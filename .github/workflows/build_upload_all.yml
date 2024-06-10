@@ -1,0 +1,80 @@
+name: Build & Upload All
+
+on: [workflow_dispatch]
+
+jobs:
+  antithesis:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        # These secrets would need to be populated in your repo and named
+        # this way if you want to copy-and-paste this configuration.
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PAT }}
+
+    # There is a lot of copy-and-paste in these sections.
+    # This could be streamlined by using a matrix configuration, which would
+    # parameterize the extract and build stages. However, it would run both the
+    # setup and teardown sections N times, once for each of the N containers we
+    # are going to build and deploy.
+    - name: Extract metadata (tags) for Docker drand
+      id: meta-drand
+      uses: docker/metadata-action@v5
+      with:
+        images: filecoin-antithesis/drand
+        tags: |
+          type=sha
+          antithesis
+    - name: Extract metadata (tags) for Docker lotus
+      id: meta-lotus
+      uses: docker/metadata-action@v5
+      with:
+        images: filecoin-antithesis/lotus
+        tags: |
+          type=sha
+          antithesis
+    - name: Extract metadata (tags) for Docker config
+      id: meta-config
+      uses: docker/metadata-action@v5
+      with:
+        images: filecoin-antithesis/config
+        tags: |
+          type=sha
+          antithesis
+
+    # Now build and push each of the containers.
+    - name: Build and push drand
+      uses: docker/build-push-action@v5
+      with:
+        context: ./drand
+        file: ./drand/Dockerfile
+        push: true
+        tags: ${{ steps.meta-drand.outputs.tags }}
+        labels: ${{ steps.meta-drand.outputs.labels }}
+    - name: Build and push lotus
+      uses: docker/build-push-action@v5
+      with:
+        context: ./lotus
+        file: ./lotus/Dockerfile
+        push: true
+        tags: ${{ steps.meta-lotus.outputs.tags }}
+        labels: ${{ steps.meta-lotus.outputs.labels }}
+    - name: Build and push config
+      uses: docker/build-push-action@v5
+      with:
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta-config.outputs.tags }}
+        labels: ${{ steps.meta-config.outputs.labels }}
