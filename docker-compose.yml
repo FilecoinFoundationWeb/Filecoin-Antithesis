@@ -4,37 +4,37 @@ services:
   drand-1:
     container_name: drand-1
     hostname: drand-1
-    image: drand:latest
+    image: "drand:${IMAGE_TAG:-antithesis}"
     entrypoint: /go/drand/scripts/./drand-1.sh
     volumes:
-      - ../drand/start_scripts/:/go/drand/scripts/
+      - ./drand/start_scripts/:/go/drand/scripts/
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.21
   drand-2:
     container_name: drand-2
     hostname: drand-2
-    image: drand:latest
+    image: "drand:${IMAGE_TAG:-antithesis}"
     entrypoint: /go/drand/scripts/./drand-2.sh
     volumes:
-      - ../drand/start_scripts/:/go/drand/scripts/
+      - ./drand/start_scripts/:/go/drand/scripts/
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.22
   drand-3:
     container_name: drand-3
     hostname: drand-3
-    image: drand:latest
+    image: "drand:${IMAGE_TAG:-antithesis}"
     entrypoint: /go/drand/scripts/./drand-3.sh
     volumes:
-      - ../drand/start_scripts/:/go/drand/scripts/
+      - ./drand/start_scripts/:/go/drand/scripts/
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.23
   lotus-1:
     container_name: lotus-1
     hostname: lotus-1
-    image: lotus:latest
+    image: "lotus:${IMAGE_TAG:-antithesis}"
     depends_on:
       - drand-1
     environment:
@@ -46,15 +46,15 @@ services:
       LOTUS_FEVM_ENABLEETHRPC: true
     entrypoint: /go/lotus-local-net/scripts/./lotus-leader.sh
     volumes:
-      - ../lotus/start_scripts/:/go/lotus-local-net/scripts/
-      - ../lotus/devgen/:/go/lotus-local-net/devgen/
+      - ./lotus/start_scripts/:/go/lotus-local-net/scripts/
+      - ./lotus/devgen/:/go/lotus-local-net/devgen/
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.24
   lotus-2:
     container_name: lotus-2
     hostname: lotus-2
-    image: lotus:latest
+    image: "lotus:${IMAGE_TAG:-antithesis}"
     depends_on:
       - drand-1
       - lotus-1
@@ -67,8 +67,8 @@ services:
       LOTUS_FEVM_ENABLEETHRPC: true
     entrypoint: /go/lotus-local-net/scripts/./lotus-follower.sh
     volumes:
-      - ../lotus/start_scripts/:/go/lotus-local-net/scripts/
-      - ../lotus/devgen/:/go/lotus-local-net/devgen/
+      - ./lotus/start_scripts/:/go/lotus-local-net/scripts/
+      - ./lotus/devgen/:/go/lotus-local-net/devgen/
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.25
