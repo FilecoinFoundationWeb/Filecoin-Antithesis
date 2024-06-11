@@ -1,3 +1,6 @@
 FROM scratch
 
-COPY config/docker-compose.yml /docker-compose.yml
+COPY ./docker-compose.yml /docker-compose.yml
+
+COPY ./drand /drand
+COPY ./lotus /lotus
