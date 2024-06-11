@@ -60,7 +60,7 @@ services:
       - lotus-1
     environment:
       LOTUS_PATH: /root/.lotus
-      LOTUS_MINER_PATH: /root/.lotus-miner1
+      LOTUS_MINER_PATH: /root/.lotus-miner
       LOTUS_SKIP_GENESIS_CHECK: _yes_
       CGO_CFLAGS_ALLOW: -D__BLST_PORTABLE__
       CGO_CFLAGS: -D__BLST_PORTABLE__
