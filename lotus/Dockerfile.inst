@@ -1,0 +1,47 @@
+# Dockerfile to build instrumented version of lotus
+FROM docker.io/golang:latest as builder
+
+# Installing rust
+RUN apt-get update && \
+    apt-get install -y ca-certificates build-essential clang ocl-icd-opencl-dev ocl-icd-libopencl1 jq libhwloc-dev git && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN git clone --recurse-submodules -b releases https://github.com/filecoin-project/lotus.git /opt/lotus
+WORKDIR /opt/lotus
+COPY ./lotus.patch ./lotus.patch
+COPY ./make.patch ./make.patch
+RUN git apply lotus.patch
+RUN git apply make.patch
+
+# install the antithesis instrumentation tool
+RUN go get github.com/antithesishq/antithesis-sdk-go@latest
+RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-instrumentor@latest
+RUN go mod tidy
+RUN mkdir /opt/lotus_transformed
+COPY ./exclusion.txt /opt/exclusion.txt
+RUN antithesis-go-instrumentor -exclude /opt/exclusion.txt /opt/lotus /opt/lotus_transformed
+RUN cp -r /opt/lotus/.git /opt/lotus_transformed/customer/
+
+# Building the binaries
+WORKDIR /opt/lotus_transformed/customer
+RUN make lotus
+RUN make lotus-miner
+
+# Thin runner
+FROM docker.io/golang:1.22.4-bookworm as runner 
+
+RUN apt-get update && \
+apt-get install -y bash mesa-opencl-icd ocl-icd-opencl-dev gcc git bzr jq pkg-config curl clang build-essential hwloc libhwloc-dev wget -y
+
+RUN mkdir -p /opt/lotus
+COPY --from=builder /opt/lotus_transformed/symbols /symbols
+COPY --from=builder /opt/lotus_transformed/customer/lotus /opt/lotus/lotus
+COPY --from=builder /opt/lotus_transformed/customer/lotus-miner /opt/lotus/lotus-miner
+
+RUN chmod +x /opt/lotus/lotus
+RUN chmod +x /opt/lotus/lotus-miner
+
+WORKDIR /opt/lotus
+
+ENTRYPOINT ["sleep", "infinity"]
