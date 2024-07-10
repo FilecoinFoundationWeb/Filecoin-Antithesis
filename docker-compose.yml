@@ -90,13 +90,14 @@ services:
       - lotus-1
       - lotus-2
     environment:
-      RPC_URL: http://10.20.20.24:1234
-      TOKEN_PATH: /root/devgen/jwt
-      NUM_WALLETS: 10
-      NUM_TRANSACTIONS: 100
-    entrypoint: ["python3", "/root/fil_spammer_rpc.py"]
+      RPC_LOTUS1: http://10.20.20.24:1234/rpc/v0
+      RPC_LOTUS2: http://10.20.20.25:1234/rpc/v0
+      INIT_BLOCK_HEIGHT: 10
+    # entrypoint: ["sleep", "infinity"]
+    entrypoint: /entrypoint.sh
     volumes:
       - ./workload/fil_spammer_rpc.py:/root/fil_spammer_rpc.py
+      - ./workload/entrypoint.sh:/entrypoint.sh
       - ./lotus/devgen/:/root/devgen
     networks:
       antithesis-net:

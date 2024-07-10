@@ -1,9 +1,13 @@
-import requests
-import json
-import os
-import time
-import subprocess
-import random
+'''
+@todo: 
+1. Adding leader/follower entrypoint to generate a RPC token and place it in a common volume mount (done)
+2. Create argparser to pass in the RPC endpoint and read the token from common volume mount and pass it in from the entrypoint
+3. Create an entrypoint for the workload to wait for the token to be created (which means start up more or less completed before it starts to do things) (in-progress)
+4. Message in the workload that actually start the fault
+'''
+
+import requests, json, random, argparse, os
+# import json
 
 class fil_spammer_rpc():
     def __init__(self, rpc_url:str, auth_token:str, common_mount_path:str):
@@ -242,17 +246,14 @@ class fil_spammer_rpc():
             res = self.do_request('post', payload)
             print(f'Fuzzing with fault {fault}: response', res['response_json'])
 
-if __name__ == '__main__':
-    # Get environment variables
-    rpc_url = os.getenv('RPC_URL', 'http://10.20.20.24:1234')
-    token_path = os.getenv('TOKEN_PATH', '/root/devgen/jwt')
-    num_wallets = int(os.getenv('NUM_WALLETS', 10))
-    num_transactions = int(os.getenv('NUM_TRANSACTIONS', 100))
 
+def get_lotus_rpc_auth_token(token_path:str) -> str:
+    '''
+    Quick helper to get the auth token
+    '''
+    auth_token = ''
     with open(token_path) as f:
-        auth_token = f.read().strip()
-
-    spammer = fil_spammer_rpc(rpc_url, auth_token, os.path.dirname(token_path))
+        auth_token = f.read()
 
     # Create wallets
     wallets = []
@@ -260,19 +261,67 @@ if __name__ == '__main__':
         wallet_id = spammer.create_wallet()
         wallets.append(wallet_id)
 
-    print(f'Created wallets: {wallets}')
+    return auth_token
 
-    # Get the genesis wallet
-    genesis_wallet = spammer.get_genesis_wallet()
-    if not genesis_wallet:
-        print('Unable to retrieve genesis wallet')
-        exit(1)
-    print(f'Genesis wallet: {genesis_wallet}')
+if __name__ == '__main__':
 
-    # Distribute FIL from genesis wallet to created wallets
-    for wallet_id in wallets:
-        res = spammer.transfer_from_genesis(genesis_wallet, wallet_id, '1000')
-        print(f'Transfer to {wallet_id} response:', res.stdout)
+    TOKEN_LOTUS_1 = 'lotus-1-token.txt'
+    TOKEN_LOTUS_2 = 'lotus-2-token.txt'
+    BASE_PATH = '/root/devgen'
+
+    parser = argparse.ArgumentParser()
+
+    # The default argument
+    parser.add_argument(
+        "step",
+        type=str,
+        help="the workload step to run",
+        choices=[
+            "1_create_wallets",
+            "2_transfer_funds", # Transfer funds from genesis
+            "3_spam_transactions",
+        ],
+        default="1_create_wallets",
+    )
+
+    args = parser.parse_args()
+
+    # Initial sanity checks
+    lotus1_rpc = os.getenv("RPC_LOTUS1")
+    lotus2_rpc = os.getenv("RPC_LOTUS2")
+    
+    if not bool(lotus1_rpc) or not bool(lotus2_rpc):
+        print('Workload cannot start, missing environment variable RPC_LOTUS1 or RPC_LOTUS2')
+        exit(2)
+
+    lotus1_token = get_lotus_rpc_auth_token(f'{BASE_PATH}/{TOKEN_LOTUS_1}')
+    lotus2_token = get_lotus_rpc_auth_token(f'{BASE_PATH}/{TOKEN_LOTUS_2}')
+
+    if not bool(lotus1_token) or not bool(lotus2_token):
+        print('Workload cannot start, unable to fetch auth tokens from Lotus nodes, make sure they are generated')
+        exit(3)
+
+    # We are ready for business
+    print('Lotus RPC information:')
+    print(f'Lotus 1: {lotus1_rpc}')
+    print(f'Lotus 1 token: {lotus1_token}')
+    print(f'Lotus 2: {lotus2_rpc}')
+    print(f'Lotus 2 token: {lotus2_token}')
+
+    # @todo, need to investgate transfer across lotus nodes
+
+    spammer1 = fil_spammer_rpc(lotus1_rpc, lotus1_token, BASE_PATH)
+
+    print('Genesis wallet')
+    print(spammer1.get_genesis_wallet())
+
+    if args.step == '1_create_wallets':
+        print('Executing step 1, creating wallets on lotus nodes')
+        spammer1.create_wallets()
+        spammer2.create_wallets()
+
+    # @todo, need to call Filecoin.StateGetActor to make sure they exist before we start transferring the funds
+
 
     # Sleep for a while to ensure the funds are properly transferred
     time.sleep(15)
@@ -295,4 +344,8 @@ if __name__ == '__main__':
             res = spammer.push_message(from_wallet, to_wallet, amount, nonce)
             print(f'Push message {i+1} from {from_wallet} to {to_wallet} response:', res['response_json'])
 
-        nonce += 1
+    # res = spammer.transfer_from_genesis('t1y22of2obqrgrqnswiicjpwlwhtyb7szjkefhfii', '100000')
+    # print(res)
+    # print(res['response'].text)
+
+    print('done')
