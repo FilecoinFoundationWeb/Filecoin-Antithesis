@@ -79,6 +79,21 @@ services:
       antithesis-net:
         ipv4_address: 10.20.20.25
 
+  curio:
+    container_name: curio-node
+    hostname: curio-node
+    image: "curio:latest"
+    depends_on:
+      lotus-1:
+        condition: service_healthy
+    entrypoint: /opt/curio/start_scripts/curio-init.sh
+    volumes:
+      - ./lotus/shared/:/opt/curio/start_scripts/shared
+      - ./forest/start_scripts/:/opt/curio/start_scripts
+    networks:
+      antithesis-net:
+        ipv4_address: 10.20.20.26
+
   ubuntu-playbox:
     container_name: ubuntu-playbox
     hostname: ubuntu-playbox
@@ -90,7 +105,7 @@ services:
       - ./lotus/shared/:/opt/shared/
     networks:
       antithesis-net:
-        ipv4_address: 10.20.20.26
+        ipv4_address: 10.20.20.27
 
 networks:
   antithesis-net:
