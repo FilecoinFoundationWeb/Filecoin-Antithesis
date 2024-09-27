@@ -43,7 +43,7 @@ services:
   # `docker compose up`.
   # Lotus node that communicates with the miner and the Forest node.
   # The RPC and P2P listening ports are exposed so Forest does not necessarily need to be running inside Docker.
-  lotus_node:
+  lotus_init:
     image: lotus:latest
     # healthcheck:
     #   test: >-
@@ -53,7 +53,7 @@ services:
     #   interval: 10s
     #   retries: 10
     #   timeout: 5s
-    container_name: lotus
+    container_name: lotus-init
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.24

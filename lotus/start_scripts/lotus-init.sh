@@ -10,4 +10,5 @@ if [ ! -f ${LOTUS_DATA_DIR}/NODE_INITIALISED ]; then
     ./lotus-seed --sector-dir ${LOTUS_DATA_DIR}/genesis-sectors genesis add-miner ${LOTUS_DATA_DIR}/localnet.json ${LOTUS_DATA_DIR}/genesis-sectors/pre-seal-${MINER_ACTOR_ADDRESS}.json
     touch ${LOTUS_DATA_DIR}/NODE_INITIALISED
 fi
+lotus --version
 sleep infinity
