@@ -1,5 +1,8 @@
 FROM docker.io/rust:latest as builder
 
+# Pin forest to a specific branch
+ARG GIT_COMMIT="94dabc64a6809bd521bc4ba94dc51d5c921c4d7c"
+
 # Step 1: Install dependencies
 RUN apt-get update && \
     apt-get install --no-install-recommends jq -y build-essential clang curl git ca-certificates && \
@@ -14,6 +17,8 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Step 3: Clone the repository (this is cached unless the repository changes)
 RUN git clone https://github.com/chainsafe/forest /forest
 WORKDIR /forest
+RUN git checkout ${GIT_COMMIT}
+
 COPY ./forest_config.toml.tpl .
 # Step 4: Copy and apply the patch (this changes more frequently, so it's placed later)
 COPY ./forest.patch ./forest.patch

@@ -3,7 +3,7 @@ services:
   drand-1:
     container_name: drand-1
     hostname: drand-1
-    image: drand:latest
+    image: drand:${DRAND_TAG:-latest}
     entrypoint: /go/drand/scripts/./drand-1.sh
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
@@ -16,7 +16,7 @@ services:
   drand-2:
     container_name: drand-2
     hostname: drand-2
-    image: drand:latest
+    image: drand:${DRAND_TAG:-latest}
     entrypoint: /go/drand/scripts/./drand-2.sh
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
@@ -28,7 +28,7 @@ services:
   drand-3:
     container_name: drand-3
     hostname: drand-3
-    image: drand:latest
+    image: drand:${DRAND_TAG:-latest}
     entrypoint: /go/drand/scripts/./drand-3.sh
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
@@ -38,7 +38,7 @@ services:
 
   # Lotus node service
   lotus_node:
-    image: lotus:latest
+    image: lotus:${LOTUS_TAG:-latest}
     container_name: lotus
     networks:
       antithesis-net:
@@ -62,7 +62,7 @@ services:
 
   # Lotus miner service
   lotus_miner:
-    image: lotus:latest
+    image: lotus:${LOTUS_TAG:-latest}
     container_name: lotus-miner
     networks:
       antithesis-net:
@@ -91,7 +91,7 @@ services:
 
   # Forest service
   forest:
-    image: forest:latest
+    image: forest:${FOREST_COMMIT:-latest}
     container_name: forest
     volumes:
       - ./data/lotus:${LOTUS_DATA_DIR}
@@ -120,7 +120,7 @@ services:
 
   # Forest <-> Lotus connector service
   forest-connecter:
-    image: forest:latest
+    image: forest:${FOREST_COMMIT:-latest}
     container_name: forest-connector
     volumes:
       - ./data/lotus:${LOTUS_DATA_DIR}

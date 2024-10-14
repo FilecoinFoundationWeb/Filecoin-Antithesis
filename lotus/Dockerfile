@@ -1,5 +1,5 @@
 # Dockerfile to build instrumented version of lotus
-FROM golang:latest
+FROM docker.io/golang:1.23.2-bookworm
 
 # Installing rust
 RUN apt-get update && \
@@ -7,7 +7,10 @@ RUN apt-get update && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-RUN git clone https://github.com/filecoin-project/lotus.git /lotus
+ARG GIT_BRANCH="v1.29.1"
+
+RUN git clone --depth=1 --branch="${GIT_BRANCH}" https://github.com/filecoin-project/lotus.git /lotus
+
 RUN export LOTUS_PATH=~/.lotus-local-net && \
     export LOTUS_MINER_PATH=~/.lotus-miner-local-net && \
     export LOTUS_SKIP_GENESIS_CHECK=_yes_ && \
@@ -15,7 +18,6 @@ RUN export LOTUS_PATH=~/.lotus-local-net && \
     export CGO_CFLAGS="-D__BLST_PORTABLE__"
 WORKDIR /lotus
 RUN latest_version=$(git tag -l 'v*' | sort -V -r | head -n 1)
-RUN git checkout v1.29.1
 COPY ./lotus.patch ./lotus.patch
 COPY ./config.toml .
 RUN git apply lotus.patch
