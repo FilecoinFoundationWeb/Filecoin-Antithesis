@@ -4,6 +4,8 @@ FROM scratch
 
 COPY ./docker-compose.yml /docker-compose.yml
 
+COPY ./data /data
+COPY ./container_ready /container_ready
 COPY ./drand /drand
 COPY ./lotus /lotus
 COPY ./forest /forest
