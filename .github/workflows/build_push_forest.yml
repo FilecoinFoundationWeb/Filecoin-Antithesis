@@ -1,0 +1,57 @@
+name: Build & Push Forest
+
+on: 
+    workflow_dispatch:
+      inputs:
+        forest_commit:
+          type: string
+          required: true
+          description: A commit hash that can be found from (https://github.com/ChainSafe/forest)
+
+jobs:
+  antithesis:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Antithesis Google Artifact Registry
+      uses: docker/login-action@v3
+      with:
+        # These secrets would need to be populated in your repo and named
+        # this way if you want to copy-and-paste this configuration.
+        registry: us-central1-docker.pkg.dev
+        username: _json_key
+        password: ${{ secrets.ANTITHESIS_GAR_KEY }}
+
+    # There is a lot of copy-and-paste in these sections.
+    # This could be streamlined by using a matrix configuration, which would
+    # parameterize the extract and build stages. However, it would run both the
+    # setup and teardown sections N times, once for each of the N containers we
+    # are going to build and deploy.
+    - name: Extract metadata (tags) for Docker forest
+      id: meta-forest
+      uses: docker/metadata-action@v5
+      with:
+        images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/forest
+        tags: |
+          type=sha
+          ${{ github.event.inputs.forest_commit }}
+          latest
+    - name: Build and push forest
+      uses: docker/build-push-action@v5
+      with:
+        build-args: |
+          GIT_COMMIT=${{ github.event.inputs.forest_commit }}
+        context: ./forest
+        file: ./forest/Dockerfile
+        push: true
+        tags: ${{ steps.meta-forest.outputs.tags }}
+        labels: ${{ steps.meta-forest.outputs.labels }}
