@@ -37,14 +37,13 @@ jobs:
     # parameterize the extract and build stages. However, it would run both the
     # setup and teardown sections N times, once for each of the N containers we
     # are going to build and deploy.
-    # - name: Extract metadata (tags) for Docker drand
-    #   id: meta-drand
-    #   uses: docker/metadata-action@v5
-    #   with:
-    #     images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/drand
-    #     tags: |
-    #       type=sha
-    #       latest
+    - name: Extract metadata (tags) for Docker drand
+      id: meta-drand
+      uses: docker/metadata-action@v5
+      with:
+        images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/drand
+        tags: |
+          type=sha
     # Now build and push each of the containers.
     - name: Build and push drand
       uses: docker/build-push-action@v5
@@ -54,5 +53,5 @@ jobs:
         context: ./drand
         file: ./drand/Dockerfile
         push: true
-        tags: ${{ github.event.inputs.drand_tag }},latest
-        # labels: ${{ steps.meta-drand.outputs.labels }}
+        tags: ${{ github.event.inputs.drand_tag }},${{ steps.meta-drand.outputs.tags }},latest
+        labels: ${{ steps.meta-drand.outputs.labels }}
