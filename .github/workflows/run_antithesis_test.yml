@@ -1,4 +1,4 @@
-name: Build & Push Drand
+name: Run Antithesis Test
 
 on: 
   workflow_dispatch:
