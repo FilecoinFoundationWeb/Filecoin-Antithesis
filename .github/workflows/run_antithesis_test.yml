@@ -1,0 +1,45 @@
+name: Build & Push Drand
+
+on: 
+  workflow_dispatch:
+    inputs:
+      duration:
+        type: string
+        required: true
+        default: '1'
+        description: Duration to the test run
+      emails:
+        type: string
+        required: true
+        description: Email receipents
+      run_type:
+        type: choice
+        description: Type of run
+        options: 
+        - normal
+        - no_faults
+
+jobs:
+  antithesis:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: antithesishq/antithesis-trigger-action@v0.6
+        with:
+          notebook_name: forest
+          tenant: filecoin
+          username: filecoin
+          password: ${{ secrets.ANTITHESIS_PASSWORD }}
+          github_token: ${{ secrets.GH_PAT }}
+          images: drand:latest;forest:latest;lotus:latest
+          config_image: config:latest
+          description: "Running the latest container images"
+          email_recipients: ${{ github.event.inputs.emails }}
+          # test_name: Filecoin localnet (latest)
+          additional_parameters: |-
+            custom.duration=${{ github.event.inputs.duration }}
+            custom.run_type=${{ github.event.inputs.run_type }}
