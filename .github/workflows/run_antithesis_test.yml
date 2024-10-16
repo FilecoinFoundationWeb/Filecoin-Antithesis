@@ -32,6 +32,7 @@ jobs:
         with:
           notebook_name: forest
           tenant: filecoin
+          subdomain: cobalt-bunny.antithesis.com
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
