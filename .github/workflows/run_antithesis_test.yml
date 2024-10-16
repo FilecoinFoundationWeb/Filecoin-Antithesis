@@ -31,7 +31,7 @@ jobs:
       - uses: antithesishq/antithesis-trigger-action@v0.6
         with:
           notebook_name: forest
-          tenant: cobalt-bunny.antithesis.com
+          tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
