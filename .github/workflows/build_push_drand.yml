@@ -44,7 +44,8 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/drand
         tags: |
           type=sha
-          antithesis
+          ${{ github.event.inputs.drand_tag }}
+          latest
     # Now build and push each of the containers.
     - name: Build and push drand
       uses: docker/build-push-action@v5
