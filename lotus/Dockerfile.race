@@ -1,0 +1,45 @@
+# Dockerfile to build instrumented version of lotus
+FROM docker.io/golang:1.23.2-bookworm
+
+# Installing rust
+RUN apt-get update && \
+    apt-get install -y ca-certificates build-essential clang ocl-icd-opencl-dev ocl-icd-libopencl1 jq libhwloc-dev git && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+ARG GIT_BRANCH="v1.29.1"
+
+RUN git clone --depth=1 --branch="${GIT_BRANCH}" https://github.com/filecoin-project/lotus.git /lotus
+
+RUN export LOTUS_PATH=~/.lotus-local-net && \
+    export LOTUS_MINER_PATH=~/.lotus-miner-local-net && \
+    export LOTUS_SKIP_GENESIS_CHECK=_yes_ && \
+    export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__" && \
+    export CGO_CFLAGS="-D__BLST_PORTABLE__"
+WORKDIR /lotus
+RUN latest_version=$(git tag -l 'v*' | sort -V -r | head -n 1)
+COPY ./lotus.patch ./lotus.patch
+COPY ./config.toml .
+RUN git apply lotus.patch
+
+# Adding race flags
+COPY ./make.patch ./make.patch
+RUN git apply make.patch
+
+RUN make 2k
+
+CMD ["./lotus","--version"]
+# Fetch parameters
+RUN ./lotus fetch-params 2048
+
+# Pre-seal for the first miner
+RUN ./lotus-seed pre-seal --sector-size 2KiB --num-sectors 2 --miner-addr t01000
+
+# Create genesis template
+RUN ./lotus-seed genesis new localnet.json 
+
+# Add the first miner to the genesis template
+RUN ./lotus-seed genesis add-miner localnet.json /root/.genesis-sectors/pre-seal-t01000.json
+RUN  make install
+
+ENTRYPOINT ["sleep", "infinity"]
