@@ -9,30 +9,18 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 ARG GIT_BRANCH="v1.29.1"
 
-RUN git clone --depth=1 --branch="${GIT_BRANCH}" https://github.com/filecoin-project/lotus.git /lotus_src
+RUN git clone --depth=1 --branch="${GIT_BRANCH}" https://github.com/filecoin-project/lotus.git /lotus
 
 RUN export LOTUS_PATH=~/.lotus-local-net && \
     export LOTUS_MINER_PATH=~/.lotus-miner-local-net && \
     export LOTUS_SKIP_GENESIS_CHECK=_yes_ && \
     export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__" && \
     export CGO_CFLAGS="-D__BLST_PORTABLE__"
-WORKDIR /lotus_src
+WORKDIR /lotus
 RUN latest_version=$(git tag -l 'v*' | sort -V -r | head -n 1)
 COPY ./lotus.patch ./lotus.patch
 COPY ./config.toml .
 RUN git apply lotus.patch
-RUN git submodule update --init
-
-# Perform code coverage instrumentation (source transformation)
-RUN go get github.com/antithesishq/antithesis-sdk-go@latest
-RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-instrumentor@latest
-RUN go mod tidy
-RUN mkdir /opt/lotus_transformed
-COPY ./exclusion.txt /opt/exclusion.txt
-RUN antithesis-go-instrumentor -exclude /opt/exclusion.txt /lotus_src /opt/lotus_transformed
-RUN cp -r /lotus_src/.git /opt/lotus_transformed/customer/
-
-WORKDIR /opt/lotus_transformed/customer/
 
 # Adding race flags
 COPY ./make.patch ./make.patch

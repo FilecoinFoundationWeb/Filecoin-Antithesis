@@ -1,21 +1,22 @@
-version: '3.8'
-
 services:
+  # Drand service for node 1
   drand-1:
     container_name: drand-1
     hostname: drand-1
-    image: drand:latest
+    image: drand:${DRAND_TAG:-latest}
     entrypoint: /go/drand/scripts/./drand-1.sh
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
+      - ./container_ready:/container_ready
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.21
 
+  # Drand service for node 2
   drand-2:
     container_name: drand-2
     hostname: drand-2
-    image: drand:latest
+    image: drand:${DRAND_TAG:-latest}
     entrypoint: /go/drand/scripts/./drand-2.sh
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
@@ -23,10 +24,11 @@ services:
       antithesis-net:
         ipv4_address: 10.20.20.22
 
+  # Drand service for node 3
   drand-3:
     container_name: drand-3
     hostname: drand-3
-    image: drand:latest
+    image: drand:${DRAND_TAG:-latest}
     entrypoint: /go/drand/scripts/./drand-3.sh
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
@@ -34,52 +36,117 @@ services:
       antithesis-net:
         ipv4_address: 10.20.20.23
 
-  lotus-1:
-    container_name: lotus-1
-    hostname: lotus-1
-    image: "lotus:latest"
-    depends_on:
-      - drand-1
-    environment:
-      LOTUS: lotus-1
-      LOTUS_COUNT: 2
-      LOTUS_PATH: /root/.lotus
-      LOTUS_MINER_PATH: /root/.lotus-miner
-      LOTUS_SKIP_GENESIS_CHECK: _yes_
-      CGO_CFLAGS_ALLOW: -D__BLST_PORTABLE__
-      CGO_CFLAGS: -D__BLST_PORTABLE__
-      LOTUS_FEVM_ENABLEETHRPC: true
-    entrypoint: /opt/lotus_transformed/customer/entrypoint.sh
-    volumes:
-      - ./lotus/start_scripts/lotus-leader.sh:/opt/lotus_transformed/customer/entrypoint.sh
-      - ./lotus/devgen/:/opt/lotus_transformed/customer/devgen/
+  # Lotus node service
+  lotus_node:
+    image: lotus:${LOTUS_TAG:-latest}
+    container_name: lotus
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.24
-        
-  workload:
-    container_name: workload
-    hostname: workload
-    image: "lotus-workload:latest"
-    depends_on:
-      - drand-1
-      - lotus-1
-    environment:
-      RPC_URL: http://10.20.20.24:1234
-      TOKEN_PATH: /root/devgen/jwt
-      NUM_WALLETS: 10
-      NUM_TRANSACTIONS: 10
-    entrypoint: ["python3", "/root/fil_spammer_rpc2.py"]
     volumes:
-      - ./workload/fil_spammer_rpc2.py:/root/fil_spammer_rpc2.py
-      - ./lotus/devgen/:/root/devgen
+      - ./data/lotus:${LOTUS_DATA_DIR}
+      - ./lotus/start_scripts/lotus-node.sh:${LOTUS_DATA_DIR}/lotus-node.sh
+      - ./container_ready:/container_ready
+    environment:
+      - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
+      - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
+      - LOTUS_LIGHTNING_HEIGHT=${LIGHTNING_HEIGHT}
+      - LOTUS_THUNDER_HEIGHT=${THUNDER_HEIGHT}
+      - LOTUS_WATERMELON_HEIGHT=${WATERMELON_HEIGHT}
+      - LOTUS_DRAGON_HEIGHT=${DRAGON_HEIGHT}
+      - LOTUS_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
+      - LOTUS_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
+    env_file:
+      - .env
+    entrypoint: ["${LOTUS_DATA_DIR}/lotus-node.sh"]
+
+  # Lotus miner service
+  lotus_miner:
+    image: lotus:${LOTUS_TAG:-latest}
+    container_name: lotus-miner
+    networks:
+      antithesis-net:
+        ipv4_address: 10.20.20.25
+    volumes:
+      - ./data/lotus:${LOTUS_DATA_DIR}
+      - ./lotus/start_scripts/lotus-miner.sh:${LOTUS_DATA_DIR}/lotus-miner.sh
+      - ./container_ready:/container_ready
+    environment:
+      - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
+      - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
+      - LOTUS_LIGHTNING_HEIGHT=${LIGHTNING_HEIGHT}
+      - LOTUS_THUNDER_HEIGHT=${THUNDER_HEIGHT}
+      - LOTUS_WATERMELON_HEIGHT=${WATERMELON_HEIGHT}
+      - LOTUS_DRAGON_HEIGHT=${DRAGON_HEIGHT}
+      - LOTUS_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
+      - LOTUS_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
+    ports:
+      - ${MINER_RPC_PORT}:${MINER_RPC_PORT}
+    env_file:
+      - ./lotus/lotus-miner.env
+      - .env
+    restart: on-failure
+    entrypoint: ["${LOTUS_DATA_DIR}/lotus-miner.sh"]
+   
+
+  # Forest service
+  forest:
+    image: forest:${FOREST_COMMIT:-latest}
+    container_name: forest
+    volumes:
+      - ./data/lotus:${LOTUS_DATA_DIR}
+      - ./data/forest:${FOREST_DATA_DIR}
+      - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
+      - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
+      - ./container_ready:/container_ready
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.26
+    environment:
+      - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${MINER_ACTOR_ADDRESS}
+      - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
+      - FOREST_SHARK_HEIGHT=${SHARK_HEIGHT}
+      - FOREST_HYGGE_HEIGHT=${HYGGE_HEIGHT}
+      - FOREST_LIGHTNING_HEIGHT=${LIGHTNING_HEIGHT}
+      - FOREST_THUNDER_HEIGHT=${THUNDER_HEIGHT}
+      - FOREST_WATERMELON_HEIGHT=${WATERMELON_HEIGHT}
+      - FOREST_DRAGON_HEIGHT=${DRAGON_HEIGHT}
+      - FOREST_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
+    ports:
+      - ${FOREST_RPC_PORT}:${FOREST_RPC_PORT}
+    env_file:
+      - .env      
+    entrypoint: ["${FOREST_DATA_DIR}/forest-init.sh"]
+
+  # Forest <-> Lotus connector service
+  forest-connecter:
+    image: forest:${FOREST_COMMIT:-latest}
+    container_name: forest-connector
+    volumes:
+      - ./data/lotus:${LOTUS_DATA_DIR}
+      - ./data/forest:${FOREST_DATA_DIR}
+      - ./forest/start_scripts/forest-connector.sh:${FOREST_DATA_DIR}/forest-connector.sh
+      - ./container_ready:/container_ready
+    env_file:
+      - .env
+    networks:
+      antithesis-net:
+        ipv4_address: 10.20.20.27
+    entrypoint: [ "${FOREST_DATA_DIR}/forest-connector.sh" ]
+
+  # Ubuntu service for testing
+  # ubuntu:
+  #   image: ubuntu:latest
+  #   container_name: ubuntu-playbox
+  #   networks:
+  #     antithesis-net:
+  #       ipv4_address: 10.20.20.30
+  #   tty: true
+  #   stdin_open: true
+  #   command: /bin/bash
 
 networks:
   antithesis-net:
-    driver: bridge
     ipam:
       config:
         - subnet: 10.20.20.0/24
