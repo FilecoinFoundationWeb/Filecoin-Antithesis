@@ -20,6 +20,7 @@ services:
     entrypoint: /go/drand/scripts/./drand-2.sh
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
+      - ./container_ready:/container_ready
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.22
@@ -32,6 +33,7 @@ services:
     entrypoint: /go/drand/scripts/./drand-3.sh
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
+      - ./container_ready:/container_ready
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.23
@@ -134,16 +136,15 @@ services:
         ipv4_address: 10.20.20.27
     entrypoint: [ "${FOREST_DATA_DIR}/forest-connector.sh" ]
 
-  # Ubuntu service for testing
-  # ubuntu:
-  #   image: ubuntu:latest
-  #   container_name: ubuntu-playbox
-  #   networks:
-  #     antithesis-net:
-  #       ipv4_address: 10.20.20.30
-  #   tty: true
-  #   stdin_open: true
-  #   command: /bin/bash
+  # Workload service
+  workload:
+    image: workload:latest
+    container_name: workload
+    volumes:
+      - ./data/lotus:/root/devgen/lotus
+    networks:
+      antithesis-net:
+        ipv4_address: 10.20.20.30
 
 networks:
   antithesis-net:

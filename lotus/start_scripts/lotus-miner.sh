@@ -1,7 +1,8 @@
 #!/bin/bash
 
-sleep 15
+sleep 10
 
+# Waiting for lotus node to be up
 lotus_node_ready=0
 while [[ ${lotus_node_ready?} -eq 0 ]]
 do
@@ -11,8 +12,9 @@ do
         echo "lotus-miner: lotus-node is ready!"
         echo "lotus-miner: continuing startup..."
         lotus_node_ready=1
+        break
     fi
-    sleep 10
+    sleep 5
 done
 
 export DRAND_CHAIN_INFO=chain_info
