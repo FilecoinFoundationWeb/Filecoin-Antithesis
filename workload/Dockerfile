@@ -1,4 +1,19 @@
-FROM docker.io/alpine:3.20
+FROM docker.io/ubuntu:latest
 
-RUN apk add --no-cache curl bash nano python3 py3-pip py3-requests
-WORKDIR /root
+RUN apt-get update -y && apt-get install -y python3 pip python3-requests python3-filelock curl jq
+
+COPY ./transactions/first.sh /opt/antithesis/test/v1/transactions/first.sh
+COPY ./transactions/parallel_driver_spammer.py /opt/antithesis/test/v1/transactions/serial_driver_spammer.py
+COPY ./transactions/parallel_driver_create_wallets.py /opt/antithesis/test/v1/transactions/serial_driver_create_wallets.py
+COPY ./transactions/parallel_driver_delete_wallets.py /opt/antithesis/test/v1/transactions/serial_driver_delete_wallets.py
+# COPY ./transactions/anytime_check_increasing_block_height.py /opt/antithesis/test/v1/transactions/anytime_check_increasing_block_height.py
+
+COPY ./resources/initialize_wallets.py /opt/antithesis/resources/initialize_wallets.py
+COPY ./resources/lotus_rpc_token.py /opt/antithesis/resources/lotus_rpc_token.py
+COPY ./resources/request.py /opt/antithesis/resources/request.py
+COPY ./resources/rpc.py /opt/antithesis/resources/rpc.py
+COPY ./resources/transaction.py /opt/antithesis/resources/transaction.py
+COPY ./resources/wallets.py /opt/antithesis/resources/wallets.py
+COPY ./resources/wallets.txt /opt/antithesis/resources/wallets.txt
+
+ENTRYPOINT sleep infinity
