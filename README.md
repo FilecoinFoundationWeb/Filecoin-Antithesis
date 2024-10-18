@@ -38,7 +38,7 @@ You can pass in additional argument to the make target to run different Drand/Lo
 ```
 make forest_commit=4eefcc25cb66b2d0449979d4d6532f74344f160b \
 drand_tag=v2.0.3 \
-lotus_tag= v1.29.0 \
+lotus_tag=v1.29.0 \
 all
 ```
 
