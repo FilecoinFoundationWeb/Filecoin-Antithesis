@@ -1,4 +1,4 @@
-FROM docker.io/ubuntu:latest
+FROM docker.io/ubuntu:24.04
 
 RUN apt-get update -y && apt-get install -y python3 pip python3-requests python3-filelock curl jq
 
