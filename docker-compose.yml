@@ -142,6 +142,7 @@ services:
     container_name: workload
     volumes:
       - ./data/lotus:/root/devgen/lotus
+      - ./data/forest:/root/devgen/forest
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.30
