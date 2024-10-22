@@ -46,6 +46,8 @@ jobs:
           additional_parameters: |-
             custom.duration=${{ github.event.inputs.duration }}
             custom.run_type=${{ github.event.inputs.run_type }}
+            antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
+            antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
 
   # Todo: build latest forest before run
   scheduled_run:
@@ -70,3 +72,5 @@ jobs:
           additional_parameters: |-
             custom.duration=8
             custom.run_type=normal
+            antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
+            antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
