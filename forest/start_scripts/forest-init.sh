@@ -2,10 +2,9 @@
 # Enable strict mode to catch errors and undefined variables
 set -euo pipefail
 
-# waiting until lotus node is up
+sleep 10
 
-sleep 15
-
+# Waiting for lotus node to be up
 lotus_node_ready=0
 while [[ ${lotus_node_ready?} -eq 0 ]]
 do
@@ -15,8 +14,9 @@ do
         echo "forest: lotus-node is ready!"
         echo "forest: continuing startup..."
         lotus_node_ready=1
+        break
     fi
-    sleep 10
+    sleep 5
 done
 
 # Fetch and save DRAND chain information
@@ -38,10 +38,7 @@ forest --genesis "${LOTUS_DATA_DIR}/devgen.car" \
        --save-token "${FOREST_DATA_DIR}/token.jwt" \
        --rpc-address 10.20.20.26:"${FOREST_RPC_PORT}" \
        --p2p-listen-address /ip4/10.20.20.26/tcp/${FOREST_P2P_PORT} \
-       --skip-load-actors
-
-forest -h
+       --skip-load-actors &
 
 touch /container_ready/forest-init
-
 sleep infinity

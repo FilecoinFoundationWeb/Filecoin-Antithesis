@@ -2,11 +2,12 @@
 
 sleep 25
 
+# Waiting for forest node to be up
 forest_init=0
 while [[ ${forest_init?} -eq 0 ]]
 do
     echo "forest-connector: checking if forest is ready.."
-    if [[ -e "${FOREST_DATA_DIR}/token.jwt" ]]; then
+    if [[ -e "/container_ready/forest-init" ]]; then
         echo "forest-connector: forest is ready!"
         echo "forest-connector: continuing startup..."
         forest_init=1

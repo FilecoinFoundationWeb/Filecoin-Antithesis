@@ -28,6 +28,7 @@ drand start --private-listen 10.20.20.22:8080 --control 127.0.0.1:8888 --public-
 
 echo "SETUP: Node 2 ready, joining DKG as a follower"
 
+# Waiting for dkg initial proposal to be available
 tries=10
 while [ "$tries" -gt 0 ]; do
     echo "drand-2: checking dkg status"
@@ -48,5 +49,7 @@ fi
 
 # Join the DKG process initiated by the leader
 drand dkg join --control 8888
+
+touch /container_ready/drand-2
 
 sleep infinity
