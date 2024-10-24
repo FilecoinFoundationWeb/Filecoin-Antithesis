@@ -1,7 +1,7 @@
 from request import request
 import json
 
-def get_genesis_wallet(rpc_url:str, auth_token:str) -> str:
+def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     '''
     @purpose - get genesis wallet
     @param rpc_url - endpoint address for node
@@ -14,11 +14,11 @@ def get_genesis_wallet(rpc_url:str, auth_token:str) -> str:
         "id": "1",
         "method": method
     })
-    response = request(rpc_url, auth_token, "post", payload)
+    response = request(node_type, rpc_url, auth_token, "post", payload)
     if response['response'].status_code != 200:
-        print(f"Workload [rpc.py]: bad response status code during get_genesis_wallet for {method}")
+        print(f"Workload [rpc.py]: bad response status code during get_genesis_wallet for {method} on a {node_type} node")
         return None
-    print(f"Workload [rpc.py]: good response status code during get_genesis_wallet for {method}")
+    print(f"Workload [rpc.py]: good response status code during get_genesis_wallet for {method} on a {node_type} node")
     response_body = response['response'].json()
 
     # questionable way to pick out genesis wallet. its hash is much longer than a regular wallet...
@@ -30,7 +30,7 @@ def get_genesis_wallet(rpc_url:str, auth_token:str) -> str:
     return None
 
 
-def create_wallet(rpc_url:str, auth_token:str) -> str:
+def create_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     '''
     @purpose - create a wallet
     @param rpc_url - endpoint address for node
@@ -44,15 +44,15 @@ def create_wallet(rpc_url:str, auth_token:str) -> str:
         "method": method,
         "params": [1]
     })
-    response = request(rpc_url, auth_token, 'post', payload)
+    response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        print(f"Workload [rpc.py]: bad response status code during create_wallet for {method}")
+        print(f"Workload [rpc.py]: bad response status code during create_wallet for {method} on a {node_type} node")
         return None
-    print(f"Workload [rpc.py]: good response status code during create_wallet for {method}")
+    print(f"Workload [rpc.py]: good response status code during create_wallet for {method} on a {node_type} node")
     return response['response'].json()['result']
 
 
-def delete_wallet(rpc_url:str, auth_token:str, wallet:str) -> bool:
+def delete_wallet(node_type:str, rpc_url:str, auth_token:str, wallet:str) -> bool:
     '''
     @purpose - delete a wallet
     @param rpc_url - endpoint address for node
@@ -66,15 +66,15 @@ def delete_wallet(rpc_url:str, auth_token:str, wallet:str) -> bool:
         "method": method,
         "params": [wallet]
     })
-    response = request(rpc_url, auth_token, 'post', payload)
+    response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        print(f"Workload [rpc.py]: bad response status code during delete_wallet for {method}")
+        print(f"Workload [rpc.py]: bad response status code during delete_wallet for {method} on a {node_type} node")
         return False
-    print(f"Workload [rpc.py]: good response status code during delete_wallet for {method}")
+    print(f"Workload [rpc.py]: good response status code during delete_wallet for {method} on a {node_type} node")
     return True
 
 
-def get_wallet_private_key(rpc_url:str, auth_token:str, wallet:str) -> str:
+def get_wallet_private_key(node_type:str, rpc_url:str, auth_token:str, wallet:str) -> str:
     '''
     @purpose - get the private key of any existing wallet
     @param rpc_url - endpoint address for node
@@ -89,15 +89,15 @@ def get_wallet_private_key(rpc_url:str, auth_token:str, wallet:str) -> str:
         "method": method,
         "params": [wallet]
     })
-    response = request(rpc_url, auth_token, 'post', payload)
+    response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        print(f"Workload [rpc.py]: bad response status code during get_wallet_private_key for {method}")
+        print(f"Workload [rpc.py]: bad response status code during get_wallet_private_key for {method} on a {node_type} node")
         return None
-    print(f"Workload [rpc.py]: good response status code during get_wallet_private_key for {method}")
+    print(f"Workload [rpc.py]: good response status code during get_wallet_private_key for {method} on a {node_type} node")
     return response['response'].json()['result']['PrivateKey']
 
 
-def get_chainhead(rpc_url:str, auth_token:str) -> str:
+def get_chainhead(node_type, rpc_url:str, auth_token:str) -> str:
     '''
     *** This method doesn't need auth_token ?
     @purpose - get the chainhead
@@ -111,11 +111,11 @@ def get_chainhead(rpc_url:str, auth_token:str) -> str:
         "id": "1",
         "method": method
     })
-    response = request(rpc_url, auth_token, 'post', payload)
+    response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        print(f"Workload [rpc.py]: bad response status code during get_chainhead for {method}")
+        print(f"Workload [rpc.py]: bad response status code during get_chainhead for {method} on a {node_type} node")
         return None
-    print(f"Workload [rpc.py]: good response status code during get_chainhead for {method}")
+    print(f"Workload [rpc.py]: good response status code during get_chainhead for {method} on a {node_type} node")
     response_body = response['response'].json()
 
     cid = ''
@@ -126,7 +126,7 @@ def get_chainhead(rpc_url:str, auth_token:str) -> str:
     return None
 
 
-def estimate_message_gas(rpc_url:str, auth_token:str, from_wallet:str, from_wallet_pk:str, to_wallet:str, fil:str) -> dict:
+def estimate_message_gas(node_type:str, rpc_url:str, auth_token:str, from_wallet:str, from_wallet_pk:str, to_wallet:str, fil:str) -> dict:
     '''
     @purpose - estimate gas for a mpool message
     @param rpc_url - endpoint address for node
@@ -157,15 +157,15 @@ def estimate_message_gas(rpc_url:str, auth_token:str, from_wallet:str, from_wall
             }, None
         ]
     })
-    response = request(rpc_url, auth_token, 'post', payload)
+    response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        print(f"Workload [rpc.py]: bad response status code during estimate_message_gas for {method}")
+        print(f"Workload [rpc.py]: bad response status code during estimate_message_gas for {method} on a {node_type} node")
         return None
-    print(f"Workload [rpc.py]: good response status code during estimate_message_gas for {method}")
+    print(f"Workload [rpc.py]: good response status code during estimate_message_gas for {method} on a {node_type} node")
     return response['response'].json()['result']
 
 
-def mpool_push_message(rpc_url:str, auth_token:str, from_wallet:str, from_wallet_pk:str, to_wallet:str, fil:str, gas_info:dict, cid:str):
+def mpool_push_message(node_type:str, rpc_url:str, auth_token:str, from_wallet:str, from_wallet_pk:str, to_wallet:str, fil:str, gas_info:dict, cid:str):
     '''
     @purpose - push a transaction message
     @param rpc_url - endpoint address for node
@@ -207,9 +207,9 @@ def mpool_push_message(rpc_url:str, auth_token:str, from_wallet:str, from_wallet
             }
         ]
     })
-    response = request(rpc_url, auth_token, 'post', payload)
+    response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        print(f"Workload [rpc.py]: bad response status code during push_message for {method}")
+        print(f"Workload [rpc.py]: bad response status code during push_message for {method} on a {node_type} node")
         return None
-    print(f"Workload [rpc.py]: good response status code during push_message for {method}")
+    print(f"Workload [rpc.py]: good response status code during push_message for {method} on a {node_type} node")
     return response

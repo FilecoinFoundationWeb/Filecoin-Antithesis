@@ -3,7 +3,7 @@ from filelock import FileLock
 import rpc
 
 
-def get_genesis_wallet(rpc_url:str, auth_token:str) -> str:
+def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     '''
     @purpose - get the id hash of the genesis wallet
     @param rpc_url - endpoint address for node
@@ -13,19 +13,19 @@ def get_genesis_wallet(rpc_url:str, auth_token:str) -> str:
     backoff = 0
     print(f"Workload [wallets.py]: attempting to get genesis wallet id hash")
     while True:
-        genesis_wallet = rpc.get_genesis_wallet(rpc_url, auth_token)
+        genesis_wallet = rpc.get_genesis_wallet(node_type, rpc_url, auth_token)
         if genesis_wallet:
             print(f"Workload [wallets.py]: successfully got genesis wallet id hash")
             return genesis_wallet
         print(f"Workload [wallets.py]: attempt {backoff + 1} failed to get genesis wallet, retrying")
         backoff += 1
         if backoff >= 16:
-            print(f"Workload [wallets.py]: failed to get genesis wallet after a long time. this is a serious issue. returning None")
+            print(f"Workload [wallets.py]: failed to get genesis wallet after a long time on a {node_type} node. this is a serious issue. returning None")
             return None
         time.sleep(backoff)
 
 
-def get_wallets_private_keys(rpc_url:str, auth_token:str, wallets:list) -> list:
+def get_wallets_private_keys(node_type:str, rpc_url:str, auth_token:str, wallets:list) -> list:
     '''
     @purpose - get private keys for a list of wallets
     @param rpc_url - endpoint address for node
@@ -39,9 +39,9 @@ def get_wallets_private_keys(rpc_url:str, auth_token:str, wallets:list) -> list:
     print(f"Workload [wallets.py]: attempting to get {num_wallets} private keys")
     while pks_found < num_wallets:
         if backoff >= 16:
-            print(f"Workload [wallets.py]: failed to get private key after a long time. this is a serious issue. returning None")
+            print(f"Workload [wallets.py]: failed to get private key after a long time on a {node_type} node. this is a serious issue. returning None")
             return None
-        pk = rpc.get_wallet_private_key(rpc_url, auth_token, wallets[pks_found])
+        pk = rpc.get_wallet_private_key(node_type, rpc_url, auth_token, wallets[pks_found])
         if pk:
             pks_found += 1
             print(f"Workload [wallets.py]: appending pk to the private_key list. Progress: {pks_found} / {num_wallets}.")
@@ -55,7 +55,7 @@ def get_wallets_private_keys(rpc_url:str, auth_token:str, wallets:list) -> list:
     return private_keys
 
 
-def create_wallets(rpc_url:str, auth_token:str, n:int) -> list:
+def create_wallets(node_type:str, rpc_url:str, auth_token:str, n:int) -> list:
     '''
     @purpose - create a certain number of wallets
     @param rpc_url - endpoint address for node
@@ -68,9 +68,9 @@ def create_wallets(rpc_url:str, auth_token:str, n:int) -> list:
     print(f"Workload [wallets.py]: attempting to create {n} wallets")
     while wallets_created < n:
         if backoff >= 16:
-            print(f"Workload [wallets.py]: failed to create a wallet after a long time. this is a serious issue. returning None")
+            print(f"Workload [wallets.py]: failed to create a wallet after a long time on a {node_type} node. this is a serious issue. returning None")
             return None
-        wallet = rpc.create_wallet(rpc_url, auth_token)
+        wallet = rpc.create_wallet(node_type, rpc_url, auth_token)
         if wallet:
             wallets_created += 1
             print(f"Workload [wallets.py]: appending wallet to the wallets list. Progress: {wallets_created} / {n}")
@@ -84,15 +84,15 @@ def create_wallets(rpc_url:str, auth_token:str, n:int) -> list:
     return wallets
 
 
-def delete_wallets(rpc_url:str, auth_token:str, wallets_to_delete:list):
+def delete_wallets(node_type:str, rpc_url:str, auth_token:str, wallets_to_delete:list):
     num_wallets_to_delete = len(wallets_to_delete)
     wallets_deleted, backoff = 0, 0
     print(f"Workload [wallets.py]: attempting to delete {num_wallets_to_delete} wallets")
     while wallets_deleted < num_wallets_to_delete:
         if backoff >= 16:
-            print(f"Workload [wallets.py]: failed to delete a wallet after a long time. this is a serious issue. returning")
+            print(f"Workload [wallets.py]: failed to delete a wallet after a long time on a {node_type} node. this is a serious issue. returning")
             return
-        response = rpc.delete_wallet(rpc_url, auth_token, wallets_to_delete[wallets_deleted])
+        response = rpc.delete_wallet(node_type, rpc_url, auth_token, wallets_to_delete[wallets_deleted])
         if response:
             wallets_deleted += 1
             print(f"Workload [wallets.py]: deleted wallet. Progress: {wallets_deleted} / {num_wallets_to_delete}")

@@ -4,7 +4,7 @@ import random, time, sys
 sys.path.append("/opt/antithesis/resources")
 
 from wallets import get_random_wallets
-from lotus_rpc_token import get_lotus_url_token
+from rpc_url_and_auth_token import get_url_and_token
 from transaction import make_transaction
 
 
@@ -13,15 +13,22 @@ transaction_options = [10, 25, 50, 80, 120, 200]
 
 def spam_hard(n:int, n_wallets:int):
 
-    print(f"Workload [spammer.py]: entering a spamming script for {n} transactions")
-    lotus_rpc_url, lotus_auth_token = get_lotus_url_token()
+    print(f"Workload [Forest][spammer.py]: entering a spamming script for {n} transactions")
+
+    node_type = "forest"
+
+    rpc_url, auth_token = get_url_and_token(node_type=node_type)
+
     wallets = get_random_wallets(n_wallets)
+
     if not wallets:
-        print(f"Workload [spammer.py]: Not enough wallets available. exiting.")
+        print(f"Workload [Forest][spammer.py]: Not enough wallets available. exiting.")
         return
-    print(f"Workload [spammer.py]: Selected {n_wallets} random wallets")
+    
+    print(f"Workload [Forest][spammer.py]: Selected {n_wallets} random wallets")
+
     for i in range(n):
-        print(f"Workload [spammer.py]: iteration {i+1} / {n}")
+        print(f"Workload [Forest][spammer.py]: iteration {i+1} / {n}")
         nominal_amount = 100
         last_seed = time.time()
         if (last_seed + 5 < time.time()):
@@ -32,10 +39,10 @@ def spam_hard(n:int, n_wallets:int):
         from_w, from_pk = random.SystemRandom().choice(list(wallets.items()))
         to_w, _ = random.SystemRandom().choice(list(wallets.items()))
         amount = int(float(random.SystemRandom().gauss(nominal_amount, nominal_amount ** (1/2))))
-        print(f"Workload [spammer.py]: amount of attoFIL for the next transaction: {amount}")
-        print("Workload [spammer.py]: executing a transaction")
-        make_transaction(lotus_rpc_url, lotus_auth_token, from_w, from_pk, to_w, amount)
-        print("Workload [spammer.py]: finished a transaction")
-    print("Workload [spammer.py]: a completed transaction spamming script")
+        print(f"Workload [Forest][spammer.py]: amount of attoFIL for the next transaction: {amount}")
+        print("Workload [Forest][spammer.py]: executing a transaction")
+        make_transaction(node_type, rpc_url, auth_token, from_w, from_pk, to_w, amount)
+        print("Workload [Forest][spammer.py]: finished a transaction")
+    print("Workload [Forest][spammer.py]: a completed transaction spamming script")
 
 spam_hard(n=random.SystemRandom().choice(transaction_options), n_wallets=10)

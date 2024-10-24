@@ -1,6 +1,6 @@
 import rpc, time
         
-def make_transaction(rpc_url:str, auth_token:str, from_wallet:str, from_wallet_pk:str, to_wallet:str, attoFIL:int) -> bool: 
+def make_transaction(node_type:str, rpc_url:str, auth_token:str, from_wallet:str, from_wallet_pk:str, to_wallet:str, attoFIL:int) -> bool: 
     '''
     @purpose - make a transaction from a wallet 
     @param rpc_url - endpoint address for node
@@ -12,30 +12,30 @@ def make_transaction(rpc_url:str, auth_token:str, from_wallet:str, from_wallet_p
     @return bool if transaction went through
     '''
     fil_amount = str(attoFIL*10**18)
-    chainhead = rpc.get_chainhead(rpc_url=rpc_url, auth_token=auth_token)
+    chainhead = rpc.get_chainhead(node_type=node_type, rpc_url=rpc_url, auth_token=auth_token)
 
     if (not bool(chainhead)):
-        print(f"Workload [transaction.py]: failed to get CID from get_chainhead RPC call")
+        print(f"Workload [transaction.py]: failed to get CID from get_chainhead RPC call on a {node_type} node")
         return False
     
     cid = chainhead['result']['Cids'][0]['/']
     
-    gas_info = rpc.estimate_message_gas(rpc_url=rpc_url, auth_token=auth_token, from_wallet=from_wallet, from_wallet_pk=from_wallet_pk, to_wallet=to_wallet, fil=fil_amount)
+    gas_info = rpc.estimate_message_gas(node_type=node_type, rpc_url=rpc_url, auth_token=auth_token, from_wallet=from_wallet, from_wallet_pk=from_wallet_pk, to_wallet=to_wallet, fil=fil_amount)
     if (not bool(gas_info)):
-        print(f'Workload [transaction.py]: failed to get gas information from estimate_message_gas RPC call')
+        print(f'Workload [transaction.py]: failed to get gas information from estimate_message_gas RPC call on a {node_type} node')
         return False
     
     # print(f"Workload [transaction.py]: GasLimit: {gas_info['GasLimit']}, GasFeeCap: {gas_info['GasFeeCap']}, GasPremium: {gas_info['GasPremium']}")
 
-    txn_response = rpc.mpool_push_message(rpc_url=rpc_url, auth_token=auth_token, from_wallet=from_wallet, from_wallet_pk=from_wallet_pk, to_wallet=to_wallet, fil=fil_amount, gas_info=gas_info, cid=cid)
+    txn_response = rpc.mpool_push_message(node_type=node_type, rpc_url=rpc_url, auth_token=auth_token, from_wallet=from_wallet, from_wallet_pk=from_wallet_pk, to_wallet=to_wallet, fil=fil_amount, gas_info=gas_info, cid=cid)
     if txn_response:
-        print("Workload [transaction.py]: a successful transaction")
+        print(f"Workload [transaction.py]: a successful transaction on a {node_type} node")
         return True
-    print("Workload [transaction.py]: a failed transaction")
+    print(f"Workload [transaction.py]: a failed transaction on a {node_type} node")
     return False
 
 
-def feed_wallets(rpc_url:str, auth_token:str, genesis_wallet:str, genesis_wallet_pk:str, to_wallets:list, attoFIL:int):
+def feed_wallets(node_type:str, rpc_url:str, auth_token:str, genesis_wallet:str, genesis_wallet_pk:str, to_wallets:list, attoFIL:int):
     '''
     @purpose - give a list of wallets FIL from the genesis wallet
     @param rpc_url - endpoint address for node
@@ -50,9 +50,9 @@ def feed_wallets(rpc_url:str, auth_token:str, genesis_wallet:str, genesis_wallet
     print(f"Workload [transaction.py]: attempting to give FIL to {num_wallets} wallets from the genesis wallet")
     while wallets_fed < num_wallets:
         if backoff >= 16:
-            print(f"Workload [transaction.py]: failed to give wallet FIL after a long time. this is a serious issue. only finished {num_wallets} wallets. finishing early.")
+            print(f"Workload [transaction.py]: failed to give wallet FIL after a long time on a {node_type} node. this is a serious issue. only finished {num_wallets} wallets. finishing early.")
             return
-        succeed = make_transaction(rpc_url=rpc_url, auth_token=auth_token, from_wallet=genesis_wallet, from_wallet_pk=genesis_wallet_pk, to_wallet=to_wallets[wallets_fed], attoFIL=attoFIL)
+        succeed = make_transaction(node_type=node_type, rpc_url=rpc_url, auth_token=auth_token, from_wallet=genesis_wallet, from_wallet_pk=genesis_wallet_pk, to_wallet=to_wallets[wallets_fed], attoFIL=attoFIL)
         if succeed:
             wallets_fed += 1
             print(f"Workload [transaction.py]: gave wallet #{wallets_fed} {attoFIL} attoFIL. progress: {wallets_fed} / {num_wallets}")

@@ -1,6 +1,6 @@
 import requests
 
-def request(rpc_url:str, auth_token:str, method:str, payload:dict) -> dict:
+def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict) -> dict:
     '''
     @purpose - making raw api requests
     @param method - get | post
@@ -10,7 +10,7 @@ def request(rpc_url:str, auth_token:str, method:str, payload:dict) -> dict:
     @return - dictionary with request and response information
     '''
 
-    print("Workload [request.py]: executing a request")
+    print(f"Workload [request.py]: executing a request on a {node_type} node")
 
     headers = {
         "Content-Type": "application/json",
