@@ -55,14 +55,15 @@ def get_wallets_private_keys(node_type:str, rpc_url:str, auth_token:str, wallets
     return private_keys
 
 
-def create_wallets(node_type:str, rpc_url:str, auth_token:str, n:int) -> list:
+def create_wallets(node_type:str, rpc_url:str, auth_token:str, n:int, type:str) -> list:
     '''
     @purpose - create a certain number of wallets
     @param rpc_url - endpoint address for node
     @param auth_token - authentication token for that node
     @param n - # of wallets to create
+    @param type - type of wallet ([bls|secp256k1|delegated (default secp256k1)])
     @return - list of wallet hash ids that were created
-    '''
+    ''' 
     wallets = []
     wallets_created, backoff = 0, 0
     print(f"Workload [wallets.py]: attempting to create {n} wallets")
@@ -70,7 +71,7 @@ def create_wallets(node_type:str, rpc_url:str, auth_token:str, n:int) -> list:
         if backoff >= 16:
             print(f"Workload [wallets.py]: failed to create a wallet after a long time on a {node_type} node. this is a serious issue. returning None")
             return None
-        wallet = rpc.create_wallet(node_type, rpc_url, auth_token)
+        wallet = rpc.create_wallet(node_type, rpc_url, auth_token, type)
         if wallet:
             wallets_created += 1
             print(f"Workload [wallets.py]: appending wallet to the wallets list. Progress: {wallets_created} / {n}")
@@ -156,3 +157,4 @@ def get_random_wallets(num:int) -> dict:
         random_wallets_dict[w] = pk
     print(f"Workload [wallets.py]: successfully got {num} random wallets")
     return random_wallets_dict
+

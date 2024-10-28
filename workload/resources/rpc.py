@@ -30,19 +30,23 @@ def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     return None
 
 
-def create_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
+def create_wallet(node_type:str, rpc_url:str, auth_token:str, type:str) -> str:
     '''
     @purpose - create a wallet
     @param rpc_url - endpoint address for node
     @param auth_token - authentication token for that node
+    @param type - type of wallet ([bls|secp256k1|delegated (default secp256k1)])
     @return - new wallet id hash as a str
     '''
+    valid_types = ['bls', 'secp256k1', 'delegated']
+    if type not in valid_types:
+        type = 'secp256k1'
     method = 'Filecoin.WalletNew'
     payload = json.dumps({
         "jsonrpc": "2.0",
         "id": "1",
         "method": method,
-        "params": [1]
+        "params": [type]
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:

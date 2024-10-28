@@ -62,3 +62,4 @@ def feed_wallets(node_type:str, rpc_url:str, auth_token:str, genesis_wallet:str,
             print(f"Workload [transaction.py]: failed to give FIL to wallet. retrying... attempt {backoff+1} for wallet #{wallets_fed+1}")
             time.sleep(backoff)
     print(f"Workload [transaction.py]: successfully gave FIL to wallets from the genesis wallet")
+
