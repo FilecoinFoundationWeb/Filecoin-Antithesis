@@ -20,7 +20,7 @@ def delete_wallets():
         return
     wallets.delete_wallets_locally(wallets_to_delete)
     wallets_to_delete = list(wallets_to_delete.keys())
-    wallets.delete_wallets(node_type, rpc_url, auth_token, wallets_to_delete)
+    wallets.delete_wallets(node, rpc_url, auth_token, wallets_to_delete)
     sdk.reachable(declare=False, id="Successful 'delete_wallets.py' script execution", message="Successful 'delete_wallets.py' script execution", condition=True, details={"node":node})
 
-delete_wallets(n=n_wallets)
+delete_wallets()

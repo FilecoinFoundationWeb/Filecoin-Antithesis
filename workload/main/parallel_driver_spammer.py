@@ -35,7 +35,7 @@ def spam_hard(n:int, n_wallets:int=10):
         amount = int(float(random.SystemRandom().gauss(nominal_amount, nominal_amount ** (1/2))))
         print(f"Workload [main][spammer.py]: amount of attoFIL for the next transaction: {amount}")
         print("Workload [main][spammer.py]: executing a transaction")
-        make_transaction(node_type, rpc_url, auth_token, from_w, from_pk, to_w, amount)
+        make_transaction(node, rpc_url, auth_token, from_w, from_pk, to_w, amount)
         print("Workload [main][spammer.py]: finished a transaction")
     sdk.reachable(declare=False, id="Successful 'spammer.py' script execution", message="Successful 'spammer.py' script execution", condition=True, details={"node":node})
 

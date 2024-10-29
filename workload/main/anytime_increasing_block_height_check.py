@@ -12,7 +12,8 @@ sdk = antithesis_fallback_sdk()
 sdk.always(declare=True, id="Chainhead increases", message="Chainhead increases as expected")
 sdk.reachable(declare=True, id="Successful 'increasing_block_height_check.py' script execution", message="Successful 'create_wallets.py' script execution")
 
-def check_increasing_block_height(n=3):
+def check_increasing_block_height(n=3, time_limit=7.5):
+
     node = nodes.select_random_node()
     rpc_url, auth_token = nodes.get_url_and_token(node)
 
@@ -31,7 +32,7 @@ def check_increasing_block_height(n=3):
                 e = time.monotonic_ns()
                 diff = round((s - e)/1_000_000_000, 2)
                 print(f"Workload [main][anytime_increasing_block_height_check.py]: time difference between block height {height} and block height {new_height} was {diff} seconds")
-                if diff > 10.5:
+                if diff > time_limit:
                     sdk.always(declare=False, id="Chainhead increases", message="Chainhead did not increase as expected", condition=False, details={"old,new,diff": [height,new_height,diff]})
                 else:
                     sdk.always(declare=False, id="Chainhead increases", message="Chainhead increases as expected", condition=True, details={"old,new,diff": [height,new_height,diff]})
