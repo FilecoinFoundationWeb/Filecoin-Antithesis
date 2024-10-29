@@ -245,3 +245,22 @@ def mpool_push_message(node_type:str, rpc_url:str, auth_token:str, from_wallet:s
     sdk.always(declare=False, id="MpoolPushMessage rpc response has good status code", message="MpoolPushMessage rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during push_message for {method} on a {node_type} node")
     return response
+#def mpool_push_message(node_type:str, rpc_url:str, auth_token:str, from_wallet:str, from_wallet_pk:str, to_wallet:str, fil:str, gas_info:dict, cid:str):
+def print_Sync_Status(node_type:str, rpc_url:str, auth_token:str):
+    '''
+    
+    '''
+    method = 'Filecoin.SyncState'
+    payload = json.dumps({"jsonrpc": "2.0",
+        "id": "1",
+        "method": method,
+        "params": []
+        })
+    response = request(node_type, rpc_url, auth_token, "post", payload)
+    if response['response'].status_code != 200:
+        sdk.always(declare=False, id="SyncState rpc response has good status code", message="SyncState rpc response has bad status code", condition=False, details={"Response":response['response']})
+        print(f"Workload [rpc.py]: bad response status code during SyncState for {method} on a {node_type} node")
+        return None
+    sdk.always(declare=False, id="SyncState rpc response has good status code", message="SyncState rpc response has good status code", condition=True)
+    print(f"Workload [rpc.py]: good response status code during SyncState for {method} on a {node_type} node")
+    return response.json().get("result", {}).get("ActiveSyncs", [])
