@@ -1,5 +1,21 @@
+#!/usr/bin/env -S python3 -u
+
 from request import request
-import json
+import json, sys
+sys.path.append("/opt/antithesis/sdk")
+
+from antithesis_sdk import antithesis_fallback_sdk
+
+sdk = antithesis_fallback_sdk()
+sdk.always(declare=True, id="WalletList rpc response has good status code", message="WalletList rpc response has good status code")
+sdk.always(declare=True, id="WalletNew rpc response has good status code", message="WalletNew rpc response has good status code")
+sdk.always(declare=True, id="WalletDelete rpc response has good status code", message="WalletDelete rpc response has good status code")
+sdk.always(declare=True, id="WalletExport rpc response has good status code", message="WalletExport rpc response has good status code")
+sdk.always(declare=True, id="ChainHead rpc response has good status code", message="ChainHead rpc response has good status code")
+sdk.always(declare=True, id="GasEstimateMessageGas rpc response has good status code", message="GasEstimateMessageGas rpc response has good status code")
+sdk.always(declare=True, id="MpoolPushMessage rpc response has good status code", message="MpoolPushMessage rpc response has good status code")
+sdk.always(declare=True, id="Genesis wallet was found in WalletList", message="Genesis wallet was found in WalletList")
+
 
 def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     '''
@@ -16,16 +32,20 @@ def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     })
     response = request(node_type, rpc_url, auth_token, "post", payload)
     if response['response'].status_code != 200:
+        sdk.always(declare=False, id="WalletList rpc response has good status code", message="WalletList rpc response has bad status code", condition=False, details={"Response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during get_genesis_wallet for {method} on a {node_type} node")
         return None
+    sdk.always(declare=False, id="WalletList rpc response has good status code", message="WalletList rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during get_genesis_wallet for {method} on a {node_type} node")
     response_body = response['response'].json()
 
     # questionable way to pick out genesis wallet. its hash is much longer than a regular wallet...
     for w in response_body['result']:
         if len(w) > 41:
+            sdk.always(declare=False, id="Genesis wallet was found in WalletList", message="Genesis wallet was found in WalletList", condition=True)
             print("Workload [rpc.py]: found the genesis wallet. returning its hash")
             return w
+    sdk.always(declare=False, id="Genesis wallet was found in WalletList", message="Genesis wallet was not found in WalletList", condition=False, details={"Response":response_body['result']})
     print("Workload [rpc.py]: failed to find genesis wallet")
     return None
 
@@ -46,8 +66,10 @@ def create_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
+        sdk.always(declare=False, id="WalletNew rpc response has good status code", message="WalletNew rpc response has bad status code", condition=False, details={"Response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during create_wallet for {method} on a {node_type} node")
         return None
+    sdk.always(declare=False, id="WalletNew rpc response has good status code", message="WalletNew rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during create_wallet for {method} on a {node_type} node")
     return response['response'].json()['result']
 
@@ -68,8 +90,10 @@ def delete_wallet(node_type:str, rpc_url:str, auth_token:str, wallet:str) -> boo
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
+        sdk.always(declare=False, id="WalletDelete rpc response has good status code", message="WalletDelete rpc response has bad status code", condition=False, details={"Response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during delete_wallet for {method} on a {node_type} node")
         return False
+    sdk.always(declare=False, id="WalletDelete rpc response has good status code", message="WalletDelete rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during delete_wallet for {method} on a {node_type} node")
     return True
 
@@ -91,8 +115,10 @@ def get_wallet_private_key(node_type:str, rpc_url:str, auth_token:str, wallet:st
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
+        sdk.always(declare=False, id="WalletExport rpc response has good status code", message="WalletExport rpc response has bad status code", condition=False, details={"Response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during get_wallet_private_key for {method} on a {node_type} node")
         return None
+    sdk.always(declare=False, id="WalletExport rpc response has good status code", message="WalletExport rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during get_wallet_private_key for {method} on a {node_type} node")
     return response['response'].json()['result']['PrivateKey']
 
@@ -113,8 +139,10 @@ def get_chainhead(node_type, rpc_url:str, auth_token:str) -> str:
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
+        sdk.always(declare=False, id="ChainHead rpc response has good status code", message="ChainHead rpc response has bad status code", condition=False, details={"Response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during get_chainhead for {method} on a {node_type} node")
         return None
+    sdk.always(declare=False, id="ChainHead rpc response has good status code", message="ChainHead rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during get_chainhead for {method} on a {node_type} node")
     response_body = response['response'].json()
 
@@ -159,8 +187,10 @@ def estimate_message_gas(node_type:str, rpc_url:str, auth_token:str, from_wallet
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
+        sdk.always(declare=False, id="GasEstimateMessageGas rpc response has good status code", message="GasEstimateMessageGas rpc response has bad status code", condition=False, details={"Response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during estimate_message_gas for {method} on a {node_type} node")
         return None
+    sdk.always(declare=False, id="GasEstimateMessageGas rpc response has good status code", message="GasEstimateMessageGas rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during estimate_message_gas for {method} on a {node_type} node")
     return response['response'].json()['result']
 
@@ -209,7 +239,9 @@ def mpool_push_message(node_type:str, rpc_url:str, auth_token:str, from_wallet:s
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
+        sdk.always(declare=False, id="MpoolPushMessage rpc response has good status code", message="MpoolPushMessage rpc response has bad status code", condition=False, details={"Response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during push_message for {method} on a {node_type} node")
         return None
+    sdk.always(declare=False, id="MpoolPushMessage rpc response has good status code", message="MpoolPushMessage rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during push_message for {method} on a {node_type} node")
     return response

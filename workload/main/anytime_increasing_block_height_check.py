@@ -1,0 +1,44 @@
+#!/usr/bin/env -S python3 -u
+
+import time, sys
+sys.path.append("/opt/antithesis/resources")
+sys.path.append("/opt/antithesis/sdk")
+import nodes
+from rpc import get_chainhead
+from antithesis_sdk import antithesis_fallback_sdk
+
+
+sdk = antithesis_fallback_sdk()
+sdk.always(declare=True, id="Chainhead increases", message="Chainhead increases as expected")
+sdk.reachable(declare=True, id="Successful 'increasing_block_height_check.py' script execution", message="Successful 'create_wallets.py' script execution")
+
+def check_increasing_block_height(n=3):
+    node = nodes.select_random_node()
+    rpc_url, auth_token = nodes.get_url_and_token(node)
+
+    for i in range(n):
+        chainhead = get_chainhead(node, rpc_url, auth_token)
+        if not chainhead:
+            return
+        height = chainhead['result']['Height']
+        s = time.monotonic_ns()
+        while True:
+            chainhead = get_chainhead(node, rpc_url, auth_token)
+            if not chainhead:
+                return
+            new_height = chainhead['result']['Height']
+            if height + 1 == new_height:
+                e = time.monotonic_ns()
+                diff = round((s - e)/1_000_000_000, 2)
+                print(f"Workload [main][anytime_increasing_block_height_check.py]: time difference between block height {height} and block height {new_height} was {diff} seconds")
+                if diff > 10.5:
+                    sdk.always(declare=False, id="Chainhead increases", message="Chainhead did not increase as expected", condition=False, details={"old,new,diff": [height,new_height,diff]})
+                else:
+                    sdk.always(declare=False, id="Chainhead increases", message="Chainhead increases as expected", condition=True, details={"old,new,diff": [height,new_height,diff]})
+                break
+            time.sleep(0.5)
+
+    sdk.reachable(declare=False, id="Successful 'increasing_block_height_check.py' script execution", message="Successful 'create_wallets.py' script execution", condition=True, details={"node":node})
+
+
+check_increasing_block_height()

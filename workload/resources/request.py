@@ -1,4 +1,14 @@
+#!/usr/bin/env -S python3 -u
+
+import sys
+sys.path.append("/opt/antithesis/sdk")
+
+from antithesis_sdk import antithesis_fallback_sdk
 import requests
+
+sdk = antithesis_fallback_sdk()
+sdk.unreachable(declare=True, id="Invalid method for a request", message="No request was sent because the method was an invalid option")
+sdk.reachable(declare=True, id="Request response received", message="A request was send and a response was received")
 
 def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict) -> dict:
     '''
@@ -37,6 +47,8 @@ def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict
 
         # print(f"Workload [request.py]: request response was {response}")
 
+        sdk.reachable(declare=False, id="Request response received", message="A request was send and a response was received", condition=True)
+
         return {
             'request': {
                 'url': rpc_url,
@@ -46,5 +58,6 @@ def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict
             'response': response
         }
     
+    sdk.unreachable(declare=False, id="Invalid method for a request", message="No request was sent because the method was an invalid option", condition=True, details={"passed through method":method})
     print(f"Workload [request.py]: No request was sent because method was {method}")
     return None
