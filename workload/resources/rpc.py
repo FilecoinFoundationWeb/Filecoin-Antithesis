@@ -15,6 +15,7 @@ sdk.always(declare=True, id="ChainHead rpc response has good status code", messa
 sdk.always(declare=True, id="GasEstimateMessageGas rpc response has good status code", message="GasEstimateMessageGas rpc response has good status code")
 sdk.always(declare=True, id="MpoolPushMessage rpc response has good status code", message="MpoolPushMessage rpc response has good status code")
 sdk.always(declare=True, id="Genesis wallet was found in WalletList", message="Genesis wallet was found in WalletList")
+sdk.always(declare=True, id="SyncState rpc response has good status code", message="SyncState rpc response has good status code")
 
 
 def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
@@ -121,6 +122,31 @@ def get_wallet_private_key(node_type:str, rpc_url:str, auth_token:str, wallet:st
     sdk.always(declare=False, id="WalletExport rpc response has good status code", message="WalletExport rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during get_wallet_private_key for {method} on a {node_type} node")
     return response['response'].json()['result']['PrivateKey']
+
+
+def get_wallet_balance(node_type:str, rpc_url:str, auth_token: str, wallet:str):
+    '''
+    @purpose - get the amount of FIL in a wallet
+    '''
+    method = 'Filecoin.WalletBalance'
+    payload = json.dumps({
+        "jsonrpc": "2.0",
+        "id": "1",
+        "method": method,
+        "params": [wallet]
+    })
+    response = request(node_type, rpc_url, auth_token, 'post', payload)
+    if response['response'].status_code != 200:
+        # sdk
+        print(f"Workload [rpc.py]: bad response status code during get_wallet_balance for {method} on a {node_type} node")
+        return None
+    # sdk
+    print(f"Workload [rpc.py]: good response status code during get_wallet_balance for {method} on a {node_type} node")
+    print("debugging!!!!!!")
+    print(response)
+    print("---------------")
+    print(response['response'])
+    print("END OF DEBUGGING!!!!!")
 
 
 def get_chainhead(node_type, rpc_url:str, auth_token:str) -> str:
@@ -245,17 +271,22 @@ def mpool_push_message(node_type:str, rpc_url:str, auth_token:str, from_wallet:s
     sdk.always(declare=False, id="MpoolPushMessage rpc response has good status code", message="MpoolPushMessage rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during push_message for {method} on a {node_type} node")
     return response
-#def mpool_push_message(node_type:str, rpc_url:str, auth_token:str, from_wallet:str, from_wallet_pk:str, to_wallet:str, fil:str, gas_info:dict, cid:str):
-def print_Sync_Status(node_type:str, rpc_url:str, auth_token:str):
+
+
+def sync_state(node_type:str, rpc_url:str, auth_token:str):
     '''
-    
+    @purpose - get the sync status of a node
+    @param rpc_url - endpoint address for a node
+    @param auth_token - authentication token for that node
+    @return - list of active syncs. each element is a dictionary with WorkerID, Base, Target, Stage, Height, Start, End, and Message keys
     '''
     method = 'Filecoin.SyncState'
-    payload = json.dumps({"jsonrpc": "2.0",
+    payload = json.dumps({
+        "jsonrpc": "2.0",
         "id": "1",
         "method": method,
         "params": []
-        })
+    })
     response = request(node_type, rpc_url, auth_token, "post", payload)
     if response['response'].status_code != 200:
         sdk.always(declare=False, id="SyncState rpc response has good status code", message="SyncState rpc response has bad status code", condition=False, details={"Response":response['response']})
@@ -263,4 +294,4 @@ def print_Sync_Status(node_type:str, rpc_url:str, auth_token:str):
         return None
     sdk.always(declare=False, id="SyncState rpc response has good status code", message="SyncState rpc response has good status code", condition=True)
     print(f"Workload [rpc.py]: good response status code during SyncState for {method} on a {node_type} node")
-    return response.json().get("result", {}).get("ActiveSyncs", [])
+    return response['response'].json()['result']['ActiveSyncs']

@@ -32,3 +32,7 @@ def get_url_and_token(node_type:str):
 def select_random_node():
     nodes = ["forest","lotus"]
     return random.choice(nodes)
+
+def get_all_nodes():
+    nodes = ["forest","lotus"]
+    return nodes
