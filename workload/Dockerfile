@@ -2,13 +2,16 @@ FROM docker.io/ubuntu:latest
 
 RUN apt-get update -y && apt-get install -y python3 pip python3-requests python3-filelock curl jq
 
+#good
 COPY ./main/first.sh /opt/antithesis/test/v1/main/first.sh
 COPY ./main/parallel_driver_spammer.py /opt/antithesis/test/v1/main/parallel_driver_spammer.py
 COPY ./main/parallel_driver_create_wallets.py /opt/antithesis/test/v1/main/parallel_driver_create_wallets.py
 COPY ./main/parallel_driver_delete_wallets.py /opt/antithesis/test/v1/main/parallel_driver_delete_wallets.py
 COPY ./main/anytime_increasing_block_height_check.py /opt/antithesis/test/v1/main/anytime_increasing_block_height_check.py
 COPY ./main/eventually_all_node_sync_status_check.py /opt/antithesis/test/v1/main/eventually_all_node_sync_status_check.py
-COPY ./main/serial_driver_sync.py /opt/antithesis/test/v1/main/serial_driver_sync.py
+
+#in progress
+#COPY ./main/anytime_node_sync_check.py /opt/antithesis/test/v1/main/anytime_node_sync_check.py
 
 
 COPY ./resources/initialize_wallets.py /opt/antithesis/resources/initialize_wallets.py

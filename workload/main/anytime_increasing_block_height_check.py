@@ -9,8 +9,8 @@ from antithesis_sdk import antithesis_fallback_sdk
 
 
 sdk = antithesis_fallback_sdk()
-sdk.always(declare=True, id="Chainhead increases", message="Chainhead increases as expected")
-sdk.reachable(declare=True, id="Successful 'increasing_block_height_check.py' script execution", message="Successful 'create_wallets.py' script execution")
+sdk.always(declare=True, id="Chainhead increases as expected", message="Chainhead increases as expected")
+sdk.reachable(declare=True, id="Script execution: 'increasing_block_height_check' ran", message="Script execution: 'increasing_block_height_check' ran")
 
 def check_increasing_block_height(n=3, time_limit=7.5):
 
@@ -33,13 +33,13 @@ def check_increasing_block_height(n=3, time_limit=7.5):
                 diff = round((s - e)/1_000_000_000, 2)
                 print(f"Workload [main][anytime_increasing_block_height_check.py]: time difference between block height {height} and block height {new_height} was {diff} seconds")
                 if diff > time_limit:
-                    sdk.always(declare=False, id="Chainhead increases", message="Chainhead did not increase as expected", condition=False, details={"old,new,diff": [height,new_height,diff]})
+                    sdk.always(declare=False, id="Chainhead increases as expected", message="Chainhead increases as expected", condition=False, details={"old height":height,"new height":new_height,"time difference":diff})
                 else:
-                    sdk.always(declare=False, id="Chainhead increases", message="Chainhead increases as expected", condition=True, details={"old,new,diff": [height,new_height,diff]})
+                    sdk.always(declare=False, id="Chainhead increases as expected", message="Chainhead increases as expected", condition=True, details={"old height":height,"new height":new_height,"time difference":diff})
                 break
             time.sleep(0.5)
 
-    sdk.reachable(declare=False, id="Successful 'increasing_block_height_check.py' script execution", message="Successful 'create_wallets.py' script execution", condition=True, details={"node":node})
+    sdk.reachable(declare=False, id="Script execution: 'increasing_block_height_check' ran", message="Script execution: 'increasing_block_height_check' ran", condition=True, details={"node type":node})
 
 
 check_increasing_block_height()

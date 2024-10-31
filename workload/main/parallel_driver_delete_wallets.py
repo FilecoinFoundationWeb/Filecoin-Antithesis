@@ -8,7 +8,7 @@ from antithesis_sdk import antithesis_fallback_sdk
 
 
 sdk = antithesis_fallback_sdk()
-sdk.reachable(declare=True, id="Successful 'delete_wallets.py' script execution", message="Successful 'delete_wallets.py' script execution")
+sdk.reachable(declare=True, id="Script execution: 'delete_wallets' ran", message="Script execution: 'delete_wallets' ran")
 
 def delete_wallets():
     n_wallets = random.SystemRandom().randint(3, 6)
@@ -21,6 +21,6 @@ def delete_wallets():
     wallets.delete_wallets_locally(wallets_to_delete)
     wallets_to_delete = list(wallets_to_delete.keys())
     wallets.delete_wallets(node, rpc_url, auth_token, wallets_to_delete)
-    sdk.reachable(declare=False, id="Successful 'delete_wallets.py' script execution", message="Successful 'delete_wallets.py' script execution", condition=True, details={"node":node})
+    sdk.reachable(declare=False, id="Script execution: 'delete_wallets' ran", message="Script execution: 'delete_wallets' ran", condition=True, details={"node type":node})
 
 delete_wallets()

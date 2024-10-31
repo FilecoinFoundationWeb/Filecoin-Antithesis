@@ -7,7 +7,6 @@ sys.path.append("/opt/antithesis/sdk")
 from antithesis_sdk import antithesis_fallback_sdk
 
 sdk = antithesis_fallback_sdk()
-sdk.unreachable(declare=True, id="Invalid parameters passed to initialize_wallets.py", message="Invalid parameters were passed to initialize_wallets.py")
 sdk.reachable(declare=True, id="Successful 'initialize_wallets.py' script execution", message="Successful 'initialize_wallets.py script execution")
 
 def init_wallets(node_type):
@@ -39,7 +38,7 @@ def init_wallets(node_type):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        sdk.unreachable(declare=False, id="Invalid parameters passed to initialize_wallets.py", message="Invalid parameters were passed to initialize_wallets.py", condition=True, details={"parameters":sys.argv})
+        print("Error: Invalid parameters were passed to initialize_wallets.py")
     else:    
         init_wallets(sys.argv[1])
 

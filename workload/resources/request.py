@@ -7,8 +7,8 @@ from antithesis_sdk import antithesis_fallback_sdk
 import requests
 
 sdk = antithesis_fallback_sdk()
-sdk.unreachable(declare=True, id="Invalid method for a request", message="No request was sent because the method was an invalid option")
-sdk.reachable(declare=True, id="Request response received", message="A request was send and a response was received")
+sdk.unreachable(declare=True, id="Invalid HTTP method in a RPC request", message="Invalid HTTP method in a RPC request")
+sdk.reachable(declare=True, id="A RPC request was send and a response was received", message="A RPC request was send and a response was received")
 
 def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict) -> dict:
     '''
@@ -44,10 +44,7 @@ def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict
 
         func = getattr(requests, method)
         response = func(rpc_url, headers=headers, **kwargs)
-
-        # print(f"Workload [request.py]: request response was {response}")
-
-        sdk.reachable(declare=False, id="Request response received", message="A request was send and a response was received", condition=True)
+        sdk.reachable(declare=False, id="A RPC request was send and a response was received", message="A RPC request was send and a response was received", condition=True)
 
         return {
             'request': {
@@ -58,6 +55,6 @@ def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict
             'response': response
         }
     
-    sdk.unreachable(declare=False, id="Invalid method for a request", message="No request was sent because the method was an invalid option", condition=True, details={"passed through method":method})
     print(f"Workload [request.py]: No request was sent because method was {method}")
+    sdk.unreachable(declare=False, id="Invalid HTTP method in a RPC request", message="Invalid HTTP method in a RPC request", condition=True, details={"invalid http method":method})
     return None

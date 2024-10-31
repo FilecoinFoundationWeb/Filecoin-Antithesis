@@ -8,7 +8,7 @@ from antithesis_sdk import antithesis_fallback_sdk
 
 
 sdk = antithesis_fallback_sdk()
-sdk.reachable(declare=True, id="Successful 'create_wallets.py' script execution", message="Successful 'create_wallets.py' script execution")
+sdk.reachable(declare=True, id="Script execution: 'create_wallets' ran", message="Script execution: 'create_wallets' ran")
 
 def create_wallets():
     n_wallets = random.SystemRandom().randint(5, 15)
@@ -18,6 +18,6 @@ def create_wallets():
     new_wallets_pks = wallets.get_wallets_private_keys(node_type=node, rpc_url=rpc_url, auth_token=auth_token, wallets=new_wallets)
     wallet_pk_dict = dict(zip(new_wallets, new_wallets_pks))
     wallets.write_wallets_locally(wallet_pk=wallet_pk_dict)
-    sdk.reachable(declare=False, id="Successful 'create_wallets.py' script execution", message="Successful 'create_wallets.py' script execution", condition=True, details={"node":node})
+    sdk.reachable(declare=False, id="Script execution: 'create_wallets' ran", message="Script execution: 'create_wallets' ran", condition=True, details={"node type":node})
 
 create_wallets()

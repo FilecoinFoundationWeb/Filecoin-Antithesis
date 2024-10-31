@@ -9,8 +9,10 @@ from antithesis_sdk import antithesis_fallback_sdk
 
 
 sdk = antithesis_fallback_sdk()
+sdk.reachable(declare=True, id="Script execution: 'anytime_node_sync_check' ran", message="Script execution: 'anytime_node_sync_check' ran")
+
+#todo: update to "human readable" for the assertion below
 sdk.always(declare=True, id="Nodes are in sync", message="Nodes are in sync")
-sdk.reachable(declare=True, id="Successful 'node_sync_check.py' script execution", message="Successful 'node_sync_check.py' script execution")
 
 def node_sync_check():
 
@@ -53,7 +55,7 @@ def node_sync_check():
             print(f"Workload [anytime_node_sync_check.py]: Worker {sync_worker} Base and Target changed after 10 seconds (Old Base: {old_base}, New Base: {new_base}, Old Target: {old_target}, New Target: {new_target})")
             sdk.always(declare=False, id="Nodes are in sync", message="Node is in sync", condition=True)
 
-    sdk.reachable(declare=False, id="Successful 'node_sync_check.py' script execution", message="Successful 'node_sync_check.py' script execution", condition=True)
+    sdk.reachable(declare=False, id="Script execution: 'anytime_node_sync_check' ran", message="Script execution: 'anytime_node_sync_check' ran", condition=True)
 
 
 node_sync_check()
