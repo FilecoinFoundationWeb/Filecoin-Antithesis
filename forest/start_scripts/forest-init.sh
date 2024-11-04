@@ -41,4 +41,26 @@ forest --genesis "${LOTUS_DATA_DIR}/devgen.car" \
        --skip-load-actors &
 
 touch /container_ready/forest-init
+
+# Function to get the current chain head
+get_chain_head() {
+    forest-cli chain head | jq -r '.Cids[0]."/"' | tr -d '"'
+}
+
+# Initial chain head
+previous_chain_head=$(get_chain_head)
+
+# Loop to check the chain head every minute
+while true; do
+    sleep 60
+    current_chain_head=$(get_chain_head)
+    if [ "$current_chain_head" == "$previous_chain_head" ]; then
+        echo "Forest chain head has not changed. Running forest-connector.sh."
+        ./forest-connector.sh
+    else
+        echo "Forest chain head has changed."
+    fi
+    previous_chain_head=$current_chain_head
+done
+
 sleep infinity
