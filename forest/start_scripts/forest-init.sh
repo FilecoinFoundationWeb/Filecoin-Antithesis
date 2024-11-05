@@ -42,14 +42,17 @@ forest --genesis "${LOTUS_DATA_DIR}/devgen.car" \
 
 touch /container_ready/forest-init
 
+sleep 30
 # Function to get the current chain head
 get_chain_head() {
-    forest-cli chain head | jq -r '.Cids[0]."/"' | tr -d '"'
+    curl -X POST 'http://10.20.20.26:3456/rpc/v1' -H 'Content-Type: application/json' --data '{"jsonrpc": "2.0", "method": "Filecoin.ChainHead", "id": null}' | jq '.result.Height'
+
 }
 
 # Initial chain head
 previous_chain_head=$(get_chain_head)
-
+echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa"
+echo $previous_chain_head
 # Loop to check the chain head every minute
 while true; do
     sleep 60
