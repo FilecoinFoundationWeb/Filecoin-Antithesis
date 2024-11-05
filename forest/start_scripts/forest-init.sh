@@ -51,8 +51,6 @@ get_chain_head() {
 
 # Initial chain head
 previous_chain_head=$(get_chain_head)
-echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa"
-echo $previous_chain_head
 # Loop to check the chain head every minute
 while true; do
     sleep 60

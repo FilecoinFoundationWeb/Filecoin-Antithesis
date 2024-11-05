@@ -16,7 +16,7 @@ do
     fi
     sleep 5
 done
-
+export LOTUS_F3_BOOTSTRAP_EPOCH=901
 export DRAND_CHAIN_INFO=chain_info
 
 lotus-miner --version
