@@ -51,7 +51,6 @@ echo Finished waiting for API, importing wallet now.
 lotus net listen > ${LOTUS_DATA_DIR}/ipv4addr
 lotus net id > ${LOTUS_DATA_DIR}/p2pID
 lotus auth create-token --perm admin > ${LOTUS_DATA_DIR}/jwt
-
 touch /container_ready/lotus-node
 
 sleep infinity

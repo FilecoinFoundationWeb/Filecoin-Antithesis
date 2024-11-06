@@ -52,10 +52,9 @@ cat localnet.json | jq -r '.NetworkName' > ${LOTUS_2_DATA_DIR}/network_name2
 cp localnet2.json ${LOTUS_2_DATA_DIR}/localnet2.json
 lotus --repo="${LOTUS_2_PATH}" daemon --genesis=${LOTUS_DATA_DIR}/devgen.car --bootstrap=false --config=${LOTUS_2_DATA_DIR}/config-node2.toml&
 lotus wait-api
-echo Finished waiting for API, importing wallet now.
 lotus net listen > ${LOTUS_2_DATA_DIR}/ipv4addr-node2
 lotus net id > ${LOTUS_2_DATA_DIR}/p2pID-node2
 lotus auth create-token --perm admin > ${LOTUS_2_DATA_DIR}/jwt-node2
-# lotus net connect $(cat lotus-1-ipv4addr)
-
+lotus net connect $(cat lotus-1-ipv4addr)
+lotus sync wait
 sleep infinity

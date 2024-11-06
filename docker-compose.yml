@@ -131,7 +131,8 @@ services:
       antithesis-net:
         ipv4_address: ${LOTUS_MINER_2_IP}
     volumes:
-      - ./data/lotus:${LOTUS_2_DATA_DIR}
+      - ./data/lotus:${LOTUS_DATA_DIR}
+      - ./data/lotus2:${LOTUS_2_DATA_DIR}
       - ./lotus/start_scripts/lotus-miner2.sh:${LOTUS_2_DATA_DIR}/lotus-miner2.sh
       - ./container_ready:/container_ready
     environment:
