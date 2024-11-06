@@ -11,11 +11,6 @@ ARG GIT_BRANCH="v1.29.1"
 
 RUN git clone --depth=1 --branch="${GIT_BRANCH}" https://github.com/filecoin-project/lotus.git /lotus
 
-RUN export LOTUS_PATH=~/.lotus-local-net && \
-    export LOTUS_MINER_PATH=~/.lotus-miner-local-net && \
-    export LOTUS_SKIP_GENESIS_CHECK=_yes_ && \
-    export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__" && \
-    export CGO_CFLAGS="-D__BLST_PORTABLE__"
 WORKDIR /lotus
 RUN latest_version=$(git tag -l 'v*' | sort -V -r | head -n 1)
 COPY ./lotus.patch ./lotus.patch
@@ -29,13 +24,19 @@ CMD ["./lotus","--version"]
 RUN ./lotus fetch-params 2048
 
 # Pre-seal for the first miner
-RUN ./lotus-seed pre-seal --sector-size 2KiB --num-sectors 2 --miner-addr t01000
+RUN ./lotus-seed --sector-dir=/root/.genesis-sectors pre-seal --sector-size 2KiB --num-sectors 2 --miner-addr t01000
 
-# Create genesis template
-RUN ./lotus-seed genesis new localnet.json 
-
+#Pre-seal for the second miner
+RUN ./lotus-seed --sector-dir=/root/.genesis-sectors2 pre-seal --sector-size 2KiB --num-sectors 3 --miner-addr t01001 
+# Create genesis template for first miner
+RUN ./lotus-seed genesis new localnet.json
+# Create genesis template for second miner 
+RUN ./lotus-seed genesis new localnet2.json
 # Add the first miner to the genesis template
 RUN ./lotus-seed genesis add-miner localnet.json /root/.genesis-sectors/pre-seal-t01000.json
+# Add the second miner to the genesis template
+RUN ./lotus-seed genesis add-miner localnet2.json /root/.genesis-sectors2/pre-seal-t01001.json
+
 RUN  make install
 
 ENTRYPOINT ["sleep", "infinity"]
