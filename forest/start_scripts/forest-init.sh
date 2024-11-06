@@ -24,7 +24,7 @@ curl 10.20.20.21/info | jq -c > chain_info
 export DRAND_CHAIN_INFO=chain_info
 # Extract network name from localnet.json and set it as an environment variable
 export NETWORK_NAME=$(grep -o "localnet.*" "${LOTUS_DATA_DIR}/localnet.json" | tr -d '",' )
-
+export FOREST_F3_SIDECAR_FFI_ENABLED=1
 # Copy the forest configuration template and update it with the network name
 cp /forest/forest_config.toml.tpl "${FOREST_DATA_DIR}/forest_config.toml"
 echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
@@ -41,4 +41,27 @@ forest --genesis "${LOTUS_DATA_DIR}/devgen.car" \
        --skip-load-actors &
 
 touch /container_ready/forest-init
+
+sleep 30
+# Function to get the current chain head
+get_chain_head() {
+    curl -X POST 'http://10.20.20.26:3456/rpc/v1' -H 'Content-Type: application/json' --data '{"jsonrpc": "2.0", "method": "Filecoin.ChainHead", "id": null}' | jq '.result.Height'
+
+}
+
+# Initial chain head
+previous_chain_head=$(get_chain_head)
+# Loop to check the chain head every minute
+while true; do
+    sleep 60
+    current_chain_head=$(get_chain_head)
+    if [ "$current_chain_head" == "$previous_chain_head" ]; then
+        echo "Forest chain head has not changed. Running forest-connector.sh."
+        ./forest-connector.sh
+    else
+        echo "Forest chain head has changed."
+    fi
+    previous_chain_head=$current_chain_head
+done
+
 sleep infinity

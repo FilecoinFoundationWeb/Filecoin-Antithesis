@@ -14,7 +14,7 @@ do
     fi
     sleep 5
 done
-
+export LOTUS_F3_BOOTSTRAP_EPOCH=901
 # Waiting for chain_info to be good
 tries=10
 while [ "$tries" -gt 0 ]; do
