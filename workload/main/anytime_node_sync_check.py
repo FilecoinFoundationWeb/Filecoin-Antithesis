@@ -12,7 +12,7 @@ sdk = antithesis_fallback_sdk()
 sdk.reachable(declare=True, id="Script execution: 'anytime_node_sync_check' ran", message="Script execution: 'anytime_node_sync_check' ran")
 
 #todo: update to "human readable" for the assertion below
-sdk.always(declare=True, id="Nodes are in sync", message="Nodes are in sync")
+sdk.always(declare=True, id="Node is syncing check", message="Node is syncing check")
 
 def node_sync_check():
 
@@ -49,11 +49,11 @@ def node_sync_check():
 
         if old_base == new_base and old_target == new_target:
             print(f"Workload [anytime_node_sync_check.py]: error! Worker {sync_worker} is stuck with the same Base and Target mismatch (Base: {old_base}, Target: {old_target})")
-            sdk.always(declare=False, id="Nodes are in sync", message="A node is stuck and is out of sync. Base and Target mismatch is the same after 10 seconds", condition=False, details={"Old Active Sync / New Active Sync":[old_active_sync, new_active_sync]})
+            sdk.always(declare=False, id="Node is syncing check", message="Node is syncing check", condition=False, details={"message":"A node is stuck and is out of sync. Base and Target mismatch is the same after 10 seconds","Old active sync":old_active_sync,"New active sync":new_active_sync})
         else:
             # not stuck here?
             print(f"Workload [anytime_node_sync_check.py]: Worker {sync_worker} Base and Target changed after 10 seconds (Old Base: {old_base}, New Base: {new_base}, Old Target: {old_target}, New Target: {new_target})")
-            sdk.always(declare=False, id="Nodes are in sync", message="Node is in sync", condition=True)
+            sdk.always(declare=False, id="Node is syncing check", message="Node is syncing check", condition=True)
 
     sdk.reachable(declare=False, id="Script execution: 'anytime_node_sync_check' ran", message="Script execution: 'anytime_node_sync_check' ran", condition=True)
 

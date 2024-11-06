@@ -11,7 +11,7 @@ COPY ./main/anytime_increasing_block_height_check.py /opt/antithesis/test/v1/mai
 COPY ./main/eventually_all_node_sync_status_check.py /opt/antithesis/test/v1/main/eventually_all_node_sync_status_check.py
 
 #in progress
-#COPY ./main/anytime_node_sync_check.py /opt/antithesis/test/v1/main/anytime_node_sync_check.py
+COPY ./main/anytime_node_sync_check.py /opt/antithesis/test/v1/main/anytime_node_sync_check.py
 
 
 COPY ./resources/initialize_wallets.py /opt/antithesis/resources/initialize_wallets.py
