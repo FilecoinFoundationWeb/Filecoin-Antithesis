@@ -2,7 +2,7 @@
 # Enable strict mode to catch errors and undefined variables
 set -euo pipefail
 
-sleep 120
+sleep 140
 
 # Waiting for lotus node to be up
 lotus_node_ready=0
@@ -42,26 +42,26 @@ forest --genesis "${LOTUS_DATA_DIR}/devgen.car" \
 
 touch /container_ready/forest-init
 
-sleep 30
-# Function to get the current chain head
-get_chain_head() {
-    curl -X POST 'http://${FOREST_IP}:${FOREST_RPC_PORT}/rpc/v1' -H 'Content-Type: application/json' --data '{"jsonrpc": "2.0", "method": "Filecoin.ChainHead", "id": null}' | jq '.result.Height'
-
-}
-
-# Initial chain head
-previous_chain_head=$(get_chain_head)
-# Loop to check the chain head every minute
-while true; do
-    sleep 60
-    current_chain_head=$(get_chain_head)
-    if [ "$current_chain_head" == "$previous_chain_head" ]; then
-        echo "Forest chain head has not changed. Running forest-connector.sh."
-        ./forest-connector.sh
-    else
-        echo "Forest chain head has changed."
-    fi
-    previous_chain_head=$current_chain_head
-done
-
+#sleep 30
+## Function to get the current chain head
+#get_chain_head() {
+#    curl -X POST 'http://${FOREST_IP}:${FOREST_RPC_PORT}/rpc/v1' -H 'Content-Type: application/json' --data '{"jsonrpc": "2.0", "method": "Filecoin.ChainHead", "id": null}' | jq '.result.Height'
+#
+#}
+#
+## Initial chain head
+#previous_chain_head=$(get_chain_head)
+## Loop to check the chain head every minute
+#while true; do
+#    sleep 60
+#    current_chain_head=$(get_chain_head)
+#    if [ "$current_chain_head" == "$previous_chain_head" ]; then
+#        echo "Forest chain head has not changed. Running forest-connector.sh."
+#        ./forest-connector.sh
+#    else
+#        echo "Forest chain head has changed."
+#    fi
+#    previous_chain_head=$current_chain_head
+#done
+#
 sleep infinity

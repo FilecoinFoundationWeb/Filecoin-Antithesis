@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Wait for 90 seconds
-sleep 95
+sleep 120
 
 # Export environment variables
 export LOTUS_F3_BOOTSTRAP_EPOCH=901

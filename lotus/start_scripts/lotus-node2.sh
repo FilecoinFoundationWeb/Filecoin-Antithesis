@@ -31,7 +31,7 @@
 #     echo "$tries connection attempts remaining..."
 # done
 
-sleep 80
+sleep 90
 export LOTUS_F3_BOOTSTRAP_EPOCH=901
 export DRAND_CHAIN_INFO=chain_info
 export LOTUS_PATH=${LOTUS_2_PATH}
@@ -41,7 +41,7 @@ export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__" 
 curl 10.20.20.21/info | jq -c > chain_info
 export DRAND_CHAIN_INFO=chain_info
-cat ${LOTUS_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > lotus-1-ipv4addr
+cat ${LOTUS_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_DATA_DIR}/lotus-1-ipv4addr
 cat lotus-1-ipv4addr
 echo "AAAAAA"
 echo $LOTUS_PATH

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sleep 30
+sleep 40
 
 # # Waiting for lotus node to be up
 # lotus_node_ready=0
@@ -24,7 +24,7 @@ export LOTUS_SKIP_GENESIS_CHECK=_yes_
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 lotus-miner --version
-lotus wallet import --as-default /root/.genesis-sectors/pre-seal-t01000.key
+lotus wallet import --as-default ${LOTUS_DATA_DIR}/key
 lotus-miner init --genesis-miner --actor=t01000 --sector-size=2KiB --pre-sealed-sectors=/root/.genesis-sectors --pre-sealed-metadata=manifest.json --nosync
 echo "lotus-miner: setup complete"
 lotus-miner run --nosync

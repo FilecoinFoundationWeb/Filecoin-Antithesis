@@ -78,6 +78,7 @@ services:
         ipv4_address: ${LOTUS_MINER_1_IP}
     volumes:
       - ./data/lotus:${LOTUS_DATA_DIR}
+      - ./data/lotus2:${LOTUS_2_DATA_DIR}
       - ./lotus/start_scripts/lotus-miner.sh:${LOTUS_DATA_DIR}/lotus-miner.sh
       - ./container_ready:/container_ready
     environment:
@@ -167,7 +168,7 @@ services:
       antithesis-net:
         ipv4_address: ${FOREST_IP}
     environment:
-      - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${MINER_ACTOR_ADDRESS}
+      - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${MINER_1_ACTOR_ADDRESS}
       - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
       - FOREST_SHARK_HEIGHT=${SHARK_HEIGHT}
       - FOREST_HYGGE_HEIGHT=${HYGGE_HEIGHT}
