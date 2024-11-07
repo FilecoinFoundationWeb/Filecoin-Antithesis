@@ -17,7 +17,7 @@ lotus-miner --version
 echo $LOTUS_PATH
 lotus wallet import --as-default /root/.genesis-sectors2/pre-seal-t01001.key
 lotus-miner init --genesis-miner --actor=t01001 --sector-size=2KiB --pre-sealed-sectors=/root/.genesis-sectors2 --pre-sealed-metadata=manifest.json --nosync
-#lotus-miner init --genesis-miner --actor=t01001 --sector-size=2KiB --pre-sealed-sectors=/root/.genesis-sectors2 --pre-sealed-metadata=manifest.json --nosync
+#lotus-miner init --genesis-miner --actor=t01001 --sector-size=2KiB --pre-sealed-sectors=/root/.genesis-sectors2 --pre-sealed-metadata=manifest.json --nosyncminer2
 # echo "lotus-miner: setup complete"
 lotus-miner run --nosync
 # sleep infinity

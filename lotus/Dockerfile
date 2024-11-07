@@ -28,7 +28,7 @@ RUN ./lotus fetch-params 2048
 RUN ./lotus-seed --sector-dir=/root/.genesis-sectors pre-seal --sector-size 2KiB --num-sectors 2 --miner-addr t01000
 
 #Pre-seal for the second miner
-RUN ./lotus-seed --sector-dir=/root/.genesis-sectors2 pre-seal --sector-size 2KiB --num-sectors 2 --miner-addr t01001 
+RUN ./lotus-seed --sector-dir=/root/.genesis-sectors2 pre-seal --sector-size 2KiB --num-sectors 3 --miner-addr t01001 
 # Create genesis template for first miner
 RUN ./lotus-seed genesis new localnet.json
 # Create genesis template for second miner 
