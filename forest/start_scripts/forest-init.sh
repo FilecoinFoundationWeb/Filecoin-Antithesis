@@ -2,7 +2,7 @@
 # Enable strict mode to catch errors and undefined variables
 set -euo pipefail
 
-sleep 10
+sleep 120
 
 # Waiting for lotus node to be up
 lotus_node_ready=0
@@ -36,8 +36,8 @@ cat ${FOREST_DATA_DIR}/forest_config.toml
 forest --genesis "${LOTUS_DATA_DIR}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
        --save-token "${FOREST_DATA_DIR}/token.jwt" \
-       --rpc-address 10.20.20.26:"${FOREST_RPC_PORT}" \
-       --p2p-listen-address /ip4/10.20.20.26/tcp/${FOREST_P2P_PORT} \
+       --rpc-address ${FOREST_IP}:"${FOREST_RPC_PORT}" \
+       --p2p-listen-address /ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT} \
        --skip-load-actors &
 
 touch /container_ready/forest-init
@@ -45,7 +45,7 @@ touch /container_ready/forest-init
 sleep 30
 # Function to get the current chain head
 get_chain_head() {
-    curl -X POST 'http://10.20.20.26:3456/rpc/v1' -H 'Content-Type: application/json' --data '{"jsonrpc": "2.0", "method": "Filecoin.ChainHead", "id": null}' | jq '.result.Height'
+    curl -X POST 'http://${FOREST_IP}:${FOREST_RPC_PORT}/rpc/v1' -H 'Content-Type: application/json' --data '{"jsonrpc": "2.0", "method": "Filecoin.ChainHead", "id": null}' | jq '.result.Height'
 
 }
 

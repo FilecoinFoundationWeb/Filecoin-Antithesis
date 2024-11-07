@@ -152,53 +152,55 @@ services:
     restart: on-failure
     entrypoint: ["${LOTUS_2_DATA_DIR}/lotus-miner2.sh"]
 
-  # # Forest service
-  # forest:
-  #   image: forest:${FOREST_COMMIT:-latest}
-  #   container_name: forest
-  #   volumes:
-  #     - ./data/lotus:${LOTUS_DATA_DIR}
-  #     - ./data/forest:${FOREST_DATA_DIR}
-  #     - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
-  #     - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
-  #     - ./container_ready:/container_ready
-  #   networks:
-  #     antithesis-net:
-  #       ipv4_address: ${FOREST_IP}
-  #   environment:
-  #     - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${MINER_ACTOR_ADDRESS}
-  #     - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
-  #     - FOREST_SHARK_HEIGHT=${SHARK_HEIGHT}
-  #     - FOREST_HYGGE_HEIGHT=${HYGGE_HEIGHT}
-  #     - FOREST_LIGHTNING_HEIGHT=${LIGHTNING_HEIGHT}
-  #     - FOREST_THUNDER_HEIGHT=${THUNDER_HEIGHT}
-  #     - FOREST_WATERMELON_HEIGHT=${WATERMELON_HEIGHT}
-  #     - FOREST_DRAGON_HEIGHT=${DRAGON_HEIGHT}
-  #     - FOREST_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
-  #     - FOREST_IP = ${FOREST_IP}
-  #   ports:
-  #     - ${FOREST_RPC_PORT}:${FOREST_RPC_PORT}
-  #   env_file:
-  #     - .env      
-  #   entrypoint: ["${FOREST_DATA_DIR}/forest-init.sh"]
+  # Forest service
+  forest:
+    image: forest:${FOREST_COMMIT:-latest}
+    container_name: forest
+    volumes:
+      - ./data/lotus:${LOTUS_DATA_DIR}
+      - ./data/lotus2:${LOTUS_2_DATA_DIR}
+      - ./data/forest:${FOREST_DATA_DIR}
+      - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
+      - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
+      - ./container_ready:/container_ready
+    networks:
+      antithesis-net:
+        ipv4_address: ${FOREST_IP}
+    environment:
+      - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${MINER_ACTOR_ADDRESS}
+      - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
+      - FOREST_SHARK_HEIGHT=${SHARK_HEIGHT}
+      - FOREST_HYGGE_HEIGHT=${HYGGE_HEIGHT}
+      - FOREST_LIGHTNING_HEIGHT=${LIGHTNING_HEIGHT}
+      - FOREST_THUNDER_HEIGHT=${THUNDER_HEIGHT}
+      - FOREST_WATERMELON_HEIGHT=${WATERMELON_HEIGHT}
+      - FOREST_DRAGON_HEIGHT=${DRAGON_HEIGHT}
+      - FOREST_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
+      - FOREST_IP = ${FOREST_IP}
+    ports:
+      - ${FOREST_RPC_PORT}:${FOREST_RPC_PORT}
+    env_file:
+      - .env      
+    entrypoint: ["${FOREST_DATA_DIR}/forest-init.sh"]
 
-  # # Forest <-> Lotus connector service
-  # forest-connecter:
-  #   image: forest:${FOREST_COMMIT:-latest}
-  #   container_name: forest-connector
-  #   volumes:
-  #     - ./data/lotus:${LOTUS_DATA_DIR}
-  #     - ./data/forest:${FOREST_DATA_DIR}
-  #     - ./forest/start_scripts/forest-connector.sh:${FOREST_DATA_DIR}/forest-connector.sh
-  #     - ./container_ready:/container_ready
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     - FOREST_CONNECTOR_IP=${FOREST_CONNECTOR_IP}
-  #   networks:
-  #     antithesis-net:
-  #       ipv4_address: ${FOREST_CONNECTOR_IP}
-  #   entrypoint: [ "${FOREST_DATA_DIR}/forest-connector.sh" ]
+  # Forest <-> Lotus connector service
+  forest-connecter:
+    image: forest:${FOREST_COMMIT:-latest}
+    container_name: forest-connector
+    volumes:
+      - ./data/lotus:${LOTUS_DATA_DIR}
+      - ./data/lotus2:${LOTUS_2_DATA_DIR}
+      - ./data/forest:${FOREST_DATA_DIR}
+      - ./forest/start_scripts/forest-connector.sh:${FOREST_DATA_DIR}/forest-connector.sh
+      - ./container_ready:/container_ready
+    env_file:
+      - .env
+    environment:
+      - FOREST_CONNECTOR_IP=${FOREST_CONNECTOR_IP}
+    networks:
+      antithesis-net:
+        ipv4_address: ${FOREST_CONNECTOR_IP}
+    entrypoint: [ "${FOREST_DATA_DIR}/forest-connector.sh" ]
 
   # Workload service
   # workload:
