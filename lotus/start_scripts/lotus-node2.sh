@@ -50,11 +50,11 @@ cp /root/.genesis-sectors2/pre-seal-t01001.key ${LOTUS_2_DATA_DIR}/key2
 cp /lotus/config-node2.toml "${LOTUS_2_DATA_DIR}/config-node2.toml"
 cat localnet.json | jq -r '.NetworkName' > ${LOTUS_2_DATA_DIR}/network_name2
 cp localnet2.json ${LOTUS_2_DATA_DIR}/localnet2.json
-lotus --repo="${LOTUS_2_PATH}" daemon --genesis=${LOTUS_DATA_DIR}/devgen.car --genesis-template=localnet2.json --bootstrap=false --config=${LOTUS_2_DATA_DIR}/config-node2.toml&
+lotus --repo="${LOTUS_2_PATH}" daemon --genesis=${LOTUS_DATA_DIR}/devgen.car  --bootstrap=false --config=${LOTUS_2_DATA_DIR}/config-node2.toml&
 lotus wait-api
 lotus net listen > ${LOTUS_2_DATA_DIR}/ipv4addr-node2
 lotus net id > ${LOTUS_2_DATA_DIR}/p2pID-node2
 lotus auth create-token --perm admin > ${LOTUS_2_DATA_DIR}/jwt-node2
-#lotus net connect $(cat ${LOTUS_DATA_DIR}/lotus-1-ipv4addr)
-#lotus sync wait
+lotus net connect $(cat ${LOTUS_DATA_DIR}/lotus-1-ipv4addr)
+lotus sync wait
 sleep infinity
