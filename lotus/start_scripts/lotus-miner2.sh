@@ -1,7 +1,19 @@
 #!/bin/bash
 
-# Wait for 90 seconds
-sleep 150
+Waiting for lotus-2 to be ready
+lotus-1-node=0
+while [[ ${lotus-2-node} -eq 0 ]]
+do
+    echo "lotus-node-2: checking if lotus-2 is ready.."
+    if [[ -e "/container_ready/lotus-2-node" ]]
+    then
+        echo "lotus-2-miner-node: lotus-2-node is ready!"
+        echo "lotus-2-miner-node: continuing startup..."
+        lotus-1-node=1
+        break
+    fi
+    sleep 5
+done
 
 # Export environment variables
 export LOTUS_F3_BOOTSTRAP_EPOCH=901
@@ -17,7 +29,6 @@ lotus-miner --version
 echo $LOTUS_PATH
 lotus wallet import --as-default /root/.genesis-sectors2/pre-seal-t01001.key
 lotus-miner init --genesis-miner --actor=t01001 --sector-size=2KiB --pre-sealed-sectors=/root/.genesis-sectors2 --pre-sealed-metadata=manifest.json --nosync
-#lotus-miner init --genesis-miner --actor=t01001 --sector-size=2KiB --pre-sealed-sectors=/root/.genesis-sectors2 --pre-sealed-metadata=manifest.json --nosyncminer2
-# echo "lotus-miner: setup complete"
 lotus-miner run --nosync
 # sleep infinity
+touch container_ready/lotus-2-miner-node

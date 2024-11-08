@@ -1,37 +1,19 @@
 #!/bin/bash
 
-# Waiting for drand dkg to be executed
-# drand_1_ready=0
-# while [[ ${drand_1_ready} -eq 0 ]]
-# do
-#     echo "lotus-node: checking if drand-1 is ready.."
-#     if [[ -e "/container_ready/drand-1" ]]
-#     then
-#         echo "lotus-node: drand-1 is ready!"
-#         echo "lotus-node: continuing startup..."
-#         drand_1_ready=1
-#         break
-#     fi
-#     sleep 5
-# done
-# export LOTUS_F3_BOOTSTRAP_EPOCH=901
-# # Waiting for chain_info to be good
-# tries=10
-# while [ "$tries" -gt 0 ]; do
-#     curl 10.20.20.21/info | jq -c
-#     chain_info_status=$?
-#     if [ $chain_info_status -eq 0 ];
-#     then
-#         echo "lotus-node: chain_info is ready!"
-#         echo " lotus-node: continuing startup..."
-#         break
-#     fi
-#     sleep 3
-#     tries=$(( tries - 1 ))
-#     echo "$tries connection attempts remaining..."
-# done
-
-sleep 90
+Waiting for lotus-1 to be ready
+lotus-1-node=0
+while [[ ${lotus-1-node} -eq 0 ]]
+do
+    echo "lotus-node-2: checking if lotus-1 is ready.."
+    if [[ -e "/container_ready/lotus-1-node" ]]
+    then
+        echo "lotus-2-node: lotus-1-node is ready!"
+        echo "lotus-2-node: continuing startup..."
+        lotus-1-node=1
+        break
+    fi
+    sleep 5
+done
 export LOTUS_F3_BOOTSTRAP_EPOCH=901
 export DRAND_CHAIN_INFO=chain_info
 export LOTUS_PATH=${LOTUS_2_PATH}
@@ -57,4 +39,5 @@ lotus net id > ${LOTUS_2_DATA_DIR}/p2pID-node2
 lotus auth create-token --perm admin > ${LOTUS_2_DATA_DIR}/jwt-node2
 lotus net connect $(cat ${LOTUS_DATA_DIR}/lotus-1-ipv4addr)
 lotus sync wait
+touch /container_ready/lotus-2-node
 sleep infinity
