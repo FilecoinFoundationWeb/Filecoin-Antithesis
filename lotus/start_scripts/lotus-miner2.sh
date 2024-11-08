@@ -1,7 +1,7 @@
 #!/bin/bash
 
 Waiting for lotus-2 to be ready
-lotus-1-node=0
+lotus-2-node=0
 while [[ ${lotus-2-node} -eq 0 ]]
 do
     echo "lotus-node-2: checking if lotus-2 is ready.."
@@ -9,7 +9,7 @@ do
     then
         echo "lotus-2-miner-node: lotus-2-node is ready!"
         echo "lotus-2-miner-node: continuing startup..."
-        lotus-1-node=1
+        lotus-2-node=1
         break
     fi
     sleep 5
