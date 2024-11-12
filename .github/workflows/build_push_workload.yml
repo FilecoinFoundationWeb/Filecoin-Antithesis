@@ -31,6 +31,7 @@ jobs:
         tags: |
           type=sha
           latest
+          ${{ env.GITHUB_REF }}
     - name: Build and push workload
       uses: docker/build-push-action@v5
       with:
