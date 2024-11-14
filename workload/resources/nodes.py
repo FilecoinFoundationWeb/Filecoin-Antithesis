@@ -14,12 +14,16 @@ def get_token(token_path:str) -> str:
 
 def get_url_and_token(node_type:str):
     if node_type == "forest":
-        rpc_url = "http://10.20.20.26:3456/rpc/v0"
+        rpc_url = "http://10.20.20.28:3456/rpc/v0"
         base_path = "/root/devgen/forest"
         token_txt = "token.jwt"
-    elif node_type == "lotus":
+    elif node_type == "lotus-1":
         rpc_url = "http://10.20.20.24:1234/rpc/v0"
-        base_path = "/root/devgen/lotus"
+        base_path = "/root/devgen/lotus-1"
+        token_txt = "jwt"
+    elif node_type == "lotus-2":
+        rpc_url = "http://10.20.20.26:1235/rpc/v0"
+        base_path = "/root/devgen/lotus-2"
         token_txt = "jwt"
     else:
         sdk.unreachable(declare=False, id="Invalid node for getting authentication credentials", message="Invalid node for getting authentication credentials", condition=True, details={"invalid node":node_type})
@@ -30,9 +34,9 @@ def get_url_and_token(node_type:str):
     return rpc_url, auth_token
 
 def select_random_node():
-    nodes = ["forest","lotus"]
+    nodes = ["forest","lotus-1","lotus-2"]
     return random.choice(nodes)
 
 def get_all_nodes():
-    nodes = ["forest","lotus"]
+    nodes = ["forest","lotus-1","lotus-2"]
     return nodes

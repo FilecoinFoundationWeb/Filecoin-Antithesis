@@ -4,12 +4,12 @@ services:
     container_name: drand-1
     hostname: drand-1
     image: drand:${DRAND_TAG:-latest}
-    entrypoint: /go/drand/scripts/./drand-1.sh
     env_file:
       - .env
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
       - ./container_ready:/container_ready
+    entrypoint: /go/drand/scripts/drand-1.sh
     networks:
       antithesis-net:
         ipv4_address: ${DRAND_1_IP}
@@ -19,12 +19,12 @@ services:
     container_name: drand-2
     hostname: drand-2
     image: drand:${DRAND_TAG:-latest}
-    entrypoint: /go/drand/scripts/./drand-2.sh
+    env_file:
+      - .env
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
       - ./container_ready:/container_ready
-    env_file:
-      - .env
+    entrypoint: /go/drand/scripts/drand-2.sh
     networks:
       antithesis-net:
         ipv4_address: ${DRAND_2_IP}
@@ -34,26 +34,24 @@ services:
     container_name: drand-3
     hostname: drand-3
     image: drand:${DRAND_TAG:-latest}
-    entrypoint: /go/drand/scripts/./drand-3.sh
+    env_file:
+      - .env
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
       - ./container_ready:/container_ready
-    env_file:
-      - .env
+    entrypoint: /go/drand/scripts/drand-3.sh
     networks:
       antithesis-net:
         ipv4_address: ${DRAND_3_IP}
 
-  # Lotus node service
-  lotus_node:
+  # Lotus node 1 service
+  lotus-1:
+    container_name: lotus-1
+    hostname: lotus-1
     image: lotus:${LOTUS_TAG:-latest}
-    container_name: lotus
-    networks:
-      antithesis-net:
-        ipv4_address: ${LOTUS_NODE_1_IP}
     volumes:
-      - ./data/lotus:${LOTUS_DATA_DIR}
-      - ./lotus/start_scripts/lotus-node.sh:${LOTUS_DATA_DIR}/lotus-node.sh
+      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
+      - ./lotus/start_scripts/lotus-1.sh:${LOTUS_1_DATA_DIR}/lotus-1.sh
       - ./container_ready:/container_ready
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
@@ -64,22 +62,21 @@ services:
       - LOTUS_DRAGON_HEIGHT=${DRAGON_HEIGHT}
       - LOTUS_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
       - LOTUS_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
-      - LOTUS_NODE_1_IP=${LOTUS_NODE_1_IP}
+      - LOTUS_1_IP=${LOTUS_1_IP}
     env_file:
       - .env
-    entrypoint: ["${LOTUS_DATA_DIR}/lotus-node.sh"]
-
-  # Lotus miner service
-  lotus_miner:
-    image: lotus:${LOTUS_TAG:-latest}
-    container_name: lotus-miner
+    entrypoint: ["${LOTUS_1_DATA_DIR}/lotus-1.sh"]
     networks:
       antithesis-net:
-        ipv4_address: ${LOTUS_MINER_1_IP}
+        ipv4_address: ${LOTUS_1_IP}
+
+  # Lotus miner 1 service
+  lotus_miner-1:
+    image: lotus:${LOTUS_TAG:-latest}
+    container_name: lotus-miner-1
     volumes:
-      - ./data/lotus:${LOTUS_DATA_DIR}
-      - ./data/lotus2:${LOTUS_2_DATA_DIR}
-      - ./lotus/start_scripts/lotus-miner.sh:${LOTUS_DATA_DIR}/lotus-miner.sh
+      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
+      - ./lotus/start_scripts/lotus-miner-1.sh:${LOTUS_1_DATA_DIR}/lotus-miner-1.sh
       - ./container_ready:/container_ready
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
@@ -92,23 +89,25 @@ services:
       - LOTUS_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
       - LOTUS_MINER_1_IP=${LOTUS_MINER_1_IP}
     ports:
-      - ${MINER_1_RPC_PORT}:${MINER_1_RPC_PORT}
+      - ${LOTUS_MINER_1_RPC_PORT}:${LOTUS_MINER_1_RPC_PORT}
     env_file:
       - .env
     restart: on-failure
-    entrypoint: ["${LOTUS_DATA_DIR}/lotus-miner.sh"]
-   
-    # Lotus node service
-  lotus_node2:
-    image: lotus:${LOTUS_TAG:-latest}
-    container_name: lotus-2
+    entrypoint: ["${LOTUS_1_DATA_DIR}/lotus-miner-1.sh"]
     networks:
       antithesis-net:
-        ipv4_address: ${LOTUS_NODE_2_IP}
+        ipv4_address: ${LOTUS_MINER_1_IP}
+   
+    # Lotus node 2 service
+  lotus-2:
+    image: lotus:${LOTUS_TAG:-latest}
+    hostname: lotus-2
+    container_name: lotus-2
     volumes:
-      - ./data/lotus:${LOTUS_DATA_DIR}
-      - ./data/lotus2:${LOTUS_2_DATA_DIR}
-      - ./lotus/start_scripts/lotus-node2.sh:${LOTUS_2_DATA_DIR}/lotus-node2.sh
+      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
+      - ./data/lotus-2:${LOTUS_2_DATA_DIR}
+      - ./lotus/start_scripts/lotus-2.sh:${LOTUS_2_DATA_DIR}/lotus-2.sh
+      - ./container_ready:/container_ready
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
       - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
@@ -118,23 +117,22 @@ services:
       - LOTUS_DRAGON_HEIGHT=${DRAGON_HEIGHT}
       - LOTUS_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
       - LOTUS_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
-      - LOTUS_NODE_2_IP=${LOTUS_NODE_2_IP}
-      - LOTUS_NODE_2_RPC_PORT=${LOTUS_2_RPC_PORT}
+      - LOTUS_2_IP=${LOTUS_2_IP}
+      - LOTUS_2_RPC_PORT=${LOTUS_2_RPC_PORT}
     env_file:
       - .env
-    entrypoint: ["${LOTUS_2_DATA_DIR}/lotus-node2.sh"]
-
-  # Lotus miner service
-  lotus_miner2:
-    image: lotus:${LOTUS_TAG:-latest}
-    container_name: lotus-miner2
+    entrypoint: ["${LOTUS_2_DATA_DIR}/lotus-2.sh"]
     networks:
       antithesis-net:
-        ipv4_address: ${LOTUS_MINER_2_IP}
+        ipv4_address: ${LOTUS_2_IP}
+
+  # Lotus miner 2 service
+  lotus_miner-2:
+    image: lotus:${LOTUS_TAG:-latest}
+    container_name: lotus-miner-2
     volumes:
-      - ./data/lotus:${LOTUS_DATA_DIR}
-      - ./data/lotus2:${LOTUS_2_DATA_DIR}
-      - ./lotus/start_scripts/lotus-miner2.sh:${LOTUS_2_DATA_DIR}/lotus-miner2.sh
+      - ./data/lotus-2:${LOTUS_2_DATA_DIR}
+      - ./lotus/start_scripts/lotus-miner-2.sh:${LOTUS_2_DATA_DIR}/lotus-miner-2.sh
       - ./container_ready:/container_ready
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
@@ -147,28 +145,28 @@ services:
       - LOTUS_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
       - LOTUS_MINER_2_IP=${LOTUS_MINER_2_IP}
     ports:
-      - ${MINER_2_RPC_PORT}:${MINER_2_RPC_PORT}
+      - ${LOTUS_MINER_2_RPC_PORT}:${LOTUS_MINER_2_RPC_PORT}
     env_file:
       - .env
     restart: on-failure
-    entrypoint: ["${LOTUS_2_DATA_DIR}/lotus-miner2.sh"]
+    entrypoint: ["${LOTUS_2_DATA_DIR}/lotus-miner-2.sh"]
+    networks:
+      antithesis-net:
+        ipv4_address: ${LOTUS_MINER_2_IP}
 
   # Forest service
   forest:
     image: forest:${FOREST_COMMIT:-latest}
     container_name: forest
     volumes:
-      - ./data/lotus:${LOTUS_DATA_DIR}
-      - ./data/lotus2:${LOTUS_2_DATA_DIR}
+      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
+      - ./data/lotus-2:${LOTUS_2_DATA_DIR}
       - ./data/forest:${FOREST_DATA_DIR}
       - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
       - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
       - ./container_ready:/container_ready
-    networks:
-      antithesis-net:
-        ipv4_address: ${FOREST_IP}
     environment:
-      - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${MINER_1_ACTOR_ADDRESS}
+      - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${LOTUS_MINER_1_ACTOR_ADDRESS}
       - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
       - FOREST_SHARK_HEIGHT=${SHARK_HEIGHT}
       - FOREST_HYGGE_HEIGHT=${HYGGE_HEIGHT}
@@ -183,36 +181,40 @@ services:
     env_file:
       - .env      
     entrypoint: ["${FOREST_DATA_DIR}/forest-init.sh"]
+    networks:
+      antithesis-net:
+        ipv4_address: ${FOREST_IP}
 
   # Forest <-> Lotus connector service
   forest-connecter:
     image: forest:${FOREST_COMMIT:-latest}
     container_name: forest-connector
     volumes:
-      - ./data/lotus:${LOTUS_DATA_DIR}
-      - ./data/lotus2:${LOTUS_2_DATA_DIR}
+      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
+      - ./data/lotus-2:${LOTUS_2_DATA_DIR}
       - ./data/forest:${FOREST_DATA_DIR}
       - ./forest/start_scripts/forest-connector.sh:${FOREST_DATA_DIR}/forest-connector.sh
       - ./container_ready:/container_ready
-    env_file:
-      - .env
     environment:
       - FOREST_CONNECTOR_IP=${FOREST_CONNECTOR_IP}
+    env_file:
+      - .env
+    entrypoint: ["${FOREST_DATA_DIR}/forest-connector.sh"]
     networks:
       antithesis-net:
         ipv4_address: ${FOREST_CONNECTOR_IP}
-    entrypoint: [ "${FOREST_DATA_DIR}/forest-connector.sh" ]
 
   # Workload service
-  # workload:
-  #   image: workload:latest
-  #   container_name: workload
-  #   volumes:
-  #     - ./data/lotus:/root/devgen/lotus
-  #     - ./data/forest:/root/devgen/forest
-  #   networks:
-  #     antithesis-net:
-  #       ipv4_address: 10.20.20.30
+  workload:
+    image: workload:latest
+    container_name: workload
+    volumes:
+      - ./data/lotus-1:/root/devgen/lotus-1
+      - ./data/lotus-2:/root/devgen/lotus-2
+      - ./data/forest:/root/devgen/forest
+    networks:
+      antithesis-net:
+        ipv4_address: 10.20.20.30
 
 networks:
   antithesis-net:
