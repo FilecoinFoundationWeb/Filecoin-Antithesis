@@ -16,7 +16,7 @@ do
 done
 
 set -euxo pipefail
-export TOKEN=$(cat ${FOREST_DATA_DIR}/token.jwt)
+export TOKEN=$(cat ${FOREST_DATA_DIR}/jwt)
 export FULLNODE_API_INFO=$TOKEN:/ip4/${FOREST_IP}/tcp/${FOREST_RPC_PORT}/http
 echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 

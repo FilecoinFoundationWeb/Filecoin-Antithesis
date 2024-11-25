@@ -35,7 +35,7 @@ cat ${FOREST_DATA_DIR}/forest_config.toml
 # Start the forest service with the specified configuration
 forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
-       --save-token "${FOREST_DATA_DIR}/token.jwt" \
+       --save-token "${FOREST_DATA_DIR}/jwt" \
        --rpc-address ${FOREST_IP}:${FOREST_RPC_PORT} \
        --p2p-listen-address /ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT} \
        --skip-load-actors &
