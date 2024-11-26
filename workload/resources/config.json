@@ -1,0 +1,15 @@
+{
+  "nodes": [
+    {
+      "name": "Lotus1",
+      "rpcurl": "http://10.20.20.24:1234/rpc/v1",
+      "authtokenpath": "/root/devgen/lotus-1/jwt"
+    },
+    {
+      "name": "Lotus2",
+      "rpcurl": "http://10.20.20.26:1235/rpc/v1",
+      "authtokenpath": "/root/devgen/lotus-2/jwt"
+    }
+  ],
+  "defaultFundingAmount": "100000000000000000000"
+}

@@ -71,7 +71,7 @@ services:
         ipv4_address: ${LOTUS_1_IP}
 
   # Lotus miner 1 service
-  lotus_miner-1:
+  lotus-miner-1:
     image: lotus:${LOTUS_TAG:-latest}
     container_name: lotus-miner-1
     volumes:
@@ -127,7 +127,7 @@ services:
         ipv4_address: ${LOTUS_2_IP}
 
   # Lotus miner 2 service
-  lotus_miner-2:
+  lotus-miner-2:
     image: lotus:${LOTUS_TAG:-latest}
     container_name: lotus-miner-2
     volumes:
