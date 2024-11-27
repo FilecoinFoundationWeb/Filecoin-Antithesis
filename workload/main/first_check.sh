@@ -34,7 +34,7 @@ set -e
 # echo "Workload [main][first.sh]: chainhead RPC endpoint online from forest"
 
 
-Waiting for the chain head to pass a certain height
+# Waiting for the chain head to pass a certain height
 INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-10}"
 BLOCK_HEIGHT_REACHED=0
 echo "Workload [main][first.sh]: waiting for block height to reach ${INIT_BLOCK_HEIGHT}"
