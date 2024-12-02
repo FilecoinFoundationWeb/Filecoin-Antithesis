@@ -22,8 +22,8 @@ done
 # Fetch and save DRAND chain information
 curl 10.20.20.21/info | jq -c > chain_info
 export DRAND_CHAIN_INFO=chain_info
-# Extract network name from localnet-1.json and set it as an environment variable
-export NETWORK_NAME=$(grep -o "localnet.*" "${LOTUS_1_DATA_DIR}/localnet-1.json" | tr -d '",' )
+# Extract network name from localnet.json and set it as an environment variable
+export NETWORK_NAME=$(grep -o "localnet.*" "${LOTUS_1_DATA_DIR}/localnet.json" | tr -d '",' )
 
 # Copy the forest configuration template and update it with the network name
 cp /forest/forest_config.toml.tpl "${FOREST_DATA_DIR}/forest_config.toml"
