@@ -1,7 +1,7 @@
 FROM docker.io/rust:1.81-bookworm as builder
 
 # Pin forest to a specific branch
-ARG GIT_COMMIT="94dabc64a6809bd521bc4ba94dc51d5c921c4d7c"
+ARG GIT_COMMIT="main"
 
 # Step 1: Install dependencies
 RUN apt-get update && \
