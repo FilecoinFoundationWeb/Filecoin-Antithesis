@@ -43,7 +43,6 @@ lotus net listen > ${LOTUS_2_DATA_DIR}/ipv4addr
 lotus net id > ${LOTUS_2_DATA_DIR}/p2pID
 lotus auth create-token --perm admin > ${LOTUS_2_DATA_DIR}/jwt
 lotus net connect $(cat ${LOTUS_1_DATA_DIR}/ipv4addr)
-lotus sync wait
 
 touch /container_ready/lotus-2
 

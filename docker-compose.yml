@@ -156,7 +156,7 @@ services:
 
   # Forest service
   forest:
-    image: forest:${FOREST_COMMIT:-latest}
+    image: forest:d2fd5deb012dc96f6eda1e52fde1bba4f273e536
     container_name: forest
     volumes:
       - ./data/lotus-1:${LOTUS_1_DATA_DIR}
@@ -175,6 +175,7 @@ services:
       - FOREST_WATERMELON_HEIGHT=${WATERMELON_HEIGHT}
       - FOREST_DRAGON_HEIGHT=${DRAGON_HEIGHT}
       - FOREST_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
+      - FOREST_TUKTUK_HEIGHT=${TUKTUK_HEIGHT}
       - FOREST_IP = ${FOREST_IP}
     ports:
       - ${FOREST_RPC_PORT}:${FOREST_RPC_PORT}
@@ -187,7 +188,7 @@ services:
 
   # Forest <-> Lotus connector service
   forest-connecter:
-    image: forest:${FOREST_COMMIT:-latest}
+    image: forest:d2fd5deb012dc96f6eda1e52fde1bba4f273e536
     container_name: forest-connector
     volumes:
       - ./data/lotus-1:${LOTUS_1_DATA_DIR}
