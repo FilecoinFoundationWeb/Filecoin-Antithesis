@@ -14,8 +14,8 @@ RUN git clone --depth=1 --branch="${GIT_BRANCH}" https://github.com/filecoin-pro
 WORKDIR /lotus
 RUN latest_version=$(git tag -l 'v*' | sort -V -r | head -n 1)
 COPY ./lotus.patch ./lotus.patch
-COPY ./config-node1.toml .
-COPY ./config-node2.toml .
+COPY ./config-1.toml .
+COPY ./config-2.toml .
 RUN git apply lotus.patch
 
 RUN make 2k
