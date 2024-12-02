@@ -67,16 +67,20 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 }
 
 // GetGenesisWallet retrieves the default (genesis) wallet address.
-// GetGenesisWallet retrieves the default (genesis) wallet address or falls back to selecting a wallet based on specific criteria.
 func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, error) {
 	// Attempt to get the default wallet
 	genesisWallet, err := api.WalletDefaultAddress(ctx)
 	if err == nil && genesisWallet != address.Undef {
+		log.Printf("Default wallet found: %s", genesisWallet)
 		return genesisWallet, nil
 	}
 
-	// Log that no default wallet was found
-	log.Println("No default wallet found, falling back to wallet list.")
+	// Log the absence of a default wallet
+	if err != nil {
+		log.Printf("Error fetching default wallet: %v", err)
+	} else {
+		log.Println("No default wallet set.")
+	}
 
 	// Fallback: List all wallets
 	wallets, err := api.WalletList(ctx)
@@ -85,19 +89,13 @@ func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, e
 	}
 
 	if len(wallets) == 0 {
-		return address.Undef, fmt.Errorf("no wallets found")
+		return address.Undef, fmt.Errorf("no wallets found in the node")
 	}
 
-	// Select the wallet with the longest address (or any other criteria)
-	longestWallet := wallets[0]
-	for _, wallet := range wallets {
-		if len(wallet.String()) > len(longestWallet.String()) {
-			longestWallet = wallet
-		}
-	}
-
-	log.Printf("Using wallet with the longest address as fallback: %s", longestWallet)
-	return longestWallet, nil
+	// Explicitly select the first wallet as fallback
+	fallbackWallet := wallets[0]
+	log.Printf("Using the first wallet as fallback: %s", fallbackWallet)
+	return fallbackWallet, nil
 }
 
 // GetAllWalletAddressesExceptGenesis retrieves all wallet addresses except the genesis wallet.
