@@ -1,5 +1,4 @@
-package main 
-
+package main
 
 import (
 	"context"
@@ -8,6 +7,7 @@ import (
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
 	"github.com/stretchr/testify/assert"
 )
+
 func TestTipsetConsistency(t *testing.T) {
 	ctx := context.Background()
 
@@ -15,31 +15,28 @@ func TestTipsetConsistency(t *testing.T) {
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
 	assert.NoError(t, err, "Failed to load config")
 
-	// Parse node names from CLI argument
-	nodeNames := parseNodeNames(nodes)
-	if len(nodeNames) == 0 {
-		t.Fatalf("No nodes specified for testing. Use the '-nodes' flag.")
-	}
+	nodeNames := []string{"Lotus1", "Lotus2"}
 
-	// Track tipsets for comparison
-	var tipsets []string
+	var filterNodes []resources.NodeConfig
 
-	for _, nodeName := range nodeNames {
-		t.Run(nodeName, func(t *testing.T) {
-			nodeConfig, found := findNodeConfig(config, nodeName)
-			if !found {
-				t.Fatalf("Node '%s' not found in config.json", nodeName)
+	for _, node := range config.Nodes {
+		for _, name := range nodeNames {
+			if node.Name == name {
+				filterNodes = append(filterNodes, node)
 			}
+		}
+	}
+	var tipsets []string
+	for _, nodeName := range filterNodes {
+		api, closer, err := resources.ConnectToNode(ctx, nodeName)
+		defer closer()
+		assert.NoError(t, err, "Failed")
 
-			api, closer, err := resources.ConnectToNode(ctx, nodeConfig)
-			assert.NoError(t, err, "Failed to connect to Lotus node")
-			defer closer()
+		head, err := api.ChainHead(ctx)
+		assert.NoError(t, err, "Failed")
 
-			head, err := api.ChainHead(ctx)
-			assert.NoError(t, err, "Failed to get chain head")
-
-			tipsets = append(tipsets, head.Key().String())
-		})
+		tipsets = append(tipsets, head.Key().String())
+		assert.NoError(t, err, "Error")
 	}
 
 	// Verify all tipsets are identical
@@ -47,4 +44,3 @@ func TestTipsetConsistency(t *testing.T) {
 		assert.Equal(t, tipsets[i], tipsets[0], "Tipsets are not consistent across nodes")
 	}
 }
-
