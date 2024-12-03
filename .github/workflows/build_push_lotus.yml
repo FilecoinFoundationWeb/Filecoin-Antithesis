@@ -52,7 +52,7 @@ jobs:
         build-args: |
           GIT_BRANCH=${{ github.event.inputs.lotus_tag }}
         context: ./lotus
-        file: ./lotus/Dockerfile
+        file: ./lotus/Dockerfile.race
         push: true
         tags: ${{ steps.meta-lotus.outputs.tags }}
         labels: ${{ steps.meta-lotus.outputs.labels }}

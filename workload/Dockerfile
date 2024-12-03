@@ -26,8 +26,10 @@ COPY ./main/parallel_driver_create_wallets.py /opt/antithesis/test/v1/main/paral
 COPY ./main/parallel_driver_delete_wallets.py /opt/antithesis/test/v1/main/parallel_driver_delete_wallets.py
 COPY ./main/anytime_increasing_block_height_check.py /opt/antithesis/test/v1/main/anytime_increasing_block_height_check.py
 COPY ./main/eventually_all_node_sync_status_check.py /opt/antithesis/test/v1/main/eventually_all_node_sync_status_check.py
-
 COPY ./sdk/antithesis_sdk.py /opt/antithesis/sdk/antithesis_sdk.py
+#in progress
+COPY ./main/anytime_node_sync_check.py /opt/antithesis/test/v1/main/anytime_node_sync_check.py
+
 
 # Download Go dependencies
 RUN go mod download
