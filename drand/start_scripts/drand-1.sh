@@ -33,7 +33,6 @@ echo "SETUP: Node 1 ready, initializing DKG as leader"
 # Initialize the DKG process as the leader
 drand dkg generate-proposal  --joiner 10.20.20.21:8080 --joiner 10.20.20.22:8080 --joiner 10.20.20.23:8080  --out proposal.toml
 drand dkg init --proposal ./proposal.toml --threshold 2 --period 3s --scheme bls-unchained-g1-rfc9380 --catchup-period 0s --genesis-delay 30s
-
 # Waiting for other drand nodes to join proposal
 drand_init=0
 while [[ ${drand_init?} -eq 0 ]]
@@ -47,7 +46,7 @@ do
     sleep 1
 done
 
-drand dkg execute
+drand dkg execute 
 
 touch /container_ready/drand-1
 

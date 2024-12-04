@@ -9,6 +9,11 @@
       "name": "Lotus2",
       "rpcurl": "http://10.20.20.26:1235/rpc/v1",
       "authtokenpath": "/root/devgen/lotus-2/jwt"
+    },
+    {
+      "name":"Forest",
+      "rpcurl": "http://10.20.20.28:23456/rpc/v1",
+      "authtokenpath":"/root/devgen/forest/jwt"
     }
   ],
   "defaultFundingAmount": "100000000000000000000"

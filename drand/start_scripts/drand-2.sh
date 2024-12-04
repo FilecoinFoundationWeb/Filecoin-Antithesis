@@ -22,7 +22,6 @@ fi
 
 # Generate the key pair for the second node
 drand generate-keypair --scheme bls-unchained-g1-rfc9380 --id default 10.20.20.22:8080 
-
 # Start the drand daemon for the second node
 drand start --private-listen 10.20.20.22:8080 --control 127.0.0.1:8888 --public-listen 0.0.0.0:80 &
 
@@ -46,7 +45,6 @@ if [ "$tries" -eq 0 ]; then
     echo "drand-2: dkg status never good"
     exit 1
 fi
-
 # Join the DKG process initiated by the leader
 drand dkg join --control 8888
 

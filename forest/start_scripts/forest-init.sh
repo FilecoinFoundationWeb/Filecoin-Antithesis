@@ -33,7 +33,7 @@ echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
 cat ${FOREST_DATA_DIR}/forest_config.toml
 # export FULLNODE_API_INFO=$TOKEN:/ip4/10.20.20.27/tcp/${FOREST_RPC_PORT}/http
 # Start the forest service with the specified configuration
-forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
+RUST_LOG=error,forest_filecoin=warn,error forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
        --save-token "${FOREST_DATA_DIR}/jwt" \
        --rpc-address ${FOREST_IP}:${FOREST_RPC_PORT} \

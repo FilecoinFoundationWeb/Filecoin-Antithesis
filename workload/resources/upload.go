@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -31,6 +32,10 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 
 	err = SendFunds(ctx, api, genesisWallet, delegatedWallet, fundingAmount)
 	assert.Always(err == nil, "failed to fund delegated wallet: %v", map[string]interface{}{"error": err})
+
+	balance, err := api.EthGetBalance(ctx, ethAddr, ethtypes.NewEthBlockNumberOrHashFromPredefined("latest"))
+	assert.Always(err == nil, "Failed to assert balance", map[string]interface{}{"error": err})
+	assert.Always(balance == ethtypes.EthBigInt(fundingAmount.Abs()), "Balance is equal", map[string]interface{}{"error": err})
 
 	contractHex, err := ioutil.ReadFile(contractPath)
 	assert.Always(err == nil, "failed to read contract file: %v", map[string]interface{}{"error": err})
@@ -79,6 +84,4 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 	fmt.Printf("Using deployer Ethereum address: 0x%s\n", ethAddr.String())
 
 	return &deployedEthAddr, nil
-
-	
 }
