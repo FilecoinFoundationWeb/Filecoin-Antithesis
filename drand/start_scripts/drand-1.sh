@@ -46,7 +46,10 @@ do
     sleep 1
 done
 
-drand dkg execute 
+drand dkg execute
+
+# preventing a race condition where lotus starts up before drand dkg has finished executing
+sleep 10
 
 touch /container_ready/drand-1
 
