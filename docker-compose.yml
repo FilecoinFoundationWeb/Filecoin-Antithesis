@@ -160,7 +160,7 @@ services:
 
   # Forest service
   forest:
-    image: forest:latest
+    image: forest:${FOREST_COMMIT:-latest}
     container_name: forest
     volumes:
       - ./data/lotus-1:${LOTUS_1_DATA_DIR}
@@ -192,7 +192,7 @@ services:
 
   # Forest <-> Lotus connector service
   forest-connecter:
-    image: forest:latest
+    image: forest:${FOREST_COMMIT:-latest}
     container_name: forest-connector
     volumes:
       - ./data/lotus-1:${LOTUS_1_DATA_DIR}
