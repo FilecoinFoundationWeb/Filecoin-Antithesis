@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestF3IsRunningEquality(t *testing.T) {
+func TestF3GetProgressEquality(t *testing.T) {
 	ctx := context.Background()
 
 	// Load configuration
@@ -27,15 +27,19 @@ func TestF3IsRunningEquality(t *testing.T) {
 		}
 	}
 
+	var progresses []interface{}
 	for _, node := range filterNodes {
 		api, closer, err := resources.ConnectToNode(ctx, node)
 		assert.NoError(t, err, "Failed to connect to node: %s", node.Name)
 		defer closer()
 
-		isRunning, err := api.F3IsRunning(ctx)
-		assert.NoError(t, err, "Failed to fetch F3 running status from node: %s", node.Name)
-		if !isRunning {
-			t.Logf("Node:%v not running F3", node.Name)
-		}
+		progress, err := api.F3GetProgress(ctx)
+		assert.NoError(t, err, "Failed to fetch F3 progress from node: %s", node.Name)
+		progresses = append(progresses, progress)
+	}
+
+	// Assert all progresses are identical
+	for i := 1; i < len(progresses); i++ {
+		assert.Equal(t, progresses[i], progresses[0], "F3 progresses are not consistent across nodes")
 	}
 }
