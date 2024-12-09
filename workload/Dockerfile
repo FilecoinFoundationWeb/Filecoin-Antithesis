@@ -30,12 +30,12 @@ COPY ./sdk/antithesis_sdk.py /opt/antithesis/sdk/antithesis_sdk.py
 #in progress
 COPY ./main/anytime_node_sync_check.py /opt/antithesis/test/v1/main/anytime_node_sync_check.py
 
-
 # Download Go dependencies
 RUN go mod download
 
 # Build the Go application
 RUN go build -o /opt/antithesis/app ./main.go
+RUN go test -run /opt/antithesis/test/v1/main/xxx
 
 RUN rm ./main.go
 

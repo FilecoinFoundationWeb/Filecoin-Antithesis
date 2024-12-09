@@ -14,7 +14,7 @@ func TestF3GetLatestCertificateEquality(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Failed to load config: %v", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Load config", map[string]interface{}{"error": err})
 
 	nodeNames := []string{"Lotus1", "Lotus2", "Forest"}
 	var filterNodes []resources.NodeConfig
@@ -31,17 +31,17 @@ func TestF3GetLatestCertificateEquality(t *testing.T) {
 	var latestCertificates []interface{}
 	for _, node := range filterNodes {
 		api, closer, err := resources.ConnectToNode(ctx, node)
-		assert.Always(err == nil, "Failed to connect to node: %s", map[string]interface{}{"node": node.Name})
+		assert.Always(err == nil, "Connect to node", map[string]interface{}{"node": node.Name, "error": err})
 		defer closer()
 
 		latestCert, err := api.F3GetLatestCertificate(ctx)
-		assert.Sometimes(err == nil, "Failed to fetch latest certificate from node: %s", map[string]interface{}{"node": node.Name, "error": err})
+		assert.Sometimes(err == nil, "Fetch latest certificate from node", map[string]interface{}{"node": node.Name, "error": err})
 		latestCertificates = append(latestCertificates, latestCert)
 	}
 
 	// Assert all latest certificates are identical
 	for i := 1; i < len(latestCertificates); i++ {
-		assert.Always(latestCertificates[i] == latestCertificates[0], "Latest certificates are not consistent across nodes", map[string]interface{}{
+		assert.Always(latestCertificates[i] == latestCertificates[0], "Latest certificates are consistent across nodes", map[string]interface{}{
 			"expected": latestCertificates[0],
 			"actual":   latestCertificates[i],
 		})
