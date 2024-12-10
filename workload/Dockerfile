@@ -35,7 +35,6 @@ RUN go mod download
 
 # Build the Go application
 RUN go build -o /opt/antithesis/app ./main.go
-RUN go test -run /opt/antithesis/test/v1/main/xxx
 
 RUN rm ./main.go
 
