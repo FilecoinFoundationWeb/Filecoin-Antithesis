@@ -6,8 +6,7 @@ import (
 	"testing"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
-	antithesis_assert "github.com/antithesishq/antithesis-sdk-go/assert"
-	"github.com/stretchr/testify/assert"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 func TestF3GetProgressEquality(t *testing.T) {
@@ -15,9 +14,7 @@ func TestF3GetProgressEquality(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-
-	antithesis_assert.Always(err == nil, "Load config", map[string]interface{}{"error": err})
-	assert.NoError(t, err, "Failed to load config")
+	assert.Always(err == nil, "Failed to load config: %v", map[string]interface{}{"error": err})
 
 	nodeNames := []string{"Lotus1", "Lotus2", "Forest"}
 	var filterNodes []resources.NodeConfig
@@ -34,7 +31,7 @@ func TestF3GetProgressEquality(t *testing.T) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	progresses := make(map[string]interface{})
-	errors := make(map[string]error)
+	errors := make(map[string]interface{})
 
 	// Fetch progresses concurrently
 	for _, node := range filterNodes {
@@ -45,15 +42,22 @@ func TestF3GetProgressEquality(t *testing.T) {
 			api, closer, err := resources.ConnectToNode(ctx, node)
 			if err != nil {
 				mu.Lock()
-				errors[node.Name] = err
+				errors[node.Name] = map[string]interface{}{
+					"error":   err,
+					"message": "Failed to connect to node",
+				}
 				mu.Unlock()
 				return
 			}
 			defer closer()
+
 			progress, err := api.F3GetProgress(ctx)
 			if err != nil {
 				mu.Lock()
-				errors[node.Name] = err
+				errors[node.Name] = map[string]interface{}{
+					"error":   err,
+					"message": "Failed to fetch F3 progress",
+				}
 				mu.Unlock()
 				return
 			}
@@ -69,16 +73,23 @@ func TestF3GetProgressEquality(t *testing.T) {
 
 	// Handle errors
 	for node, err := range errors {
-		assert.NoError(t, err, "Node '%s' encountered an error", node)
+		assert.Always(false, "Node '%s' encountered an error: %v", map[string]interface{}{
+			"node":  node,
+			"error": err,
+		})
 	}
 
 	// Assert all progresses are identical
 	var reference interface{}
-	for _, progress := range progresses {
+	for node, progress := range progresses {
 		if reference == nil {
 			reference = progress
 		} else {
-			assert.Equal(t, reference, progress, "F3 progresses are not consistent across nodes")
+			assert.Always(reference == progress, "F3 progresses are not consistent across nodes", map[string]interface{}{
+				"node":     node,
+				"expected": reference,
+				"actual":   progress,
+			})
 		}
 	}
 }
