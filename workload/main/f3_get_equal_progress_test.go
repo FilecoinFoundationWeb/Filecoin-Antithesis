@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
+	antithesis_assert "github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,6 +15,8 @@ func TestF3GetProgressEquality(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
+
+	antithesis_assert.Always(err == nil, "Load config", map[string]interface{}{"error": err})
 	assert.NoError(t, err, "Failed to load config")
 
 	nodeNames := []string{"Lotus1", "Lotus2", "Forest"}

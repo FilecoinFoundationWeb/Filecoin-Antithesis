@@ -14,7 +14,7 @@ func TestF3GetLatestCertificateEquality(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Failed to load config: %v", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Load config", map[string]interface{}{"error": err})
 
 	nodeNames := []string{"Lotus1", "Lotus2", "Forest"}
 	var filterNodes []resources.NodeConfig
