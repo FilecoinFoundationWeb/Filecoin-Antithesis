@@ -3,7 +3,7 @@
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
 OPERATION="deploy"
-NODE_NAMES=("Lotus1" "Lotus2")
+NODE_NAMES=("Lotus1")
 CONTRACT_DIR="/opt/antithesis/resources/smart-contracts"
 
 if [ ! -f "$APP_BINARY" ]; then

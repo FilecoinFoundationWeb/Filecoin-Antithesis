@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
-
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 func TestF3GetF3PowerTableEquality(t *testing.T) {
@@ -29,28 +29,76 @@ func TestF3GetF3PowerTableEquality(t *testing.T) {
 		}
 	}
 
-	var powerTables []string
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	powerTables := make(map[string]string)
+	errors := make(map[string]interface{})
+
+	// Fetch power tables concurrently
 	for _, node := range filterNodes {
-		api, closer, err := resources.ConnectToNode(ctx, node)
-		assert.Always(err == nil, "Failed to connect to node: %s", map[string]interface{}{"node": node.Name})
-		defer closer()
+		wg.Add(1)
+		go func(node resources.NodeConfig) {
+			defer wg.Done()
 
-		ts, err := api.ChainHead(ctx)
-		assert.Always(err == nil, "Failed to get chain head for node: %s", map[string]interface{}{"node": node.Name, "error": err})
+			api, closer, err := resources.ConnectToNode(ctx, node)
+			if err != nil {
+				mu.Lock()
+				errors[node.Name] = map[string]interface{}{"error": err, "message": "Failed to connect to node"}
+				mu.Unlock()
+				return
+			}
+			defer closer()
 
-		powerTable, err := api.F3GetF3PowerTable(ctx, ts.Key())
-		assert.Sometimes(err == nil, "Failed to fetch power table from node: %s", map[string]interface{}{"node": node.Name, "error": err})
+			ts, err := api.ChainHead(ctx)
+			if err != nil {
+				mu.Lock()
+				errors[node.Name] = map[string]interface{}{"error": err, "message": "Failed to get chain head"}
+				mu.Unlock()
+				return
+			}
 
-		powerTableBytes, err := json.Marshal(powerTable)
-		assert.Always(err == nil, "Failed to serialize power table from node: %s", map[string]interface{}{"node": node.Name, "error": err})
-		powerTables = append(powerTables, string(powerTableBytes))
+			powerTable, err := api.F3GetF3PowerTable(ctx, ts.Key())
+
+			if err != nil {
+				mu.Lock()
+				errors[node.Name] = map[string]interface{}{"error": err, "message": "Failed to fetch power table"}
+				mu.Unlock()
+				return
+			}
+
+			powerTableBytes, err := json.Marshal(powerTable)
+			if err != nil {
+				mu.Lock()
+				errors[node.Name] = map[string]interface{}{"error": err, "message": "Failed to serialize power table"}
+				mu.Unlock()
+				return
+			}
+
+			mu.Lock()
+			powerTables[node.Name] = string(powerTableBytes)
+			mu.Unlock()
+		}(node)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Handle errors
+	for node, err := range errors {
+		assert.Always(false, "Node '%s' encountered an error: %v", map[string]interface{}{"node": node, "error": err})
 	}
 
 	// Assert all power tables are identical
-	for i := 1; i < len(powerTables); i++ {
-		assert.Always(powerTables[i] == powerTables[0], "Power tables are not consistent across nodes", map[string]interface{}{
-			"expected": powerTables[0],
-			"actual":   powerTables[i],
-		})
+	var reference string
+	for node, table := range powerTables {
+		if reference == "" {
+			reference = table
+		} else {
+			assert.Always(table == reference, "Power tables are not consistent across nodes", map[string]interface{}{
+				"node":     node,
+				"expected": reference,
+				"actual":   table,
+			})
+		}
 	}
 }

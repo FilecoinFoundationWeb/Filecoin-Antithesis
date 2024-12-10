@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
+	"sync"
 	"testing"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
-
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 func TestF3GetLatestCertificateEquality(t *testing.T) {
@@ -28,22 +28,58 @@ func TestF3GetLatestCertificateEquality(t *testing.T) {
 		}
 	}
 
-	var latestCertificates []interface{}
-	for _, node := range filterNodes {
-		api, closer, err := resources.ConnectToNode(ctx, node)
-		assert.Always(err == nil, "Failed to connect to node: %s", map[string]interface{}{"node": node.Name})
-		defer closer()
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	latestCertificates := make(map[string]interface{})
+	errors := make(map[string]interface{})
 
-		latestCert, err := api.F3GetLatestCertificate(ctx)
-		assert.Sometimes(err == nil, "Failed to fetch latest certificate from node: %s", map[string]interface{}{"node": node.Name, "error": err})
-		latestCertificates = append(latestCertificates, latestCert)
+	// Fetch latest certificates concurrently
+	for _, node := range filterNodes {
+		wg.Add(1)
+		go func(node resources.NodeConfig) {
+			defer wg.Done()
+
+			api, closer, err := resources.ConnectToNode(ctx, node)
+			if err != nil {
+				mu.Lock()
+				errors[node.Name] = map[string]interface{}{"error": err, "message": "Failed to connect to node"}
+				mu.Unlock()
+				return
+			}
+			defer closer()
+			latestCert, err := api.F3GetLatestCertificate(ctx)
+			if err != nil {
+				mu.Lock()
+				errors[node.Name] = map[string]interface{}{"error": err, "message": "Failed to fetch latest certificate"}
+				mu.Unlock()
+				return
+			}
+
+			mu.Lock()
+			latestCertificates[node.Name] = latestCert
+			mu.Unlock()
+		}(node)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Handle errors
+	for node, err := range errors {
+		assert.Always(false, "Node '%s' encountered an error: %v", map[string]interface{}{"node": node, "error": err})
 	}
 
 	// Assert all latest certificates are identical
-	for i := 1; i < len(latestCertificates); i++ {
-		assert.Always(latestCertificates[i] == latestCertificates[0], "Latest certificates are not consistent across nodes", map[string]interface{}{
-			"expected": latestCertificates[0],
-			"actual":   latestCertificates[i],
-		})
+	var reference interface{}
+	for node, cert := range latestCertificates {
+		if reference == nil {
+			reference = cert
+		} else {
+			assert.Always(cert == reference, "Latest certificates are not consistent across nodes", map[string]interface{}{
+				"node":     node,
+				"expected": reference,
+				"actual":   cert,
+			})
+		}
 	}
 }
