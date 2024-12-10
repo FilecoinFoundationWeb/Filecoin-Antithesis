@@ -2,7 +2,7 @@
 # Enable strict mode to catch errors and undefined variables
 set -euo pipefail
 
-sleep 20
+sleep 30
 
 # Waiting for lotus node 1 to be up
 lotus_1_ready=0

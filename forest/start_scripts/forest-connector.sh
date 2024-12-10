@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sleep 25
+sleep 35
 
 # Waiting for forest node to be up
 forest_ready=0

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
@@ -30,22 +31,54 @@ func TestF3GetProgressEquality(t *testing.T) {
 		}
 	}
 
-	var progresses []interface{}
-	for _, node := range filterNodes {
-		api, closer, err := resources.ConnectToNode(ctx, node)
-		antithesis_assert.Always(err == nil, "Connect to node", map[string]interface{}{"node": node.Name, "error": err})
-		assert.NoError(t, err, "Failed to connect to node", node.Name)
-		defer closer()
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	progresses := make(map[string]interface{})
+	errors := make(map[string]error)
 
-		progress, err := api.F3GetProgress(ctx)
-		antithesis_assert.Always(err == nil, "Fetch F3 progress from node", map[string]interface{}{"node": node.Name, "error": err})
-		assert.NoError(t, err, "Failed to fetch F3 progress from node", node.Name)
-		progresses = append(progresses, progress)
+	// Fetch progresses concurrently
+	for _, node := range filterNodes {
+		wg.Add(1)
+		go func(node resources.NodeConfig) {
+			defer wg.Done()
+
+			api, closer, err := resources.ConnectToNode(ctx, node)
+			if err != nil {
+				mu.Lock()
+				errors[node.Name] = err
+				mu.Unlock()
+				return
+			}
+			defer closer()
+			progress, err := api.F3GetProgress(ctx)
+			if err != nil {
+				mu.Lock()
+				errors[node.Name] = err
+				mu.Unlock()
+				return
+			}
+
+			mu.Lock()
+			progresses[node.Name] = progress
+			mu.Unlock()
+		}(node)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Handle errors
+	for node, err := range errors {
+		assert.NoError(t, err, "Node '%s' encountered an error", node)
 	}
 
 	// Assert all progresses are identical
-	for i := 1; i < len(progresses); i++ {
-		antithesis_assert.Always(progresses[i] == progresses[0], "F3 progresses are always consistent across nodes", map[string]interface{}{"progresses": progresses})
-		assert.Equal(t, progresses[i], progresses[0], "F3 progresses are always consistent across nodes")
+	var reference interface{}
+	for _, progress := range progresses {
+		if reference == nil {
+			reference = progress
+		} else {
+			assert.Equal(t, reference, progress, "F3 progresses are not consistent across nodes")
+		}
 	}
 }
