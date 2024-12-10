@@ -59,7 +59,6 @@ func TestNodeHeightProgression(t *testing.T) {
 				if currentHeight > initialHeight {
 					t.Logf("Node '%s' chain height progressed: initial=%d, current=%d", node.Name, initialHeight, currentHeight)
 					progressed = true
-					break
 				}
 			}
 			if progressed {
