@@ -62,7 +62,7 @@ func TestF3GetLatestCertificateEquality(t *testing.T) {
 
 	// Check that we have all progresses for the nodes
 	for _, latestCertificate := range latestCertificates {
-		if latestCertificate != nil {
+		if latestCertificate == nil {
 			return
 		}
 	}

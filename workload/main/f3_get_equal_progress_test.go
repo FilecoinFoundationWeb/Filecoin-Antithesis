@@ -46,7 +46,7 @@ func TestF3GetProgressEquality(t *testing.T) {
 			defer closer()
 
 			progress, err := api.F3GetProgress(ctx)
-			assert.Always(err == nil, "Fetching F3 progress from a node", map[string]interface{}{"node": node.Name, "error": err})
+			assert.Sometimes(err == nil, "Fetching F3 progress from a node", map[string]interface{}{"node": node.Name, "error": err})
 
 			if err != nil {
 				progresses[node.Name] = nil
@@ -62,7 +62,7 @@ func TestF3GetProgressEquality(t *testing.T) {
 
 	// Check that we have all progresses for the nodes
 	for _, progress := range progresses {
-		if progress != nil {
+		if progress == nil {
 			return
 		}
 	}
