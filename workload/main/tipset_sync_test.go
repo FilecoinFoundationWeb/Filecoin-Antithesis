@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
-	"github.com/stretchr/testify/assert"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 func TestTipsetConsistency(t *testing.T) {
@@ -13,10 +13,9 @@ func TestTipsetConsistency(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.NoError(t, err, "Failed to load config")
+	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
 
 	nodeNames := []string{"Lotus1", "Lotus2"}
-
 	var filterNodes []resources.NodeConfig
 
 	for _, node := range config.Nodes {
@@ -26,21 +25,30 @@ func TestTipsetConsistency(t *testing.T) {
 			}
 		}
 	}
+
 	var tipsets []string
-	for _, nodeName := range filterNodes {
-		api, closer, err := resources.ConnectToNode(ctx, nodeName)
+	for _, node := range filterNodes {
+		api, closer, err := resources.ConnectToNode(ctx, node)
+		assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node, "error": err})
+
+		if err != nil {
+			return
+		}
+
 		defer closer()
-		assert.NoError(t, err, "Failed")
 
-		head, err := api.ChainHead(ctx)
-		assert.NoError(t, err, "Failed")
+		ts, err := api.ChainHead(ctx)
+		assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node, "error": err})
 
-		tipsets = append(tipsets, head.Key().String())
-		assert.NoError(t, err, "Error")
+		if err != nil {
+			return
+		}
+
+		tipsets = append(tipsets, ts.Key().String())
 	}
 
 	// Verify all tipsets are identical
 	for i := 1; i < len(tipsets); i++ {
-		assert.Equal(t, tipsets[i], tipsets[0], "Tipsets are not consistent across nodes")
+		assert.Always(tipsets[0] == tipsets[i], "Tipsets are not consistent across nodes", map[string]interface{}{"base_tipset": tipsets[0], "different_tipset": tipsets[i]})
 	}
 }
