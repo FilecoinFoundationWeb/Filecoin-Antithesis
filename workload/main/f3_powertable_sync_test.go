@@ -82,7 +82,7 @@ func TestF3GetF3PowerTableEquality(t *testing.T) {
 	// Assert all power tables are identical
 	var reference string
 	for _, table := range powerTables {
-		if reference == nil {
+		if reference == "" {
 			reference = table
 		} else {
 			assert.Always(table == reference, "All power tables are consistent across nodes", map[string]interface{}{
