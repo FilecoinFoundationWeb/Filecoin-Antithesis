@@ -21,8 +21,8 @@ select_random_node() {
     echo "${NODE_NAMES[$index]}"
 }
 
-$random_node = select_random_node()
+random_node=$(select_random_node)
 
 echo "Spamming transactions across the network"
-$APP_BINARY -config=$CONFIG_FILE -operation=$OPERATION -nodes=$random_node
+$APP_BINARY -config=$CONFIG_FILE -operation=$OPERATION -node=$random_node
 
