@@ -34,7 +34,6 @@ func TestTipsetConsistency(t *testing.T) {
 		if err != nil {
 			return
 		}
-
 		defer closer()
 
 		ts, err := api.ChainHead(ctx)
