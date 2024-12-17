@@ -3,7 +3,7 @@ name: Run Antithesis Test
 on: 
   schedule:
     # midnight EST
-    - cron:  '0 3 * * *'
+    - cron:  '0 2 * * *'
   #manual run
   workflow_dispatch:
     inputs:
@@ -70,7 +70,7 @@ jobs:
           email_recipients: "filecoin-notifications.0607b605acbba4a098334f1cf7aad48b.show-sender.prefer-html@streams.zulipchat.com"
           # test_name: Filecoin localnet (latest)
           additional_parameters: |-
-            custom.duration=8
+            custom.duration=10
             custom.run_type=normal
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}

@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/api"
@@ -15,13 +16,16 @@ import (
 
 // InitializeWallets creates wallets and funds them with a specified amount from the genesis wallet.
 func InitializeWallets(ctx context.Context, api api.FullNode, numWallets int, fundingAmount abi.TokenAmount) error {
+
 	genesisWallet, err := GetGenesisWallet(ctx, api)
+
 	if err != nil {
 		return fmt.Errorf("failed to get genesis wallet: %v", err)
 	}
 
 	for i := 0; i < numWallets; i++ {
 		wallet, err := CreateWallet(ctx, api, types.KTSecp256k1)
+
 		if err != nil {
 			return fmt.Errorf("failed to create wallet #%d: %v", i+1, err)
 		}
@@ -39,7 +43,10 @@ func InitializeWallets(ctx context.Context, api api.FullNode, numWallets int, fu
 
 // CreateWallet creates a wallet of the specified type and returns its address.
 func CreateWallet(ctx context.Context, api api.FullNode, walletType types.KeyType) (address.Address, error) {
+
 	wallet, err := api.WalletNew(ctx, walletType)
+	assert.Always(err == nil, "Create a new wallet", map[string]interface{}{"error": err, "type": walletType})
+
 	if err != nil {
 		return address.Undef, fmt.Errorf("failed to create wallet: %w", err)
 	}
@@ -54,11 +61,13 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 		Value: amount,
 	}
 	sm, err := api.MpoolPushMessage(ctx, msg, nil)
+	assert.Always(err == nil, "Push a message to send funds between two wallets", map[string]interface{}{"error": err})
 	if err != nil {
 		return fmt.Errorf("failed to push message to mempool: %w", err)
 	}
 
 	_, err = api.StateWaitMsg(ctx, sm.Cid(), 3, abi.ChainEpoch(-1), true)
+	assert.Always(err == nil, "Waiting for a message to send funds between two wallets to be included in next block", map[string]interface{}{"error": err})
 	if err != nil {
 		return fmt.Errorf("waiting for message inclusion: %w", err)
 	}
@@ -70,6 +79,8 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, error) {
 	// Attempt to get the default wallet
 	genesisWallet, err := api.WalletDefaultAddress(ctx)
+	assert.Always(err == nil && genesisWallet != address.Undef, "Get the genesis wallet", map[string]interface{}{"error": err})
+
 	if err == nil && genesisWallet != address.Undef {
 		log.Printf("Default wallet found: %s", genesisWallet)
 		return genesisWallet, nil
@@ -95,6 +106,9 @@ func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, e
 	// Explicitly select the first wallet as fallback
 	fallbackWallet := wallets[0]
 	log.Printf("Using the first wallet as fallback: %s", fallbackWallet)
+
+	assert.Unreachable("Using a fallback wallet because the genesis wallet was not found", map[string]interface{}{"fallback wallet": fallbackWallet, "list of all wallets": wallets})
+
 	return fallbackWallet, nil
 }
 
@@ -106,6 +120,7 @@ func GetAllWalletAddressesExceptGenesis(ctx context.Context, api api.FullNode) (
 	}
 
 	allWallets, err := api.WalletList(ctx)
+	assert.Always(err == nil, "List all wallets on a node", map[string]interface{}{"error": err})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list wallets: %w", err)
 	}
@@ -142,6 +157,7 @@ func GetRandomWallets(ctx context.Context, api api.FullNode, numWallets int) ([]
 func DeleteWallets(ctx context.Context, api api.FullNode, walletsToDelete []address.Address) error {
 	for _, wallet := range walletsToDelete {
 		err := api.WalletDelete(ctx, wallet)
+		assert.Always(err == nil, "Delete a wallet", map[string]interface{}{"error": err})
 		if err != nil {
 			return fmt.Errorf("failed to delete wallet %s: %w", wallet.String(), err)
 		}

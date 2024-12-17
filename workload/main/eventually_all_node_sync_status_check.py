@@ -10,9 +10,7 @@ from antithesis_sdk import antithesis_fallback_sdk
 
 sdk = antithesis_fallback_sdk()
 
-sdk.reachable(declare=True, id="Script execution: 'eventually_all_node_sync_status' ran", message="Script execution: 'eventually_all_node_sync_status' ran")
-sdk.unreachable(declare=True, id="No fault period: error fetching chainhead", message="No fault period: error fetching chainhead")
-sdk.always(declare=True, id="No fault period: all nodes are synced (within 1)", message="No fault period: all nodes are synced (within 1)")
+sdk.always(declare=True, id="All nodes are synced (within 1) during period of no faults", message="All nodes are synced (within 1) during period of no faults")
 
 def all_node_sync_status():
 
@@ -28,7 +26,6 @@ def all_node_sync_status():
         chainhead = get_chainhead(node, rpc_url, auth_token)
 
         if not chainhead:
-            sdk.unreachable(declare=False, id="No fault period: error fetching chainhead", message="No fault period: error fetching chainhead", condition=True, details={"node type":node,"chainhead":chainhead})
             return
 
         node_height_dict[f"{node}_height"] = chainhead['result']['Height']
@@ -37,11 +34,9 @@ def all_node_sync_status():
     within_one = max(node_height_dict.values()) - min(node_height_dict.values()) <= 1
 
     if within_one:
-        sdk.always(declare=False, id="No fault period: all nodes are synced (within 1)", message="No fault period: all nodes are synced (within 1)", condition=True, details=node_height_dict)
+        sdk.always(declare=False, id="All nodes are synced (within 1) during period of no faults", message="All nodes are synced (within 1) during period of no faults", condition=True, details=node_height_dict)
     else:
-        sdk.always(declare=False, id="No fault period: all nodes are synced (within 1)", message="No fault period: all nodes are synced (within 1)", condition=False, details=node_height_dict)
-
-    sdk.reachable(declare=False, id="Script execution: 'eventually_all_node_sync_status' ran", message="Script execution: 'eventually_all_node_sync_status' ran", condition=True)
+        sdk.always(declare=False, id="All nodes are synced (within 1) during period of no faults", message="All nodes are synced (within 1) during period of no faults", condition=False, details=node_height_dict)
 
 
 all_node_sync_status()

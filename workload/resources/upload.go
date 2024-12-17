@@ -22,31 +22,32 @@ import (
 // DeploySmartContract deploys a smart contract using a delegated wallet.
 func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath string, fundingAmount abi.TokenAmount) (*ethtypes.EthAddress, error) {
 	genesisWallet, err := GetGenesisWallet(ctx, api)
-	assert.Always(genesisWallet != address.Undef, "failed to get genesis wallet: %v", map[string]interface{}{"error": err})
+	assert.Always(genesisWallet != address.Undef, "Get the genesis wallet", map[string]interface{}{"error": err})
 
 	delegatedWallet, err := CreateWallet(ctx, api, types.KTDelegated)
-	assert.Always(err == nil, "Delegated wallet creation must succeed %v", map[string]interface{}{"error": err})
 
 	ethAddr, err := ethtypes.EthAddressFromFilecoinAddress(delegatedWallet)
-	assert.Always(err == nil, "failed to create Ethereum address: %v", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Create an Ethereum address from a Filecoin address", map[string]interface{}{"error": err})
 
 	err = SendFunds(ctx, api, genesisWallet, delegatedWallet, fundingAmount)
-	assert.Always(err == nil, "failed to fund delegated wallet: %v", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Fund a delegated wallet", map[string]interface{}{"error": err})
 
 	balance, err := api.EthGetBalance(ctx, ethAddr, ethtypes.NewEthBlockNumberOrHashFromPredefined("latest"))
-	assert.Always(err == nil, "Failed to assert balance", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Get the Eth balance from a specific address", map[string]interface{}{"error": err})
+
+	//THIS ASSERTION ALWAYS FAILS
 	assert.Always(balance == ethtypes.EthBigInt(fundingAmount.Abs()), "Balance is equal", map[string]interface{}{"error": err})
 
 	contractHex, err := ioutil.ReadFile(contractPath)
-	assert.Always(err == nil, "failed to read contract file: %v", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Read the smart contract file", map[string]interface{}{"error": err})
 
 	contract, err := hex.DecodeString(string(contractHex))
-	assert.Always(err == nil, "failed to decode contract bytecode: %v", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Decode smart contract into a byte representation", map[string]interface{}{"error": err})
 
 	// Serialize the contract initialization parameters
 	initcode := abi.CborBytes(contract)
 	params, err := actors.SerializeParams(&initcode)
-	assert.Always(err == nil, "failed to serialize Create params: %v", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Serialize initial smart contract bytecodes to filecoin compatible format", map[string]interface{}{"error": err})
 
 	msg := &types.Message{
 		To:     builtin.EthereumAddressManagerActorAddr,
@@ -56,26 +57,26 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 		Params: params,
 	}
 
+	// we fail here in the script 1/6 times
 	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
-	assert.Always(err == nil, "failed to push message: %v", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Push a smart contract message", map[string]interface{}{"error": err})
 
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 0, abi.ChainEpoch(-1), true)
-	assert.Always(err == nil, "error waiting for message execution: %v", map[string]interface{}{"error": err})
-	assert.Always(wait.Receipt.ExitCode == 0, "smart contract deployment failed: %v", map[string]interface{}{"exitCode": wait.Receipt.ExitCode})
+	assert.Always(err == nil, "Waiting for smart contract message execution", map[string]interface{}{"error": err, "WaitExitCode": wait.Receipt.ExitCode})
 
 	var result eam.CreateReturn
 	err = result.UnmarshalCBOR(bytes.NewReader(wait.Receipt.Return))
-	assert.Always(err == nil, "failed to unmarshal Create return: %v", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Unmarshal CBOR", map[string]interface{}{"error": err})
 
 	deployedEthAddr, err := ethtypes.CastEthAddress(result.EthAddress[:])
-	assert.Always(err == nil, "failed to cast Ethereum address: %v", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Interpret bytes as an EthAddress and perform basic checks by casting", map[string]interface{}{"error": err})
 
 	txHash, err := api.EthGetTransactionHashByCid(ctx, smsg.Cid())
-	assert.Sometimes(err == nil, "failed to get Ethereum transaction hash: %v", map[string]interface{}{"error": err})
+	assert.Sometimes(err == nil, "Get Ethereum transaction hash from the Chain ID", map[string]interface{}{"error": err})
 
 	if err == nil {
 		receipt, err := api.EthGetTransactionReceipt(ctx, *txHash)
-		assert.Sometimes(err == nil, "Retrieving transaction receipt should succeed sometimes", map[string]interface{}{"error": err})
+		assert.Sometimes(err == nil, "Retrieve transaction receipt from Eth transaction hash", map[string]interface{}{"error": err})
 		if err == nil {
 			log.Printf("Transaction Receipt: %+v\n", receipt)
 		}

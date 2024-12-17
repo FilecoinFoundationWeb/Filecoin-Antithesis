@@ -45,8 +45,15 @@ func TestF3GetProgressEquality(t *testing.T) {
 			}
 			defer closer()
 
+			isRunning, err := api.F3IsRunning(ctx)
+			assert.Always(err == nil, "Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+
+			if !isRunning {
+				return
+			}
+
 			progress, err := api.F3GetProgress(ctx)
-			assert.Sometimes(err == nil, "Fetching F3 progress from a node", map[string]interface{}{"node": node.Name, "error": err})
+			assert.Always(err == nil, "Fetching F3 progress from a node while F3 is active", map[string]interface{}{"node": node.Name, "error": err})
 
 			if err != nil {
 				progresses[node.Name] = nil
