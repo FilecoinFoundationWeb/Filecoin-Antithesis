@@ -15,7 +15,7 @@ sdk.always(declare=True, id="Get the chainhead", message="Get the chainhead")
 sdk.always(declare=True, id="Estimate message gas for a transaction", message="Estimate message gas for a transaction")
 sdk.always(declare=True, id="Push message to mpool", message="Push message to mpool")
 sdk.always(declare=True, id="Found the genesis wallet", message="Found the genesis wallet")
-sdk.always(declare=True, id="Get status of a sync state", message="Get status of a sync state")
+#sdk.always(declare=True, id="Get status of a sync state", message="Get status of a sync state")
 
 
 def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
@@ -289,9 +289,9 @@ def sync_state(node_type:str, rpc_url:str, auth_token:str):
     })
     response = request(node_type, rpc_url, auth_token, "post", payload)
     if response['response'].status_code != 200:
-        sdk.always(declare=False, id="Get status of a sync state", message="Get status of a sync state", condition=False, details={"node type":node_type,"response":response['response']})
+        #sdk.always(declare=False, id="Get status of a sync state", message="Get status of a sync state", condition=False, details={"node type":node_type,"response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during SyncState for {method} on a {node_type} node")
         return None
-    sdk.always(declare=False, id="Get status of a sync state", message="Get status of a sync state", condition=True)
+    #sdk.always(declare=False, id="Get status of a sync state", message="Get status of a sync state", condition=True)
     print(f"Workload [rpc.py]: good response status code during SyncState for {method} on a {node_type} node")
     return response['response'].json()['result']['ActiveSyncs']

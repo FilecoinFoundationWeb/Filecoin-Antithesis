@@ -45,6 +45,14 @@ func TestF3GetLatestCertificateEquality(t *testing.T) {
 			}
 			defer closer()
 
+			isRunning, err := api.F3IsRunning(ctx)
+			assert.Always(err == nil, "Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+
+			if !isRunning {
+				latestCertificates[node.Name] = nil
+				return
+			}
+
 			latestCert, err := api.F3GetLatestCertificate(ctx)
 			assert.Always(err == nil, "Fetching F3 progress from a node", map[string]interface{}{"node": node.Name, "error": err})
 

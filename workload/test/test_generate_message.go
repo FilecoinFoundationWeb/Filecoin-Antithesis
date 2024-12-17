@@ -10,6 +10,7 @@ import (
 )
 
 func TestMessageBuilder(t *testing.T) {
+	// fetch powertable from lotus API, by adding context and tipset which canbe found using chainhead
 	pt := NewPowerTable()
 	err := pt.Add([]PowerEntry{
 		{
@@ -24,10 +25,12 @@ func TestMessageBuilder(t *testing.T) {
 		},
 	}...)
 	assert.NoError(t, err)
+	// main go f3 fix
 	payload := Payload{
 		Instance: 1,
 		Round:    0,
 	}
+	//get network name from lotus api api.get manifest and get manifest.networkname
 	nn := NetworkName("test")
 
 	mt := &MessageBuilder{
@@ -37,6 +40,7 @@ func TestMessageBuilder(t *testing.T) {
 		SigningMarshaler: signingMarshaler,
 	}
 
+	// should be adding miner address, we can hard code it t01000 or something
 	_, err = mt.PrepareSigningInputs(2)
 	require.Error(t, err, "unknown ID should return an error")
 

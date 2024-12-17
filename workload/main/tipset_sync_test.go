@@ -48,6 +48,6 @@ func TestTipsetConsistency(t *testing.T) {
 
 	// Verify all tipsets are identical
 	for i := 1; i < len(tipsets); i++ {
-		assert.Always(tipsets[0] == tipsets[i], "Tipsets are not consistent across nodes", map[string]interface{}{"base_tipset": tipsets[0], "different_tipset": tipsets[i]})
+		assert.Always(tipsets[0] == tipsets[i], "Tipsets are consistent across nodes", map[string]interface{}{"base_tipset": tipsets[0], "different_tipset": tipsets[i]})
 	}
 }

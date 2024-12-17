@@ -36,11 +36,17 @@ func TestF3GetCertificateEquality(t *testing.T) {
 		if err != nil {
 			return
 		}
-
 		defer closer()
 
+		isRunning, err := api.F3IsRunning(ctx)
+		assert.Always(err == nil, "Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+
+		if !isRunning {
+			return
+		}
+
 		certificate, err := api.F3GetCertificate(ctx, 1) // Example instance ID = 1
-		assert.Sometimes(err == nil, "Fetching certificate from a node", map[string]interface{}{"node": node.Name, "error": err})
+		assert.Always(err == nil, "Fetching certificate from a node while F3 is active", map[string]interface{}{"node": node.Name, "error": err})
 
 		// TO DELETE
 		fmt.Print(certificate)
