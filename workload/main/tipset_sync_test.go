@@ -71,7 +71,7 @@ func TestTipsetConsistency(t *testing.T) {
 	// Verify all tipsets are identical
 	baseTipset := tipsets[0]
 	for i, ts := range tipsets {
-		assert.Always(baseTipset == ts, "Tipsets are not consistent across nodes", map[string]interface{}{
+		assert.Always(baseTipset == ts, "Tipsets are consistent across nodes", map[string]interface{}{
 			"base_tipset":       baseTipset,
 			"different_tipset":  ts,
 			"node_index":        i,

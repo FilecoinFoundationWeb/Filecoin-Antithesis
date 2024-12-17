@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
-	"github.com/stretchr/testify/assert"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 func TestSamePowerTableAcrossNodes(t *testing.T) {
@@ -15,7 +15,7 @@ func TestSamePowerTableAcrossNodes(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.NoError(t, err, "Failed to load config")
+	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
 
 	// Ensure there are nodes in the configuration
 	if len(config.Nodes) == 0 {
@@ -31,6 +31,7 @@ func TestSamePowerTableAcrossNodes(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			api, closer, err := resources.ConnectToNode(ctx, node)
+			assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node.Name, "error": err})
 			if err != nil {
 				errChan <- err
 				return
@@ -39,6 +40,7 @@ func TestSamePowerTableAcrossNodes(t *testing.T) {
 
 			// Fetch the tipset key
 			ts, err := api.ChainHead(ctx)
+			assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node.Name, "error": err})
 			if err != nil {
 				errChan <- err
 				return
@@ -46,6 +48,7 @@ func TestSamePowerTableAcrossNodes(t *testing.T) {
 
 			// Fetch power table
 			powerTable, err := api.F3GetF3PowerTable(ctx, ts.Key())
+			assert.Always(err == nil, "Getting the F3 powertable for a node", map[string]interface{}{"node": node.Name, "error": err})
 			if err != nil {
 				errChan <- err
 				return
@@ -53,6 +56,7 @@ func TestSamePowerTableAcrossNodes(t *testing.T) {
 
 			// Serialize power table to JSON for comparison
 			powerTableBytes, err := json.Marshal(powerTable)
+			assert.Always(err == nil, "Serialized the powertable", map[string]interface{}{"node": node.Name, "error": err})
 			if err != nil {
 				errChan <- err
 				return
@@ -65,11 +69,14 @@ func TestSamePowerTableAcrossNodes(t *testing.T) {
 	close(errChan)
 
 	for err := range errChan {
-		assert.NoError(t, err, "Error occurred during power table fetch")
+		assert.Unreachable("An error occurred during a PowerTable fetch", map[string]interface{}{"error": err})
 	}
 
 	// Assert all power tables are the same
 	for i := 1; i < len(powerTables); i++ {
-		assert.Equal(t, powerTables[0], powerTables[i], "Power tables do not match across nodes")
+		assert.Always(powerTables[0] == powerTables[i], "All power tables match across nodes", map[string]interface{}{
+			"base_powertable":     powerTables[0],
+			"compared_powertable": powerTables[i],
+		})
 	}
 }
