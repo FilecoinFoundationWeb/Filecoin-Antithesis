@@ -68,6 +68,8 @@ func TestTipsetConsistency(t *testing.T) {
 	// Wait for all goroutines to complete
 	wg.Wait()
 
+	// TODO take a closer look at what this script is doing and if it is correct. Put in all_node_sync_status_check logic in here
+
 	// Verify all tipsets are identical
 	baseTipset := tipsets[0]
 	for i, ts := range tipsets {

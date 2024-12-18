@@ -5,9 +5,15 @@ go 1.23
 require (
 	github.com/antithesishq/antithesis-sdk-go v0.4.2
 	github.com/filecoin-project/go-address v1.2.0
+	github.com/filecoin-project/go-bitfield v0.2.4
+	github.com/filecoin-project/go-f3 v0.7.2
 	github.com/filecoin-project/go-state-types v0.15.0
 	github.com/filecoin-project/lotus v1.31.0
-	github.com/stretchr/testify v1.9.0
+	github.com/ipfs/go-cid v0.4.1
+	github.com/multiformats/go-multihash v0.2.3
+	github.com/test-go/testify v1.1.4
+	github.com/whyrusleeping/cbor-gen v0.2.0
+	go.dedis.ch/kyber/v4 v4.0.0-pre2.0.20240924132404-4de33740016e
 )
 
 require (
@@ -19,10 +25,8 @@ require (
 	github.com/filecoin-project/go-amt-ipld/v2 v2.1.0 // indirect
 	github.com/filecoin-project/go-amt-ipld/v3 v3.1.0 // indirect
 	github.com/filecoin-project/go-amt-ipld/v4 v4.4.0 // indirect
-	github.com/filecoin-project/go-bitfield v0.2.4 // indirect
 	github.com/filecoin-project/go-clock v0.1.0 // indirect
 	github.com/filecoin-project/go-crypto v0.1.0 // indirect
-	github.com/filecoin-project/go-f3 v0.7.2 // indirect
 	github.com/filecoin-project/go-hamt-ipld v0.1.5 // indirect
 	github.com/filecoin-project/go-hamt-ipld/v2 v2.0.0 // indirect
 	github.com/filecoin-project/go-hamt-ipld/v3 v3.4.0 // indirect
@@ -46,7 +50,6 @@ require (
 	github.com/ipfs/bbloom v0.0.4 // indirect
 	github.com/ipfs/boxo v0.20.0 // indirect
 	github.com/ipfs/go-block-format v0.2.0 // indirect
-	github.com/ipfs/go-cid v0.4.1 // indirect
 	github.com/ipfs/go-datastore v0.6.0 // indirect
 	github.com/ipfs/go-ipfs-util v0.0.3 // indirect
 	github.com/ipfs/go-ipld-cbor v0.2.0 // indirect
@@ -72,7 +75,6 @@ require (
 	github.com/multiformats/go-multiaddr-fmt v0.1.0 // indirect
 	github.com/multiformats/go-multibase v0.2.0 // indirect
 	github.com/multiformats/go-multicodec v0.9.0 // indirect
-	github.com/multiformats/go-multihash v0.2.3 // indirect
 	github.com/multiformats/go-multistream v0.6.0 // indirect
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
@@ -81,8 +83,7 @@ require (
 	github.com/polydawn/refmt v0.89.0 // indirect
 	github.com/raulk/clock v1.1.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/test-go/testify v1.1.4 // indirect
-	github.com/whyrusleeping/cbor-gen v0.2.0 // indirect
+	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	gitlab.com/yawning/secp256k1-voi v0.0.0-20230925100816-f2616030848b // indirect
 	gitlab.com/yawning/tuplehash v0.0.0-20230713102510-df83abbf9a02 // indirect

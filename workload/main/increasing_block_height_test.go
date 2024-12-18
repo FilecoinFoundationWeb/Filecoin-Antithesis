@@ -31,7 +31,7 @@ func TestIncreasingBlockHeight(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for _, node := range config.Nodes {
+	for _, node := range filterNodes {
 		wg.Add(1)
 		go func(node resources.NodeConfig) {
 			defer wg.Done()
