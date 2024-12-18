@@ -41,7 +41,7 @@ func (s *LotusAPISigner) Sign(ctx context.Context, sender gpbft.PubKey, msg []by
 	return sig.Data, nil
 }
 
-func TestMessageSigning(t *testing.T) {
+func TestBuildGMessageWithSignatureBuilder(t *testing.T) {
 	ctx := context.Background()
 
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
@@ -82,6 +82,7 @@ func TestMessageSigning(t *testing.T) {
 		payload := gpbft.Payload{
 			Instance: 1,
 			Round:    0,
+			Phase:    2,
 		}
 
 		mb := &gpbft.MessageBuilder{
@@ -105,6 +106,7 @@ func TestMessageSigning(t *testing.T) {
 		payloadSig, _, err := signatureBuilder.Sign(ctx, signer)
 		assert.Always(err == nil, "Signing payload", map[string]interface{}{"node": node, "minerID": minerID, "error": err})
 
-		log.Printf("Signed payload for Node '%s', Miner ID %d:\nPayload Signature: %x\n", node.Name, minerID, payloadSig)
+		gMessage := signatureBuilder.Build(payloadSig, nil)
+		log.Printf("Constructed GMessage for Node '%s': %+v\n", node.Name, gMessage)
 	}
 }
