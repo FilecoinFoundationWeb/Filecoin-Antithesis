@@ -69,7 +69,7 @@ func TestIncreasingBlockHeight(t *testing.T) {
 						return
 					}
 
-					if time.Since(startTime) > 5 {
+					if time.Since(startTime).Seconds() > 5 {
 						assert.Unreachable("Block height is not progressing as expected", map[string]interface{}{"node": node.Name, "initial_height": initialts.Height(), "current_height": currentts.Height(), "time_elapsed": time.Since(startTime).Seconds()})
 						break
 					}
