@@ -6,21 +6,19 @@ require (
 	github.com/antithesishq/antithesis-sdk-go v0.4.2
 	github.com/filecoin-project/go-address v1.2.0
 	github.com/filecoin-project/go-bitfield v0.2.4
-	github.com/filecoin-project/go-f3 v0.7.2
+	github.com/filecoin-project/go-f3 v0.7.3
 	github.com/filecoin-project/go-state-types v0.15.0
 	github.com/filecoin-project/lotus v1.31.0
 	github.com/ipfs/go-cid v0.4.1
 	github.com/multiformats/go-multihash v0.2.3
-	github.com/test-go/testify v1.1.4
 	github.com/whyrusleeping/cbor-gen v0.2.0
-	go.dedis.ch/kyber/v4 v4.0.0-pre2.0.20240924132404-4de33740016e
+	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
 )
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/filecoin-project/go-amt-ipld/v2 v2.1.0 // indirect
 	github.com/filecoin-project/go-amt-ipld/v3 v3.1.0 // indirect
@@ -79,11 +77,9 @@ require (
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/polydawn/refmt v0.89.0 // indirect
 	github.com/raulk/clock v1.1.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	gitlab.com/yawning/secp256k1-voi v0.0.0-20230925100816-f2616030848b // indirect
 	gitlab.com/yawning/tuplehash v0.0.0-20230713102510-df83abbf9a02 // indirect
@@ -97,7 +93,6 @@ require (
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect
 	golang.org/x/sync v0.9.0 // indirect
 	golang.org/x/sys v0.27.0 // indirect
-	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/protobuf v1.35.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
