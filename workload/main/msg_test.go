@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"testing"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
+	"github.com/antithesishq/antithesis-sdk-go/random"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-f3/gpbft"
 	"github.com/filecoin-project/lotus/api"
@@ -38,7 +40,23 @@ func (s *LotusAPISigner) Sign(ctx context.Context, sender gpbft.PubKey, msg []by
 		return nil, xerrors.Errorf("error while signing: %w", err)
 	}
 
-	return sig.Data, nil
+	maliciousSig := make([]byte, 96)
+
+	for i := 0; i < 12; i++ {
+		for j := 0; j < 8; j++ {
+			maliciousSig[i*8+j] = byte(random.GetRandom() >> (j * 8) & 0xFF)
+		}
+	}
+
+	fmt.Print("sig.Data: ")
+	fmt.Print(sig.Data)
+	fmt.Print("\n")
+
+	fmt.Print("MaliciousSig: ")
+	fmt.Print(maliciousSig)
+	fmt.Print("\n")
+
+	return maliciousSig, nil
 }
 
 func TestBuildGMessageWithSignatureBuilder(t *testing.T) {
