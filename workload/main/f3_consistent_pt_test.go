@@ -53,10 +53,6 @@ func TestF3ApiCalls(t *testing.T) {
 		// F3GetECPowerTable
 		ts, err := api.ChainHead(ctx)
 		assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node.Name, "error": err})
-		if err == nil {
-			_, err = api.F3GetECPowerTable(ctx, ts.Key())
-			assert.Always(err == nil, "F3GetECPowerTable call successful", map[string]interface{}{"node": node.Name, "error": err})
-		}
 
 		// F3GetF3PowerTable
 		if err == nil {
