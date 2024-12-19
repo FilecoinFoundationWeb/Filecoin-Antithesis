@@ -13,14 +13,41 @@ RUN git clone --depth=1 --branch="${GIT_BRANCH}" https://github.com/filecoin-pro
 
 WORKDIR /lotus
 RUN latest_version=$(git tag -l 'v*' | sort -V -r | head -n 1)
+
 COPY ./lotus.patch ./lotus.patch
-COPY ./config-1.toml .
-COPY ./config-2.toml .
 RUN git apply lotus.patch
 
+# Adding race flags
+COPY ./make.patch ./make.patch
+RUN git apply make.patch
+
+COPY ./config-1.toml .
+COPY ./config-2.toml .
+
+RUN git submodule update --init
+
+# Perform code coverage instrumentation (source transformation)
+RUN go get github.com/antithesishq/antithesis-sdk-go@latest
+RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-instrumentor@latest
+RUN go mod tidy
+RUN mkdir /lotus_instrumented
+COPY ./exclusion.txt /exclusion.txt
+RUN antithesis-go-instrumentor -exclude /exclusion.txt /lotus /lotus_instrumented
+
+RUN mkdir -p /symbols
+RUN cp -r /lotus_instrumented/symbols/* /symbols
+
+WORKDIR /lotus_instrumented/customer/
+
+# Removing original source code
+RUN rm -rf /lotus
+
+# Build 2k binary for lotus
 RUN make 2k
 
+# Check lotus version
 CMD ["./lotus","--version"]
+
 # Fetch parameters
 RUN ./lotus fetch-params 2048
 

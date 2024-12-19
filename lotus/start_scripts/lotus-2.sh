@@ -34,7 +34,7 @@ lotus --version
 # cat ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr
 
 cp /root/.genesis-sector-2/pre-seal-t01001.key ${LOTUS_2_DATA_DIR}/key
-cp /lotus/config-2.toml "${LOTUS_2_DATA_DIR}/config.toml"
+cp /lotus_instrumented/customer/config-2.toml "${LOTUS_2_DATA_DIR}/config.toml"
 cat localnet-2.json | jq -r '.NetworkName' > ${LOTUS_2_DATA_DIR}/network_name
 cp localnet-2.json ${LOTUS_2_DATA_DIR}/localnet.json
 lotus --repo="${LOTUS_2_PATH}" daemon --genesis=${LOTUS_1_DATA_DIR}/devgen.car  --bootstrap=false --config=${LOTUS_2_DATA_DIR}/config.toml&
