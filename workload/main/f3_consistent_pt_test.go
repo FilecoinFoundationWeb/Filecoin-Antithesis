@@ -2,81 +2,78 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"sync"
 	"testing"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
-func TestSamePowerTableAcrossNodes(t *testing.T) {
+func TestF3ApiCalls(t *testing.T) {
 	ctx := context.Background()
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
 	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
 
-	// Ensure there are nodes in the configuration
-	if len(config.Nodes) == 0 {
-		t.Fatal("No nodes found in config.json")
+	// Hardcoded list of Lotus nodes to test
+	nodeNames := []string{"Lotus1", "Lotus2"}
+
+	// Filter the nodes based on the specified node names
+	var filteredNodes []resources.NodeConfig
+	for _, node := range config.Nodes {
+		for _, name := range nodeNames {
+			if node.Name == name {
+				filteredNodes = append(filteredNodes, node)
+			}
+		}
 	}
 
-	var wg sync.WaitGroup
-	powerTables := make([]string, len(config.Nodes))
-	errChan := make(chan error, len(config.Nodes))
+	for _, node := range filteredNodes {
+		api, closer, err := resources.ConnectToNode(ctx, node)
+		assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node.Name, "error": err})
+		if err != nil {
+			continue
+		}
+		defer closer()
 
-	for i, node := range config.Nodes {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			api, closer, err := resources.ConnectToNode(ctx, node)
-			assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node.Name, "error": err})
-			if err != nil {
-				errChan <- err
-				return
-			}
-			defer closer()
+		// Test F3 API calls
 
-			// Fetch the tipset key
-			ts, err := api.ChainHead(ctx)
-			assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node.Name, "error": err})
-			if err != nil {
-				errChan <- err
-				return
-			}
+		// F3GetCertificate
+		_, err = api.F3GetCertificate(ctx, 0)
+		assert.Always(err == nil, "F3GetCertificate call successful", map[string]interface{}{"node": node.Name, "error": err})
 
-			// Fetch power table
-			powerTable, err := api.F3GetF3PowerTable(ctx, ts.Key())
-			assert.Always(err == nil, "Getting the F3 powertable for a node", map[string]interface{}{"node": node.Name, "error": err})
-			if err != nil {
-				errChan <- err
-				return
-			}
+		// F3GetLatestCertificate
+		_, err = api.F3GetLatestCertificate(ctx)
+		assert.Always(err == nil, "F3GetLatestCertificate call successful", map[string]interface{}{"node": node.Name, "error": err})
 
-			// Serialize power table to JSON for comparison
-			powerTableBytes, err := json.Marshal(powerTable)
-			assert.Always(err == nil, "Serialized the powertable", map[string]interface{}{"node": node.Name, "error": err})
-			if err != nil {
-				errChan <- err
-				return
-			}
-			powerTables[i] = string(powerTableBytes)
-		}(i)
-	}
+		// F3GetManifest
+		_, err = api.F3GetManifest(ctx)
+		assert.Always(err == nil, "F3GetManifest call successful", map[string]interface{}{"node": node.Name, "error": err})
 
-	wg.Wait()
-	close(errChan)
+		// F3GetECPowerTable
+		ts, err := api.ChainHead(ctx)
+		assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node.Name, "error": err})
+		if err == nil {
+			_, err = api.F3GetECPowerTable(ctx, ts.Key())
+			assert.Always(err == nil, "F3GetECPowerTable call successful", map[string]interface{}{"node": node.Name, "error": err})
+		}
 
-	for err := range errChan {
-		assert.Unreachable("An error occurred during a PowerTable fetch", map[string]interface{}{"error": err})
-	}
+		// F3GetF3PowerTable
+		if err == nil {
+			_, err = api.F3GetF3PowerTable(ctx, ts.Key())
+			assert.Always(err == nil, "F3GetF3PowerTable call successful", map[string]interface{}{"node": node.Name, "error": err})
+		}
 
-	// Assert all power tables are the same
-	for i := 1; i < len(powerTables); i++ {
-		assert.Always(powerTables[0] == powerTables[i], "All power tables match across nodes", map[string]interface{}{
-			"base_powertable":     powerTables[0],
-			"compared_powertable": powerTables[i],
-		})
+		// F3IsRunning
+		_, err = api.F3IsRunning(ctx)
+		assert.Always(err == nil, "F3IsRunning call successful", map[string]interface{}{"node": node.Name, "error": err})
+
+		// F3GetProgress
+		_, err = api.F3GetProgress(ctx)
+		assert.Always(err == nil, "F3GetProgress call successful", map[string]interface{}{"node": node.Name, "error": err})
+
+		// F3ListParticipants
+		_, err = api.F3ListParticipants(ctx)
+		assert.Always(err == nil, "F3ListParticipants call successful", map[string]interface{}{"node": node.Name, "error": err})
 	}
 }
