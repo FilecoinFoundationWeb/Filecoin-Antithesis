@@ -66,7 +66,7 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 		return fmt.Errorf("failed to push message to mempool: %w", err)
 	}
 
-	_, err = api.StateWaitMsg(ctx, sm.Cid(), 5, abi.ChainEpoch(-1), true)
+	_, err = api.StateWaitMsg(ctx, sm.Cid(), 5, 100, true)
 	assert.Always(err == nil, "Waiting for a message to send funds between two wallets to be included in next block", map[string]interface{}{"error": err})
 	if err != nil {
 		return fmt.Errorf("waiting for message inclusion: %w", err)
