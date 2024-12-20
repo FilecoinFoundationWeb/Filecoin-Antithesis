@@ -108,5 +108,6 @@ func TestBuildAndValidateMessage(t *testing.T) {
 
 		gMessage := signatureBuilder.Build(payloadSig, nil) // VRF signature is not used
 		log.Printf("Constructed GMessage for Node '%s': %+v\n", node.Name, gMessage)
+
 	}
 }
