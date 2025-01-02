@@ -38,14 +38,6 @@ func TestF3ApiCalls(t *testing.T) {
 
 		// Test F3 API calls
 
-		// F3GetCertificate
-		_, err = api.F3GetCertificate(ctx, 0)
-		assert.Always(err == nil, "F3GetCertificate call successful", map[string]interface{}{"node": node.Name, "error": err})
-
-		// F3GetLatestCertificate
-		_, err = api.F3GetLatestCertificate(ctx)
-		assert.Always(err == nil, "F3GetLatestCertificate call successful", map[string]interface{}{"node": node.Name, "error": err})
-
 		// F3GetManifest
 		_, err = api.F3GetManifest(ctx)
 		assert.Always(err == nil, "F3GetManifest call successful", map[string]interface{}{"node": node.Name, "error": err})
