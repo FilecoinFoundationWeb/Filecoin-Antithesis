@@ -90,7 +90,7 @@ func main() {
 		if len(allWallets) == 0 {
 			// rand.Intn panics if allWallets == 0
 			log.Fatalf("No wallets available to delete on node '%s'.", *nodeName)
-			return
+			break
 		}
 
 		// Delete a random number of wallets
