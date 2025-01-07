@@ -142,7 +142,15 @@ func main() {
 		}
 		defer closer()
 
-		err = resources.ConnectToOtherNodes(ctx, api, *nodeConfig, config.Nodes)
+		var lotusNodes []resources.NodeConfig
+
+		for _, node := range config.Nodes {
+			if node.Name == "Lotus1" || node.Name == "Lotus2" {
+				lotusNodes = append(lotusNodes, node)
+			}
+		}
+
+		err = resources.ConnectToOtherNodes(ctx, api, *nodeConfig, lotusNodes)
 		if err != nil {
 			log.Fatalf("Failed to connect node '%s' to other nodes: %v", *nodeName, err)
 		}
