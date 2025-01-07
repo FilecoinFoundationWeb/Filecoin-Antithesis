@@ -87,10 +87,11 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to list wallets on node '%s': %v", *nodeName, err)
 		}
+
+		log.Printf("Found %d non-genesis wallets on node '%s'", len(allWallets), *nodeName)
+
 		if len(allWallets) == 0 {
-			// rand.Intn panics if allWallets == 0
-			log.Fatalf("No wallets available to delete on node '%s'.", *nodeName)
-			return
+			log.Fatalf("No non-genesis wallets available to delete on node '%s'.", *nodeName)
 		}
 
 		// Delete a random number of wallets
@@ -116,7 +117,7 @@ func main() {
 			}
 			defer closer()
 
-			nodeWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+			nodeWallets, err := resources.GetRandomWallets(ctx, api, 1)
 			if err != nil {
 				log.Fatalf("Failed to list wallets on node '%s': %v", node.Name, err)
 			}

@@ -24,7 +24,7 @@ func InitializeWallets(ctx context.Context, api api.FullNode, numWallets int, fu
 	}
 
 	for i := 0; i < numWallets; i++ {
-		wallet, err := CreateWallet(ctx, api, types.KTSecp256k1)
+		wallet, err := CreateWallet(ctx, api, types.KTBLS)
 
 		if err != nil {
 			return fmt.Errorf("failed to create wallet #%d: %v", i+1, err)

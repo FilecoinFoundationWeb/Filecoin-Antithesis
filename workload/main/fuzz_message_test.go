@@ -1,5 +1,3 @@
-//go:build fuzzing
-
 package main
 
 import (
@@ -143,7 +141,7 @@ func FuzzBuildAndSignMessages(f *testing.F) {
 
 			gMessage := signatureBuilder.Build(payloadSig, nil)
 			log.Printf("Constructed GMessage with malformed payload: %+v", gMessage)
-
+			assert.Sometimes(gMessage != nil, "Building GMessage with malformed payload", map[string]interface{}{"node": node.Name})
 		}
 	})
 }

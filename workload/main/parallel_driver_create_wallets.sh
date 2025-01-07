@@ -4,7 +4,7 @@
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
 OPERATION="create"
-NODE_NAMES=("Lotus1" "Lotus2")  # Replace with your actual node names
+NODE_NAMES=("Lotus1")  # Replace with your actual node names
 MIN_WALLETS=5                  # Minimum number of wallets to create
 MAX_WALLETS=15                 # Maximum number of wallets to create
 

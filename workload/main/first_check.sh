@@ -2,7 +2,7 @@
 
 set -e
 
-# RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.24:1234/rpc/v1}"
+RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.24:1234/rpc/v1}"
 
 # # Waiting for rpc endpoint to come online
 # RPC_READY=0
