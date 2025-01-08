@@ -8,6 +8,9 @@ RUN apt-get update -y && \
     tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
     rm go1.23.2.linux-amd64.tar.gz
 
+# Install Antithesis Python SDK
+RUN pip install antithesis cffi --break-system-packages
+
 # Set up Go environment
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/go"
@@ -21,7 +24,6 @@ COPY go.mod ./go.mod
 COPY go.sum ./go.sum
 COPY main.go ./main.go
 COPY ./main /opt/antithesis/test/v1/main
-COPY ./sdk/antithesis_sdk.py /opt/antithesis/sdk/antithesis_sdk.py
 
 # Download Go dependencies
 RUN go mod download

@@ -2,13 +2,11 @@
 
 import random, sys
 sys.path.append("/opt/antithesis/resources")
-sys.path.append("/opt/antithesis/sdk")
 import wallets, nodes
-from antithesis_sdk import antithesis_fallback_sdk
 
-
-sdk = antithesis_fallback_sdk()
-sdk.reachable(declare=True, id="Script execution: 'create_wallets' ran", message="Script execution: 'create_wallets' ran")
+from antithesis.assertions import (
+    reachable,
+)
 
 def create_wallets():
     n_wallets = random.SystemRandom().randint(5, 15)
@@ -18,6 +16,6 @@ def create_wallets():
     new_wallets_pks = wallets.get_wallets_private_keys(node_type=node, rpc_url=rpc_url, auth_token=auth_token, wallets=new_wallets)
     wallet_pk_dict = dict(zip(new_wallets, new_wallets_pks))
     wallets.write_wallets_locally(wallet_pk=wallet_pk_dict)
-    sdk.reachable(declare=False, id="Script execution: 'create_wallets' ran", message="Script execution: 'create_wallets' ran", condition=True, details={"node type":node})
+    reachable("Script execution: 'parallel_driver_create_wallets.py' ran", {"node_type":node})
 
 create_wallets()

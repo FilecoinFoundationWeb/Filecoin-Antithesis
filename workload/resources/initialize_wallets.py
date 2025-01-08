@@ -1,13 +1,11 @@
 #!/usr/bin/env -S python3 -u
 
 from nodes import get_url_and_token
-import wallets, transaction
-import sys
-sys.path.append("/opt/antithesis/sdk")
-from antithesis_sdk import antithesis_fallback_sdk
+import wallets, transaction, sys
 
-sdk = antithesis_fallback_sdk()
-sdk.reachable(declare=True, id="Successful 'initialize_wallets.py' script execution", message="Successful 'initialize_wallets.py script execution")
+from antithesis.assertions import (
+    reachable,
+)
 
 def init_wallets(node_type):
 
@@ -33,7 +31,7 @@ def init_wallets(node_type):
     transaction.feed_wallets(node_type, rpc_url, auth_token, genesis_wallet, genesis_wallet_pk, new_wallets, 40000)
 
     # reached the end of the script without error
-    sdk.reachable(declare=False, id="Successful 'initialize_wallets.py' script execution", message="Successful 'initialize_wallets.py script execution", condition=True, details={"node":node_type})
+    reachable("Successful 'initialize_wallets.py' script execution", {"node":node_type})
   
 
 if __name__ == "__main__":

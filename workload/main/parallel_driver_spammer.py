@@ -2,15 +2,13 @@
 
 import random, time, sys
 sys.path.append("/opt/antithesis/resources")
-sys.path.append("/opt/antithesis/sdk")
 from wallets import get_random_wallets
 import nodes
 from transaction import make_transaction
-from antithesis_sdk import antithesis_fallback_sdk
 
-
-sdk = antithesis_fallback_sdk()
-sdk.reachable(declare=True, id="Script execution: 'parallel_driver_spammer' ran", message="Script execution: 'parallel_driver_spammer' ran")
+from antithesis.assertions import (
+    reachable,
+)
 
 def spam_hard(n_wallets:int=10):
 
@@ -48,7 +46,7 @@ def spam_hard(n_wallets:int=10):
         make_transaction(node, rpc_url, auth_token, from_w, from_pk, to_w, amount)
         time.sleep(cooldown)
     
-    sdk.reachable(declare=False, id="Script execution: 'parallel_driver_spammer' ran", message="Script execution: 'parallel_driver_spammer' ran", condition=True, details={"node type":node})
+    reachable("Script execution: 'parallel_driver_spammer.py' ran", {"node_type":node})
 
 
 spam_hard()

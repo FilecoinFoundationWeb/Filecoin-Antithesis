@@ -2,14 +2,12 @@
 
 import time, sys
 sys.path.append("/opt/antithesis/resources")
-sys.path.append("/opt/antithesis/sdk")
 import nodes
 from rpc import get_chainhead
-from antithesis_sdk import antithesis_fallback_sdk
 
-
-sdk = antithesis_fallback_sdk()
-sdk.always(declare=True, id="Chainhead increases within the time boundary (7.5s)", message="Chainhead increases within the time boundary (7.5s)")
+from antithesis.assertions import (
+    always,
+)
 
 def check_increasing_block_height(n=3, time_limit=7.5):
 
@@ -31,10 +29,7 @@ def check_increasing_block_height(n=3, time_limit=7.5):
                 e = time.monotonic_ns()
                 diff = round((s - e)/1_000_000_000, 2)
                 print(f"Workload [main][anytime_increasing_block_height_check.py]: time difference between block height {height} and block height {new_height} was {diff} seconds")
-                if diff > time_limit:
-                    sdk.always(declare=False, id="Chainhead increases within the time boundary (7.5s)", message="Chainhead increases within the time boundary (7.5s)", condition=False, details={"old height":height,"new height":new_height,"time difference":diff})
-                else:
-                    sdk.always(declare=False, id="Chainhead increases within the time boundary (7.5s)", message="Chainhead increases within the time boundary (7.5s)", condition=True, details={"old height":height,"new height":new_height,"time difference":diff})
+                always(diff < time_limit, "Chainhead increases within the time boundary (7.5s)", {"old height":height,"new height":new_height,"time difference":diff})
                 break
             time.sleep(0.5)
 

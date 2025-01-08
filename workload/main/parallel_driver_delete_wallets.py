@@ -2,13 +2,11 @@
 
 import random, sys
 sys.path.append("/opt/antithesis/resources")
-sys.path.append("/opt/antithesis/sdk")
 import wallets, nodes
-from antithesis_sdk import antithesis_fallback_sdk
 
-
-sdk = antithesis_fallback_sdk()
-sdk.reachable(declare=True, id="Script execution: 'delete_wallets' ran", message="Script execution: 'delete_wallets' ran")
+from antithesis.assertions import (
+    reachable,
+)
 
 def delete_wallets():
     n_wallets = random.SystemRandom().randint(3, 6)
@@ -21,6 +19,6 @@ def delete_wallets():
     wallets.delete_wallets_locally(wallets_to_delete)
     wallets_to_delete = list(wallets_to_delete.keys())
     wallets.delete_wallets(node, rpc_url, auth_token, wallets_to_delete)
-    sdk.reachable(declare=False, id="Script execution: 'delete_wallets' ran", message="Script execution: 'delete_wallets' ran", condition=True, details={"node type":node})
+    reachable("Script execution: 'parallel_driver_delete_wallets.py' ran", {"node_type":node})
 
 delete_wallets()

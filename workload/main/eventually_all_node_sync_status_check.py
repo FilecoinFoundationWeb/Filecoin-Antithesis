@@ -2,15 +2,12 @@
 
 import time, sys
 sys.path.append("/opt/antithesis/resources")
-sys.path.append("/opt/antithesis/sdk")
 import nodes
 from rpc import get_chainhead
-from antithesis_sdk import antithesis_fallback_sdk
 
-
-sdk = antithesis_fallback_sdk()
-
-sdk.always(declare=True, id="All nodes are synced (within 1) during period of no faults", message="All nodes are synced (within 1) during period of no faults")
+from antithesis.assertions import (
+    always,
+)
 
 def all_node_sync_status():
 
@@ -33,10 +30,6 @@ def all_node_sync_status():
     # each height is an int
     within_one = max(node_height_dict.values()) - min(node_height_dict.values()) <= 1
 
-    if within_one:
-        sdk.always(declare=False, id="All nodes are synced (within 1) during period of no faults", message="All nodes are synced (within 1) during period of no faults", condition=True, details=node_height_dict)
-    else:
-        sdk.always(declare=False, id="All nodes are synced (within 1) during period of no faults", message="All nodes are synced (within 1) during period of no faults", condition=False, details=node_height_dict)
-
+    always(within_one, "All nodes are synced (within 1) during period of no faults", node_height_dict)
 
 all_node_sync_status()

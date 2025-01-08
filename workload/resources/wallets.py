@@ -1,16 +1,13 @@
 #!/usr/bin/env -S python3 -u
 
-import time, random, sys
-sys.path.append("/opt/antithesis/sdk")
-from antithesis_sdk import antithesis_fallback_sdk
+import time, random
+
+from antithesis.assertions import (
+    unreachable,
+)
+
 from filelock import FileLock
 import rpc
-
-sdk = antithesis_fallback_sdk()
-sdk.unreachable(declare=True, id="Timeout: get the genesis wallet", message="Timeout: get the genesis wallet")
-sdk.unreachable(declare=True, id="Timeout: get private keys of wallets", message="Timeout: get private keys of wallets")
-sdk.unreachable(declare=True, id="Timeout: create a wallet", message="Timeout: create a wallet")
-sdk.unreachable(declare=True, id="Timeout: delete a wallet", message="Timeout: delete a wallet")
 
 def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     '''
@@ -29,7 +26,7 @@ def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
         print(f"Workload [wallets.py]: attempt {backoff + 1} failed to get genesis wallet, retrying")
         backoff += 1
         if backoff >= 16:
-            sdk.unreachable(declare=False, id="Timeout: get the genesis wallet", message="Timeout: get the genesis wallet", condition=True)
+            unreachable("Timeout: get the genesis wallet", None)
             print(f"Workload [wallets.py]: failed to get genesis wallet after a long time on a {node_type} node. this is a serious issue. returning None")
             return None
         time.sleep(backoff)
@@ -49,7 +46,7 @@ def get_wallets_private_keys(node_type:str, rpc_url:str, auth_token:str, wallets
     print(f"Workload [wallets.py]: attempting to get {num_wallets} private keys")
     while pks_found < num_wallets:
         if backoff >= 16:
-            sdk.unreachable(declare=False, id="Timeout: get private keys of wallets", message="Timeout: get private keys of wallets", condition=True)
+            unreachable("Timeout: get private keys of wallets", None)
             print(f"Workload [wallets.py]: failed to get private key after a long time on a {node_type} node. this is a serious issue. returning None")
             return None
         pk = rpc.get_wallet_private_key(node_type, rpc_url, auth_token, wallets[pks_found])
@@ -79,7 +76,7 @@ def create_wallets(node_type:str, rpc_url:str, auth_token:str, n:int) -> list:
     print(f"Workload [wallets.py]: attempting to create {n} wallets")
     while wallets_created < n:
         if backoff >= 16:
-            sdk.unreachable(declare=False, id="Timeout: create a wallet", message="Timeout: create a wallet", condition=True)
+            unreachable("Timeout: create a wallet", None)
             print(f"Workload [wallets.py]: failed to create a wallet after a long time on a {node_type} node. this is a serious issue. returning None")
             return None
         wallet = rpc.create_wallet(node_type, rpc_url, auth_token)
@@ -102,7 +99,7 @@ def delete_wallets(node_type:str, rpc_url:str, auth_token:str, wallets_to_delete
     print(f"Workload [wallets.py]: attempting to delete {num_wallets_to_delete} wallets")
     while wallets_deleted < num_wallets_to_delete:
         if backoff >= 16:
-            sdk.unreachable(declare=False, id="Timeout: delete a wallet", message="Timeout: delete a wallet", condition=True)
+            unreachable("Timeout: delete a wallet", None)
             print(f"Workload [wallets.py]: failed to delete a wallet after a long time on a {node_type} node. this is a serious issue. returning")
             return
         response = rpc.delete_wallet(node_type, rpc_url, auth_token, wallets_to_delete[wallets_deleted])
