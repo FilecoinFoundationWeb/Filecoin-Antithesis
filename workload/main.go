@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/api"
@@ -108,8 +109,16 @@ func main() {
 		var apis []api.FullNode
 		var wallets [][]address.Address
 
-		// Gather wallets from all nodes
+		// Filter nodes to only include "Lotus1" and "Lotus2"
+		filteredNodes := []resources.NodeConfig{}
 		for _, node := range config.Nodes {
+			if node.Name == "Lotus1" || node.Name == "Lotus2" {
+				filteredNodes = append(filteredNodes, node)
+			}
+		}
+
+		// Gather wallets from filtered nodes
+		for _, node := range filteredNodes {
 			api, closer, err := resources.ConnectToNode(ctx, node)
 			if err != nil {
 				log.Fatalf("Failed to connect to Lotus node '%s': %v", node.Name, err)
@@ -186,6 +195,7 @@ func main() {
 
 		// Deploy the smart contract
 		ethAddr, err := resources.DeploySmartContract(ctx, api, *contractPath, tokenAmount)
+		assert.Sometimes(err != nil, "Failed to deploy a smart contract", map[string]interface{}{"error": err})
 		if err != nil {
 			log.Fatalf("Failed to deploy smart contract: %v", err)
 		}
