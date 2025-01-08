@@ -57,7 +57,7 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 	assert.Sometimes(err == nil, "Push a smart contract message", map[string]interface{}{"error": err})
 
 	if smsg == nil {
-		log.Fatalf("Failed to push message to mempool: %v", err)
+		log.Fatalf("Failed to push message to mempool: smsg is nil, error: %v", err)
 	}
 
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
