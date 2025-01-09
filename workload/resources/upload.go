@@ -31,6 +31,10 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 	assert.Always(err == nil, "Create an Ethereum address from a Filecoin address", map[string]interface{}{"error": err})
 
 	err = SendFunds(ctx, api, genesisWallet, delegatedWallet, fundingAmount)
+	if err != nil {
+		log.Fatalf("Failed to fund delegated wallet: %v", err)
+	}
+	log.Printf("Funded delegated wallet: %s with %s FIL", delegatedWallet, fundingAmount.String())
 	assert.Sometimes(err == nil, "Fund a delegated wallet", map[string]interface{}{"error": err})
 
 	contractHex, err := ioutil.ReadFile(contractPath)

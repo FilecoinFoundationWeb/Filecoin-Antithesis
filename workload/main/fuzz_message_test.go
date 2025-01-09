@@ -43,7 +43,7 @@ func (s *LotusAPISigner) Sign(ctx context.Context, sender gpbft.PubKey, msg []by
 
 	return sig.Data, nil
 }
-func FuzzBuildAndSignMessages(f *testing.F) {
+func (fff *F3) FuzzBuildAndSignMessages(f *testing.F) {
 	const timeoutDuration = 10 * time.Second
 
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
@@ -143,7 +143,7 @@ func FuzzBuildAndSignMessages(f *testing.F) {
 
 			gMessage := signatureBuilder.Build(payloadSig, nil)
 			log.Printf("Constructed GMessage with malformed payload: %+v", gMessage)
-
+			assert.Always(gMessage == nil, "Constructed GMessage is nil", map[string]interface{}{"node": node.Name})
 		}
 	})
 }
