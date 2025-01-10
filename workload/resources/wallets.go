@@ -37,7 +37,6 @@ func InitializeWallets(ctx context.Context, api api.FullNode, numWallets int, fu
 
 		log.Printf("Created and funded wallet #%d: %s with %s FIL", i+1, wallet, fundingAmount.String())
 	}
-
 	return nil
 }
 
@@ -53,20 +52,30 @@ func CreateWallet(ctx context.Context, api api.FullNode, walletType types.KeyTyp
 	return wallet, nil
 }
 
-// SendFunds transfers FIL from the genesis wallet to a recipient wallet.
 func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, amount abi.TokenAmount) error {
 	msg := &types.Message{
 		From:  from,
 		To:    to,
 		Value: amount,
 	}
+
 	sm, err := api.MpoolPushMessage(ctx, msg, nil)
-	assert.Sometimes(err == nil, "Push a message to send funds between two wallets", map[string]interface{}{"error": err})
+	assert.Sometimes(err == nil, "Push a message to send funds between two wallets", map[string]interface{}{"from": from, "to": to, "amount": amount, "error": err})
 	if sm == nil {
 		log.Fatalf("Failed to push message to mempool: %v", err)
 	}
-	_, err = api.StateWaitMsg(ctx, sm.Cid(), 5, 100, false)
-	assert.Sometimes(err == nil, "Waiting for a message to send funds between two wallets to be included in next block", map[string]interface{}{"error": err})
+
+	result, err := api.StateWaitMsg(ctx, sm.Cid(), 5, 100, false)
+	assert.Sometimes(err == nil, "Waiting for the funds transfer message to be included in the next block", map[string]interface{}{"Cid": sm.Cid(), "error": err})
+
+	// Check if the message execution was successful
+	if !result.Receipt.ExitCode.IsSuccess() {
+		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, sm.Cid())
+		assert.Sometimes(replayErr == nil, "StateReplay failed during funds transfer", map[string]interface{}{"messageCid": sm.Cid(), "error": replayErr})
+		assert.Always(replayResult != nil, "StateReplay returned nil result for funds transfer", map[string]interface{}{"messageCid": sm.Cid()})
+		return replayErr // Return the error if StateReplay failed
+	}
+
 	return nil
 }
 

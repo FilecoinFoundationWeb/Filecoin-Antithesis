@@ -31,22 +31,18 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 	assert.Always(err == nil, "Create an Ethereum address from a Filecoin address", map[string]interface{}{"error": err})
 
 	err = SendFunds(ctx, api, genesisWallet, delegatedWallet, fundingAmount)
-	if err != nil {
-		log.Fatalf("Failed to fund delegated wallet: %v", err)
-	}
-	log.Printf("Funded delegated wallet: %s with %s FIL", delegatedWallet, fundingAmount.String())
-	assert.Sometimes(err == nil, "Fund a delegated wallet", map[string]interface{}{"error": err})
+	assert.Sometimes(err == nil, "Fund a delegated wallet", map[string]interface{}{"genesisWallet": genesisWallet, "delegatedWallet": delegatedWallet, "amount": fundingAmount, "error": err})
 
 	contractHex, err := ioutil.ReadFile(contractPath)
-	assert.Always(err == nil, "Read the smart contract file", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Read the smart contract file", map[string]interface{}{"filePath": contractPath, "error": err})
 
 	contract, err := hex.DecodeString(string(contractHex))
-	assert.Always(err == nil, "Decode smart contract into a byte representation", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Decode smart contract into a byte representation", map[string]interface{}{"hex": string(contractHex), "error": err})
 
 	// Serialize the contract initialization parameters
 	initcode := abi.CborBytes(contract)
 	params, err := actors.SerializeParams(&initcode)
-	assert.Always(err == nil, "Serialize initial smart contract bytecodes to filecoin compatible format", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Serialize initial smart contract bytecodes to Filecoin compatible format", map[string]interface{}{"error": err})
 
 	msg := &types.Message{
 		To:     builtin.EthereumAddressManagerActorAddr,
@@ -56,7 +52,6 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 		Params: params,
 	}
 
-	// we fail here in the script 1/6 times
 	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
 	assert.Sometimes(err == nil, "Push a smart contract message", map[string]interface{}{"error": err})
 
@@ -65,7 +60,15 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 	}
 
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
-	assert.Sometimes(wait.Receipt.ExitCode.IsError(), "Waiting for smart contract to land on chain", map[string]interface{}{"error": err, "WaitExitCode": wait.Receipt.ExitCode})
+	assert.Sometimes(err == nil, "Failed while waiting for the message to land on chain", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
+
+	// Replay check for failed execution
+	if !wait.Receipt.ExitCode.IsSuccess() {
+		result, replayErr := api.StateReplay(ctx, types.EmptyTSK, smsg.Cid())
+		assert.Sometimes(replayErr == nil, "StateReplay failed", map[string]interface{}{"messageCid": smsg.Cid(), "error": replayErr})
+		assert.Always(result != nil, "StateReplay returned nil result", map[string]interface{}{"messageCid": smsg.Cid()})
+		return nil, fmt.Errorf("smart contract deployment failed: %v", result.Error)
+	}
 
 	var result eam.CreateReturn
 	err = result.UnmarshalCBOR(bytes.NewReader(wait.Receipt.Return))
@@ -84,6 +87,7 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 			log.Printf("Transaction Receipt: %+v\n", receipt)
 		}
 	}
+
 	fmt.Printf("Smart contract deployed at Ethereum address: 0x%s\n", deployedEthAddr.String())
 	fmt.Printf("Using deployer Ethereum address: 0x%s\n", ethAddr.String())
 
