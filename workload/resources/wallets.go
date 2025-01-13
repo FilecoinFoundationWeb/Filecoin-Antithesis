@@ -70,7 +70,7 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 
 	// Check if the message execution was successful
 	if !result.Receipt.ExitCode.IsSuccess() {
-		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, sm.Cid())
+		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, result.Message)
 		assert.Sometimes(replayErr == nil, "StateReplay failed during funds transfer", map[string]interface{}{"messageCid": sm.Cid(), "error": replayErr})
 		assert.Always(replayResult != nil, "StateReplay returned nil result for funds transfer", map[string]interface{}{"messageCid": sm.Cid()})
 		return replayErr // Return the error if StateReplay failed

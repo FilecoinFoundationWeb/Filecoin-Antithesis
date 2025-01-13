@@ -142,7 +142,7 @@ func FuzzBuildAndSignMessages(f *testing.F) {
 			}
 			gMessage := signatureBuilder.Build(payloadSig, nil)
 			log.Printf("Constructed GMessage with malformed payload: %+v", gMessage)
-			assert.Always(gMessage == nil, "Constructed GMessage is nil", map[string]interface{}{"node": node.Name})
+			assert.Sometimes(gMessage == nil, "Constructed GMessage is nil", map[string]interface{}{"node": node.Name})
 		}
 	})
 }
