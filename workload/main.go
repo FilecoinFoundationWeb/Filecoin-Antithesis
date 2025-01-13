@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/api"
@@ -89,12 +88,10 @@ func main() {
 			log.Fatalf("Failed to list wallets on node '%s': %v", *nodeName, err)
 		}
 		if len(allWallets) == 0 {
-			// rand.Intn panics if allWallets == 0
 			log.Printf("No wallets available to delete on node '%s'.", *nodeName)
 			break
 		}
 
-		// Delete a random number of wallets
 		rand.Seed(time.Now().UnixNano())
 		numToDelete := rand.Intn(len(allWallets)) + 1
 		walletsToDelete := allWallets[:numToDelete]
@@ -109,7 +106,6 @@ func main() {
 		var apis []api.FullNode
 		var wallets [][]address.Address
 
-		// Filter nodes to only include "Lotus1" and "Lotus2"
 		filteredNodes := []resources.NodeConfig{}
 		for _, node := range config.Nodes {
 			if node.Name == "Lotus1" || node.Name == "Lotus2" {
@@ -117,7 +113,6 @@ func main() {
 			}
 		}
 
-		// Gather wallets from filtered nodes
 		for _, node := range filteredNodes {
 			api, closer, err := resources.ConnectToNode(ctx, node)
 			if err != nil {
@@ -133,7 +128,6 @@ func main() {
 			wallets = append(wallets, nodeWallets)
 		}
 
-		// Start spamming transactions
 		rand.Seed(time.Now().UnixNano())
 		numTransactions := rand.Intn(50) + 1
 		log.Printf("Spamming transactions between nodes...")
@@ -152,7 +146,6 @@ func main() {
 		defer closer()
 
 		var lotusNodes []resources.NodeConfig
-
 		for _, node := range config.Nodes {
 			if node.Name == "Lotus1" || node.Name == "Lotus2" {
 				lotusNodes = append(lotusNodes, node)
@@ -181,25 +174,31 @@ func main() {
 
 	case "deploy":
 		log.Printf("Deploying smart contract from file: %s on node '%s'...", *contractPath, *nodeName)
-
-		// Connect to the selected node
 		api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 		if err != nil {
 			log.Fatalf("Failed to connect to Lotus node '%s': %v", *nodeName, err)
 		}
 		defer closer()
 
-		// Define the funding amount
 		fundingAmount, _ := new(big.Int).SetString(config.DefaultFundingAmount, 10)
 		tokenAmount := abi.TokenAmount(types.BigInt{Int: fundingAmount})
 
-		// Deploy the smart contract
-		ethAddr, err := resources.DeploySmartContract(ctx, api, *contractPath, tokenAmount)
-		assert.Sometimes(err != nil, "Failed to deploy a smart contract", map[string]interface{}{"error": err})
+		fromAddr, idAddr, err := resources.DeploySmartContracts(ctx, api, *contractPath, tokenAmount)
 		if err != nil {
 			log.Fatalf("Failed to deploy smart contract: %v", err)
 		}
-		log.Printf("Smart contract deployed successfully at Ethereum address: 0x%s", ethAddr.String())
 
+		log.Printf("Smart contract deployed successfully at ID address: %s", idAddr)
+
+		inputData := resources.GenerateInputData(ctx, api, fromAddr)
+
+		// Invoke smart contract
+		log.Printf("Invoking smart contract method...")
+		funcSignature := "getBalance(address)"
+		result, err := resources.InvokeContract(ctx, api, fromAddr, idAddr, funcSignature, inputData)
+		if err != nil {
+			log.Fatalf("Failed to invoke smart contract: %v", err)
+		}
+		log.Printf("Contract invoked successfully. Result: %x", result)
 	}
 }

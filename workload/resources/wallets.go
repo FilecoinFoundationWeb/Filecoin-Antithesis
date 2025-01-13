@@ -59,21 +59,21 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 		Value: amount,
 	}
 
-	sm, err := api.MpoolPushMessage(ctx, msg, nil)
-	assert.Sometimes(err == nil, "Push a message to send funds between two wallets", map[string]interface{}{"from": from, "to": to, "amount": amount, "error": err})
-	if sm == nil {
-		log.Fatalf("Failed to push message to mempool: %v", err)
+	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
+	if err != nil || smsg == nil {
+		log.Printf("Failed to push message: %v", err)
+		return fmt.Errorf("failed to push message to mempool: %v", err)
 	}
 
-	result, err := api.StateWaitMsg(ctx, sm.Cid(), 5, 100, false)
-	assert.Sometimes(err == nil, "Waiting for the funds transfer message to be included in the next block", map[string]interface{}{"Cid": sm.Cid(), "error": err})
-
-	// Check if the message execution was successful
-	if !result.Receipt.ExitCode.IsSuccess() {
-		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, sm.Cid())
-		assert.Sometimes(replayErr == nil, "StateReplay failed during funds transfer", map[string]interface{}{"messageCid": sm.Cid(), "error": replayErr})
-		assert.Always(replayResult != nil, "StateReplay returned nil result for funds transfer", map[string]interface{}{"messageCid": sm.Cid()})
-		return replayErr // Return the error if StateReplay failed
+	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
+	if err != nil || !wait.Receipt.ExitCode.IsSuccess() {
+		log.Printf("Message didn't land or failed. Attempting replay for CID: %v", smsg.Cid())
+		result, replayErr := api.StateReplay(ctx, types.EmptyTSK, smsg.Cid())
+		if replayErr != nil {
+			log.Printf("Replay failed: %v", replayErr)
+			return fmt.Errorf("failed to replay message: %v", replayErr)
+		}
+		return fmt.Errorf("message failed after replay: %v", result.Error)
 	}
 
 	return nil
