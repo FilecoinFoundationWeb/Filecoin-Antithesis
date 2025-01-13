@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"flag"
 	"log"
 	"math/big"
@@ -174,6 +175,7 @@ func main() {
 
 	case "deploy":
 		log.Printf("Deploying smart contract from file: %s on node '%s'...", *contractPath, *nodeName)
+
 		api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 		if err != nil {
 			log.Fatalf("Failed to connect to Lotus node '%s': %v", *nodeName, err)
@@ -187,18 +189,28 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to deploy smart contract: %v", err)
 		}
+		log.Printf("Contract deployed with owner: %s and contract ID address: %s", fromAddr, idAddr)
 
-		log.Printf("Smart contract deployed successfully at ID address: %s", idAddr)
-
+		// Query initial balance
 		inputData := resources.GenerateInputData(ctx, api, fromAddr)
-
-		// Invoke smart contract
-		log.Printf("Invoking smart contract method...")
-		funcSignature := "getBalance(address)"
-		result, err := resources.InvokeContract(ctx, api, fromAddr, idAddr, funcSignature, inputData)
+		result, err := resources.InvokeContract(ctx, api, fromAddr, idAddr, "getBalance(address)", inputData)
 		if err != nil {
-			log.Fatalf("Failed to invoke smart contract: %v", err)
+			log.Fatalf("Failed to invoke getBalance: %v", err)
 		}
-		log.Printf("Contract invoked successfully. Result: %x", result)
+
+		expectedResult := "0000000000000000000000000000000000000000000000000000000000002710" // 10000 in hex
+		if hex.EncodeToString(result) != expectedResult {
+			log.Fatalf("Unexpected balance. Expected: %s, Got: %s", expectedResult, hex.EncodeToString(result))
+		}
+		log.Printf("Balance verified: %s", hex.EncodeToString(result))
+
+		// Send coins
+		inputData = resources.GenerateInputData(ctx, api, fromAddr)
+		result, err = resources.InvokeContract(ctx, api, fromAddr, idAddr, "sendCoin(address,uint256)", inputData)
+		if err != nil {
+			log.Fatalf("Failed to invoke sendCoin: %v", err)
+		}
+		log.Println("sendCoin invocation succeeded.")
+		log.Printf("Result: %s", hex.EncodeToString(result))
 	}
 }
