@@ -67,8 +67,8 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
 	if err != nil || !wait.Receipt.ExitCode.IsSuccess() {
-		log.Printf("Message didn't land or failed. Attempting replay for CID: %v", smsg.Cid())
-		result, replayErr := api.StateReplay(ctx, types.EmptyTSK, smsg.Cid())
+		log.Printf("Message didn't land or failed. Attempting replay for CID: %v", smsg.Message)
+		result, replayErr := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
 		if replayErr != nil {
 			log.Printf("Replay failed: %v", replayErr)
 			return fmt.Errorf("failed to replay message: %v", replayErr)

@@ -64,7 +64,7 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 
 	// Replay check for failed execution
 	if !wait.Receipt.ExitCode.IsSuccess() {
-		result, replayErr := api.StateReplay(ctx, types.EmptyTSK, smsg.Cid())
+		result, replayErr := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
 		assert.Sometimes(replayErr == nil, "StateReplay failed", map[string]interface{}{"messageCid": smsg.Cid(), "error": replayErr})
 		assert.Always(result != nil, "StateReplay returned nil result", map[string]interface{}{"messageCid": smsg.Cid()})
 		return nil, fmt.Errorf("smart contract deployment failed: %v", result.Error)
