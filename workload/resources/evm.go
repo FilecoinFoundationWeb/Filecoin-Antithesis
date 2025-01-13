@@ -14,10 +14,10 @@ import (
 	"github.com/filecoin-project/go-state-types/builtin"
 	"github.com/filecoin-project/go-state-types/builtin/v10/eam"
 	"github.com/filecoin-project/lotus/api"
-	"github.com/filecoin-project/lotus/build/buildconstants"
 	"github.com/filecoin-project/lotus/chain/actors"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/chain/types/ethtypes"
+	cbg "github.com/whyrusleeping/cbor-gen"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -82,13 +82,21 @@ func DeploySmartContracts(ctx context.Context, api api.FullNode, contractPath st
 func InvokeContract(ctx context.Context, api api.FullNode, from address.Address, contract address.Address, funcName string, inputData []byte) ([]byte, error) {
 	entryPoint := CalcFuncSignature(funcName)
 
+	// Prepare the parameters for the message
+	params := append(entryPoint, inputData...)
+	var cborBuffer bytes.Buffer
+	err := cbg.WriteByteArray(&cborBuffer, params) // Serialize into CBOR
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize parameters into CBOR: %w", err)
+	}
+
 	msg := &types.Message{
 		To:       contract,
 		From:     from,
 		Value:    abi.NewTokenAmount(0),
 		Method:   builtin.MethodsEVM.InvokeContract,
-		GasLimit: buildconstants.BlockGasLimit,
-		Params:   append(entryPoint, inputData...),
+		GasLimit: 1000000000,
+		Params:   cborBuffer.Bytes(),
 	}
 
 	log.Println("Sending invocation message")
@@ -99,12 +107,12 @@ func InvokeContract(ctx context.Context, api api.FullNode, from address.Address,
 
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
 	if err != nil || !wait.Receipt.ExitCode.IsSuccess() {
-		log.Println("Invocation failed, attempting replay...")
-		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, smsg.Cid())
+		// Replay to ensure the message lands on the chain
+		result, replayErr := api.StateReplay(ctx, types.EmptyTSK, smsg.Cid())
 		if replayErr != nil {
 			return nil, fmt.Errorf("replay failed: %w", replayErr)
 		}
-		return nil, fmt.Errorf("invocation failed with replay error: %v", replayResult.Error)
+		return nil, fmt.Errorf("smart contract invocation failed: %v", result.Error)
 	}
 
 	return wait.Receipt.Return, nil
