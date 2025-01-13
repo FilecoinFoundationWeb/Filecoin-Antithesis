@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"flag"
 	"log"
 	"math/big"
@@ -190,16 +192,44 @@ func main() {
 		defer closer()
 
 		// Define the funding amount
-		fundingAmount, _ := new(big.Int).SetString(config.DefaultFundingAmount, 10)
+		fundingAmount, ok := new(big.Int).SetString(config.DefaultFundingAmount, 10)
+		if !ok {
+			log.Fatalf("Invalid funding amount: %s", config.DefaultFundingAmount)
+		}
 		tokenAmount := abi.TokenAmount(types.BigInt{Int: fundingAmount})
 
-		// Deploy the smart contract
-		ethAddr, err := resources.DeploySmartContract(ctx, api, *contractPath, tokenAmount)
-		assert.Sometimes(err != nil, "Failed to deploy a smart contract", map[string]interface{}{"error": err})
-		if err != nil {
-			log.Fatalf("Failed to deploy smart contract: %v", err)
+		// Deploy the contract
+		fromAddr, idAddr := resources.DeployContractFromFilenameWithValue(ctx, api, *contractPath, tokenAmount)
+		log.Printf("Deployed contract from file: %s. Contract address: %s, From address: %s", *contractPath, idAddr, fromAddr)
+
+		// Invoke the contract with owner
+		{
+			inputData := resources.InputDataFromFrom(ctx, api, fromAddr)
+
+			result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, idAddr, "getBalance(address)", inputData)
+			assert.Always(err == nil, "Invoking contract by function name", map[string]interface{}{"error": err})
+
+			expectedResult, err := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000002710")
+			assert.Always(err == nil, "Decoding expected result", map[string]interface{}{"error": err})
+			assert.Always(bytes.Equal(result, expectedResult), "Validating contract invocation result", map[string]interface{}{"result": result, "expected_result": expectedResult})
+
+			log.Printf("Owner invocation successful. Result: %x", result)
 		}
-		log.Printf("Smart contract deployed successfully at Ethereum address: 0x%s", ethAddr.String())
+
+		// Invoke the contract with a non-owner
+		{
+			inputData := resources.InputDataFromFrom(ctx, api, fromAddr)
+			inputData[31]++ // Modify the last byte to simulate a different (non-owner) address
+
+			result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, idAddr, "getBalance(address)", inputData)
+			assert.Always(err == nil, "Invoking contract by function name with non-owner address", map[string]interface{}{"error": err})
+
+			expectedResult, err := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000000000")
+			assert.Always(err == nil, "Decoding expected result for non-owner", map[string]interface{}{"error": err})
+			assert.Always(bytes.Equal(result, expectedResult), "Validating non-owner invocation result", map[string]interface{}{"result": result, "expected_result": expectedResult})
+
+			log.Printf("Non-owner invocation successful. Result: %x", result)
+		}
 
 	}
 }
