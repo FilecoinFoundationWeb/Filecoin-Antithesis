@@ -15,7 +15,8 @@ import (
 // SpamTransactionsBetweenNodes spams transactions between wallets on multiple connected nodes.
 func SpamTransactions(ctx context.Context, apis []api.FullNode, wallets [][]address.Address, numTransactions int) error {
 	if len(wallets) < 2 || len(wallets[0]) < 1 || len(wallets[1]) < 1 {
-		return fmt.Errorf("not enough wallets to spam transactions; need wallets on both nodes")
+		fmt.Printf("not enough wallets to spam transactions; need wallets on both nodes")
+		return nil
 	}
 
 	// Randomized transaction options
@@ -50,7 +51,7 @@ func SpamTransactions(ctx context.Context, apis []api.FullNode, wallets [][]addr
 		} else {
 			log.Printf("Transaction #%d succeeded", i+1)
 		}
-		
+
 		time.Sleep(cooldown)
 	}
 
