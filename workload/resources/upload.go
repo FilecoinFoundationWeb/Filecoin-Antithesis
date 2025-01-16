@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
@@ -58,7 +59,7 @@ func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath str
 	if smsg == nil {
 		log.Fatalf("Failed to push message to mempool: smsg is nil, error: %v", err)
 	}
-
+	time.Sleep(5 * time.Second)
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
 	assert.Sometimes(err == nil, "Failed while waiting for the message to land on chain", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
 
