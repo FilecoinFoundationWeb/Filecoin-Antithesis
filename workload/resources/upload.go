@@ -130,7 +130,7 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 	if err != nil {
 		return nil, err
 	}
-
+	time.Sleep(5 * time.Second)
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
 	assert.Sometimes(err == nil, "Wait for invoke message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
 
