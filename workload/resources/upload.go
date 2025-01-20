@@ -5,92 +5,157 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
-	"log"
+	"os"
 	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
+	"github.com/filecoin-project/go-state-types/big"
 	"github.com/filecoin-project/go-state-types/builtin"
 	"github.com/filecoin-project/go-state-types/builtin/v10/eam"
 	"github.com/filecoin-project/lotus/api"
+	"github.com/filecoin-project/lotus/build/buildconstants"
 	"github.com/filecoin-project/lotus/chain/actors"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/chain/types/ethtypes"
+	cbg "github.com/whyrusleeping/cbor-gen"
+	"golang.org/x/crypto/sha3"
 )
 
-// DeploySmartContract deploys a smart contract using a delegated wallet.
-func DeploySmartContract(ctx context.Context, api api.FullNode, contractPath string, fundingAmount abi.TokenAmount) (*ethtypes.EthAddress, error) {
-	genesisWallet, err := GetGenesisWallet(ctx, api)
-	assert.Sometimes(genesisWallet != address.Undef, "Get the genesis wallet", map[string]interface{}{"error": err})
+func DeployContractWithValue(ctx context.Context, api api.FullNode, sender address.Address, bytecode []byte, value big.Int) eam.CreateReturn {
+	method := builtin.MethodsEAM.CreateExternal
+	initcode := abi.CborBytes(bytecode)
 
-	delegatedWallet, err := CreateWallet(ctx, api, types.KTDelegated)
-	assert.Always(err == nil, "Create a delegated type wallet", map[string]interface{}{"error": err})
-
-	ethAddr, err := ethtypes.EthAddressFromFilecoinAddress(delegatedWallet)
-	assert.Always(err == nil, "Create an Ethereum address from a Filecoin address", map[string]interface{}{"error": err})
-
-	err = SendFunds(ctx, api, genesisWallet, delegatedWallet, fundingAmount)
-	assert.Sometimes(err == nil, "Fund a delegated wallet", map[string]interface{}{"genesisWallet": genesisWallet, "delegatedWallet": delegatedWallet, "amount": fundingAmount, "error": err})
-
-	contractHex, err := ioutil.ReadFile(contractPath)
-	assert.Always(err == nil, "Read the smart contract file", map[string]interface{}{"filePath": contractPath, "error": err})
-
-	contract, err := hex.DecodeString(string(contractHex))
-	assert.Always(err == nil, "Decode smart contract into a byte representation", map[string]interface{}{"hex": string(contractHex), "error": err})
-
-	// Serialize the contract initialization parameters
-	initcode := abi.CborBytes(contract)
-	params, err := actors.SerializeParams(&initcode)
-	assert.Always(err == nil, "Serialize initial smart contract bytecodes to Filecoin compatible format", map[string]interface{}{"error": err})
+	params, Actorerr := actors.SerializeParams(&initcode)
+	assert.Always(Actorerr == nil, "Serialize contract initialization parameters", map[string]interface{}{"error": Actorerr})
 
 	msg := &types.Message{
 		To:     builtin.EthereumAddressManagerActorAddr,
-		From:   delegatedWallet,
-		Value:  abi.NewTokenAmount(0), // No FIL sent
-		Method: builtin.MethodsEAM.CreateExternal,
+		From:   sender,
+		Value:  value,
+		Method: method,
 		Params: params,
 	}
 
 	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
-	assert.Sometimes(err == nil, "Push a smart contract message", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Push a create contract message", map[string]interface{}{"error": err})
+	time.Sleep(5 * time.Second)
 
-	if smsg == nil {
-		log.Fatalf("Failed to push message to mempool: smsg is nil, error: %v", err)
+	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
+	assert.Always(err == nil, "Wait for message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
+	assert.Always(wait.Receipt.ExitCode.IsSuccess(), "Contract installation failed", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
+
+	var result eam.CreateReturn
+	r := bytes.NewReader(wait.Receipt.Return)
+	err = result.UnmarshalCBOR(r)
+	assert.Always(err == nil, "Unmarshal CBOR result", map[string]interface{}{"error": err})
+
+	return result
+}
+
+func DeployContract(ctx context.Context, api api.FullNode, sender address.Address, bytecode []byte) eam.CreateReturn {
+	return DeployContractWithValue(ctx, api, sender, bytecode, big.Zero())
+}
+
+func DeployContractFromFilenameWithValue(ctx context.Context, api api.FullNode, binFilename string, value big.Int) (address.Address, address.Address) {
+	contractHex, err := os.ReadFile(binFilename)
+	assert.Always(err == nil, "Read smart contract file", map[string]interface{}{"filePath": binFilename, "error": err})
+
+	contractHex = bytes.TrimRight(contractHex, "\n")
+	contract, err := hex.DecodeString(string(contractHex))
+	assert.Always(err == nil, "Decode smart contract hex string", map[string]interface{}{"error": err})
+
+	fromAddr, err := api.WalletDefaultAddress(ctx)
+	assert.Always(err == nil, "Retrieve default wallet address", map[string]interface{}{"error": err})
+
+	result := DeployContractWithValue(ctx, api, fromAddr, contract, value)
+
+	idAddr, err := address.NewIDAddress(result.ActorID)
+	assert.Always(err == nil, "Create ID address from ActorID", map[string]interface{}{"error": err})
+	return fromAddr, idAddr
+}
+
+func DeployContractFromFilename(ctx context.Context, api api.FullNode, binFilename string) (address.Address, address.Address) {
+	return DeployContractFromFilenameWithValue(ctx, api, binFilename, big.Zero())
+}
+
+func InvokeSolidity(ctx context.Context, api api.FullNode, sender address.Address, target address.Address, selector []byte, inputData []byte) (*api.MsgLookup, error) {
+	return InvokeSolidityWithValue(ctx, api, sender, target, selector, inputData, big.Zero())
+}
+
+func InvokeContractByFuncName(ctx context.Context, api api.FullNode, fromAddr address.Address, idAddr address.Address, funcSignature string, inputData []byte) ([]byte, *api.MsgLookup, error) {
+	entryPoint := CalcFuncSignature(funcSignature)
+
+	wait, err := InvokeSolidity(ctx, api, fromAddr, idAddr, entryPoint, inputData)
+	assert.Sometimes(err == nil, "Invoke Solidity function", map[string]interface{}{"error": err})
+	if err != nil {
+		return nil, wait, fmt.Errorf("failed to invoke Solidity function: %w", err)
+	}
+
+	assert.Sometimes(wait.Receipt.ExitCode.IsSuccess(), "Check if contract execution succeeded", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
+	if !wait.Receipt.ExitCode.IsSuccess() {
+		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
+		assert.Sometimes(replayErr == nil, "Replay failed message", map[string]interface{}{"error": replayErr})
+		if replayErr != nil {
+			return nil, wait, fmt.Errorf("failed to replay failed message: %w", replayErr)
+		}
+		return nil, wait, fmt.Errorf("invoke failed with error: %v", replayResult.Error)
+	}
+
+	result, err := cbg.ReadByteArray(bytes.NewBuffer(wait.Receipt.Return), uint64(len(wait.Receipt.Return)))
+	assert.Sometimes(err == nil, "Read return data from contract execution", map[string]interface{}{"error": err})
+	return result, wait, err
+}
+
+func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender address.Address, target address.Address, selector []byte, inputData []byte, value big.Int) (*api.MsgLookup, error) {
+	params := append(selector, inputData...)
+	var buffer bytes.Buffer
+	err := cbg.WriteByteArray(&buffer, params)
+	assert.Always(err == nil, "Write byte array to buffer", map[string]interface{}{"error": err})
+	params = buffer.Bytes()
+
+	msg := &types.Message{
+		To:       target,
+		From:     sender,
+		Value:    value,
+		Method:   builtin.MethodsEVM.InvokeContract,
+		GasLimit: buildconstants.BlockGasLimit,
+		Params:   params,
+	}
+
+	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
+	assert.Sometimes(err == nil, "Push message to invoke contract", map[string]interface{}{"error": err})
+	time.Sleep(5 * time.Second)
+	if err != nil {
+		return nil, err
 	}
 	time.Sleep(5 * time.Second)
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
-	assert.Sometimes(err == nil, "Failed while waiting for the message to land on chain", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
+	assert.Sometimes(err == nil, "Wait for invoke message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
 
-	// Replay check for failed execution
 	if !wait.Receipt.ExitCode.IsSuccess() {
-		result, replayErr := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
-		assert.Sometimes(replayErr == nil, "StateReplay failed", map[string]interface{}{"messageCid": smsg.Cid(), "error": replayErr})
-		assert.Always(result != nil, "StateReplay returned nil result", map[string]interface{}{"messageCid": smsg.Cid()})
-		return nil, fmt.Errorf("smart contract deployment failed: %v", result.Error)
+		replayResult, err := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
+		assert.Sometimes(err == nil, "Replay failed invoke message", map[string]interface{}{"error": err})
+		return nil, fmt.Errorf("invoke failed with error: %v", replayResult.Error)
 	}
+	return wait, nil
+}
 
-	var result eam.CreateReturn
-	err = result.UnmarshalCBOR(bytes.NewReader(wait.Receipt.Return))
-	assert.Always(err == nil, "Unmarshal CBOR", map[string]interface{}{"error": err})
+func CalcFuncSignature(funcName string) []byte {
+	hasher := sha3.NewLegacyKeccak256()
+	hasher.Write([]byte(funcName))
+	return hasher.Sum(nil)[:4]
+}
 
-	deployedEthAddr, err := ethtypes.CastEthAddress(result.EthAddress[:])
-	assert.Always(err == nil, "Interpret bytes as an EthAddress and perform basic checks by casting", map[string]interface{}{"error": err})
+func InputDataFromFrom(ctx context.Context, api api.FullNode, from address.Address) []byte {
+	fromID, err := api.StateLookupID(ctx, from, types.EmptyTSK)
+	assert.Always(err == nil, "Lookup ID address for sender", map[string]interface{}{"error": err})
 
-	txHash, err := api.EthGetTransactionHashByCid(ctx, smsg.Cid())
-	assert.Sometimes(err == nil, "Get Ethereum transaction hash from the Chain ID", map[string]interface{}{"error": err})
+	senderEthAddr, err := ethtypes.EthAddressFromFilecoinAddress(fromID)
+	assert.Always(err == nil, "Convert Filecoin address to Ethereum address", map[string]interface{}{"error": err})
 
-	if err == nil {
-		receipt, err := api.EthGetTransactionReceipt(ctx, *txHash)
-		assert.Sometimes(err == nil, "Retrieve transaction receipt from Eth transaction hash", map[string]interface{}{"error": err})
-		if err == nil {
-			log.Printf("Transaction Receipt: %+v\n", receipt)
-		}
-	}
-
-	fmt.Printf("Smart contract deployed at Ethereum address: 0x%s\n", deployedEthAddr.String())
-	fmt.Printf("Using deployer Ethereum address: 0x%s\n", ethAddr.String())
-
-	return &deployedEthAddr, nil
+	inputData := make([]byte, 32)
+	copy(inputData[32-len(senderEthAddr):], senderEthAddr[:])
+	return inputData
 }

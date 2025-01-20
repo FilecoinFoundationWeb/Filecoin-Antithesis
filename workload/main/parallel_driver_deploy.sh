@@ -2,22 +2,25 @@
 
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-OPERATION="deploy"
+OPERATION="deploySimpleCoin"
 NODE_NAMES=("Lotus1")
-CONTRACT_DIR="/opt/antithesis/resources/smart-contracts"
+CONTRACT_FILE="/opt/antithesis/resources/smart-contracts/SimpleCoin.hex"
 
+# Ensure the application binary exists
 if [ ! -f "$APP_BINARY" ]; then
     echo "Error: $APP_BINARY not found."
     exit 1
 fi
 
+# Ensure the configuration file exists
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: $CONFIG_FILE not found."
     exit 1
 fi
 
-if [ ! -d "$CONTRACT_DIR" ]; then
-    echo "Error: Contract directory $CONTRACT_DIR not found."
+# Ensure the contract file exists
+if [ ! -f "$CONTRACT_FILE" ]; then
+    echo "Error: Contract file $CONTRACT_FILE not found."
     exit 1
 fi
 
@@ -27,20 +30,15 @@ select_random_node() {
     echo "${NODE_NAMES[$index]}"
 }
 
-# Function to pick a random smart contract
-select_random_contract() {
-    local contracts=("$CONTRACT_DIR"/*.hex)
-    if [ ${#contracts[@]} -eq 0 ]; then
-        echo "Error: No smart contract files found in $CONTRACT_DIR."
-        exit 1
-    fi
-    local index=$((RANDOM % ${#contracts[@]}))
-    echo "${contracts[$index]}"
-}
-
 random_node=$(select_random_node)
-random_contract=$(select_random_contract)
 
-echo "Deploying smart contract $random_contract on $random_node"
-$APP_BINARY -config=$CONFIG_FILE -operation=$OPERATION -node=$random_node -contract=$random_contract
+echo "Deploying smart contract $CONTRACT_FILE on node $random_node"
 
+# Execute the deployment operation
+$APP_BINARY --operation "$OPERATION" --node "$random_node" --contract "$CONTRACT_FILE" --config "$CONFIG_FILE"
+if [ $? -ne 0 ]; then
+    echo "Error: Deployment failed."
+    exit 1
+fi
+
+echo "Smart contract $CONTRACT_FILE successfully deployed on node $random_node."
