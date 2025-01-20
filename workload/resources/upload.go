@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -39,11 +38,10 @@ func DeployContractWithValue(ctx context.Context, api api.FullNode, sender addre
 		Params: params,
 	}
 
-	log.Println("Sending create message")
 	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
 	assert.Always(err == nil, "Push a create contract message", map[string]interface{}{"error": err})
 	time.Sleep(5 * time.Second)
-	log.Println("Waiting for message to execute")
+
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
 	assert.Always(err == nil, "Wait for message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
 	assert.Always(wait.Receipt.ExitCode.IsSuccess(), "Contract installation failed", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
@@ -83,54 +81,35 @@ func DeployContractFromFilename(ctx context.Context, api api.FullNode, binFilena
 }
 
 func InvokeSolidity(ctx context.Context, api api.FullNode, sender address.Address, target address.Address, selector []byte, inputData []byte) (*api.MsgLookup, error) {
-	log.Printf("InvokeSolidity: Preparing to invoke contract from sender: %s to target: %s", sender, target)
-	log.Printf("Selector: %x, InputData: %x", selector, inputData)
 	return InvokeSolidityWithValue(ctx, api, sender, target, selector, inputData, big.Zero())
 }
 
-// InvokeContractByFuncName invokes a smart contract function using its signature and input data.
 func InvokeContractByFuncName(ctx context.Context, api api.FullNode, fromAddr address.Address, idAddr address.Address, funcSignature string, inputData []byte) ([]byte, *api.MsgLookup, error) {
-	log.Printf("InvokeContractByFuncName: Preparing to invoke function '%s' on contract at address: %s from sender: %s", funcSignature, idAddr, fromAddr)
 	entryPoint := CalcFuncSignature(funcSignature)
-	log.Printf("Function signature hash (entry point): %x", entryPoint)
 
-	// Invoke Solidity function
 	wait, err := InvokeSolidity(ctx, api, fromAddr, idAddr, entryPoint, inputData)
-	log.Printf("InvokeSolidity completed. MsgLookup: %v, Error: %v", wait, err)
+	assert.Sometimes(err == nil, "Invoke Solidity function", map[string]interface{}{"error": err})
 	if err != nil {
 		return nil, wait, fmt.Errorf("failed to invoke Solidity function: %w", err)
 	}
 
-	// Check for successful execution
+	assert.Sometimes(wait.Receipt.ExitCode.IsSuccess(), "Check if contract execution succeeded", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
 	if !wait.Receipt.ExitCode.IsSuccess() {
-		log.Printf("InvokeContractByFuncName: Contract execution failed. ExitCode: %d", wait.Receipt.ExitCode)
 		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
+		assert.Sometimes(replayErr == nil, "Replay failed message", map[string]interface{}{"error": replayErr})
 		if replayErr != nil {
-			log.Printf("StateReplay failed. Error: %v", replayErr)
 			return nil, wait, fmt.Errorf("failed to replay failed message: %w", replayErr)
 		}
-		log.Printf("StateReplay completed. Error: %s", replayResult.Error)
 		return nil, wait, fmt.Errorf("invoke failed with error: %v", replayResult.Error)
 	}
 
-	// Parse the result
 	result, err := cbg.ReadByteArray(bytes.NewBuffer(wait.Receipt.Return), uint64(len(wait.Receipt.Return)))
-	log.Printf("Parsed return data: %x, Error: %v", result, err)
-	if err != nil {
-		return nil, wait, fmt.Errorf("failed to read return data: %w", err)
-	}
-
-	log.Printf("InvokeContractByFuncName: Successfully invoked function '%s'. Result: %x", funcSignature, result)
-	return result, wait, nil
+	assert.Sometimes(err == nil, "Read return data from contract execution", map[string]interface{}{"error": err})
+	return result, wait, err
 }
 
 func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender address.Address, target address.Address, selector []byte, inputData []byte, value big.Int) (*api.MsgLookup, error) {
-	log.Printf("InvokeSolidityWithValue: Preparing to invoke contract from sender: %s to target: %s with value: %s", sender, target, value.String())
-	log.Printf("Selector: %x, InputData: %x", selector, inputData)
-
 	params := append(selector, inputData...)
-	log.Printf("Serialized parameters for invocation: %x", params)
-
 	var buffer bytes.Buffer
 	err := cbg.WriteByteArray(&buffer, params)
 	assert.Always(err == nil, "Write byte array to buffer", map[string]interface{}{"error": err})
@@ -145,51 +124,37 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 		Params:   params,
 	}
 
-	log.Println("Sending invoke message to the mempool")
 	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
+	assert.Sometimes(err == nil, "Push message to invoke contract", map[string]interface{}{"error": err})
 	time.Sleep(5 * time.Second)
 	if err != nil {
-		log.Printf("Failed to push message to mempool. Error: %v", err)
 		return nil, err
 	}
-	log.Printf("Message pushed to mempool. CID: %s", smsg.Cid())
 
-	log.Println("Waiting for the message to execute")
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
-	log.Printf("StateWaitMsg completed. MsgLookup: %v, Error: %v", wait, err)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("Message execution result: %v", wait.Receipt)
-	log.Printf("Message execution result: %v", wait.Receipt.ExitCode)
-	if !wait.Receipt.ExitCode.IsSuccess() {
-		log.Printf("Contract execution failed. ExitCode: %d", wait.Receipt.ExitCode)
-		result, err := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
-		log.Printf("StateReplay completed. Error: %v", err)
-		log.Printf("StateReplay result: %v", result)
-		if err != nil {
-			return nil, fmt.Errorf("replay failed: %v", err)
-		}
-		return nil, fmt.Errorf("invoke failed with error: %v", result.Error)
-	}
+	assert.Sometimes(err == nil, "Wait for invoke message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
 
-	log.Println("InvokeSolidityWithValue: Successfully executed the invoke message")
+	if !wait.Receipt.ExitCode.IsSuccess() {
+		replayResult, err := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
+		assert.Sometimes(err == nil, "Replay failed invoke message", map[string]interface{}{"error": err})
+		return nil, fmt.Errorf("invoke failed with error: %v", replayResult.Error)
+	}
 	return wait, nil
 }
 
-// Utility function to calculate the function signature hash
 func CalcFuncSignature(funcName string) []byte {
 	hasher := sha3.NewLegacyKeccak256()
 	hasher.Write([]byte(funcName))
-	hash := hasher.Sum(nil)
-	return hash[:4]
+	return hasher.Sum(nil)[:4]
 }
 
 func InputDataFromFrom(ctx context.Context, api api.FullNode, from address.Address) []byte {
-	fromId, err := api.StateLookupID(ctx, from, types.EmptyTSK)
-	assert.Always(err == nil, "Failed to lookup ID address", map[string]interface{}{"error": err})
-	senderEthAddr, err := ethtypes.EthAddressFromFilecoinAddress(fromId)
-	assert.Always(err == nil, "Failed to convert Filecoin address to Ethereum address", map[string]interface{}{"error": err})
+	fromID, err := api.StateLookupID(ctx, from, types.EmptyTSK)
+	assert.Always(err == nil, "Lookup ID address for sender", map[string]interface{}{"error": err})
+
+	senderEthAddr, err := ethtypes.EthAddressFromFilecoinAddress(fromID)
+	assert.Always(err == nil, "Convert Filecoin address to Ethereum address", map[string]interface{}{"error": err})
+
 	inputData := make([]byte, 32)
 	copy(inputData[32-len(senderEthAddr):], senderEthAddr[:])
 	return inputData
