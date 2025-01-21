@@ -1,67 +1,115 @@
-## Introduction
+Antithesis Simulation for Filecoin Network
+==========================================
 
-This repository contains a (docker) containerized setup of a Filecoin localnet for Antithesis Autonomous Testing. The localnet currently consists of Lotus and Forest nodes and is patched to work with local Drand nodes (vs. live Drand API endpoints)
+This documentation outlines the structure, purpose, and guidelines for contributing to the Antithesis Simulation project for the Filecoin network. It provides insights into the main idea, the repository's structure, and the current state of the project.
 
-## How does Antithesis Simulation Testing Work
+* * * * *
 
-(TBA)
+Repository Structure Overview
+-----------------------------
 
-## Run Antithesis Testing
+The repository contains a containerized setup of a Filecoin localnet for Antithesis Autonomous Testing, including Lotus and Forest nodes patched to work with local Drand nodes. Below is a brief description of the key files and directories:
 
-(TBD) - Waiting for Github Action for Triggering
+### Key Files and Directories
 
-## View Recent Test Results
+-   **cleanup.sh**: Cleans all the persisted data in the localnet setup.
+-   **drand/**: Contains the Dockerfile and startup scripts for Drand nodes.
+    -   **start_scripts/**: Includes scripts like `drand-1.sh`, `drand-2.sh`, and `drand-3.sh` to start specific Drand nodes.
+-   **lotus/**: Similar to Drand but for Lotus. This directory also stores configuration and patch files to support interaction with other nodes.
+    -   **start_scripts/**: Contains scripts for starting Lotus nodes and miners (e.g., `lotus-1.sh`, `lotus-miner-1.sh`).
+-   **forest/**: Similar to Drand but for Forest nodes. Includes configuration templates and startup scripts.
+    -   **start_scripts/**: Scripts like `forest-connector.sh` and `forest-init.sh` to initialize and connect Forest nodes.
+-   **workload/**: The main driver of the application, responsible for generating activity chains and asserting test properties. Includes:
+    -   **main.go**: Entrypoint of the application, a Go binary with CLI flags for different operations.
+    -   **main/**: Contains driver scripts and tests categorized by naming conventions (e.g., `parallel`, `anytime`, `eventually`). These follow test templates from [Antithesis Test Composer Reference](https://antithesis.com/docs/test_templates/test_composer_reference/).
+        -   Examples: `parallel_driver_spammer.py`, `anytime_node_height_progression.sh`, `eventually_all_node_sync_status_check.py`.
+    -   **resources/**: Helper files for workloads, such as `rpc.py`, `wallets.py`, and smart contract files (`SimpleCoin.sol`).
+    -   **removed/**: Contains deprecated or removed tests for reference.
 
-(TBA) - SLACK channel integration
-(TBA) - Dashboard
+* * * * *
 
-## How to run the localnet (for sanity check)
+How Antithesis Simulation Testing Works
+---------------------------------------
 
-The simplest way to run the localnet stack is to run the:
+Antithesis Simulation tests distributed systems by generating various failure scenarios and validating system properties under stress. It automates the process of:
 
-`make forest_commit=<commit_hash> all`
+1.  Injecting faults (e.g., crashes, network partitions) into the system.
+2.  Asserting test properties using the Antithesis SDKs.
+3.  Observing system behavior to ensure it meets reliability expectations.
 
-You can find the forest commit hash on the [Forest github](https://github.com/ChainSafe/forest). For example: `4eefcc25cb66b2d0449979d4d6532f74344f160b` 
+Key components of Antithesis testing include:
 
-1. This will build Drand (v2.0.4), Lotus (v1.29.1) and a Forest node of the corresponding commit passed into the make target.
+-   Fault injection using activity chains.
+-   Monitoring system responses.
+-   Asserting invariants (e.g., data consistency, fault tolerance).
 
-2. It will then attempt to run a `docker-compose up` command with the newly built container images
+For more details, refer to the [Antithesis Documentation](https://antithesis.com/docs/introduction/how_antithesis_works/).
 
-You can observe the localnet chain moving and miners performing work. To shutdown the localnet and clean up, run:
+* * * * *
 
-`make cleanup`
+Run Antithesis Testing
+----------------------
 
-## Advanced usage
+This section provides an overview of the files and goals for running Antithesis testing:
 
-You can pass in additional argument to the make target to run different Drand/Lotus version. For example:
 
-```
-make forest_commit=4eefcc25cb66b2d0449979d4d6532f74344f160b \
-drand_tag=v2.0.3 \
-lotus_tag=v1.29.0 \
-all
-```
+### Steps
 
-There are also individual build targets for different tasks such as building container images or running the `docker-compose up` commands specifically.
+To run the localnet stack:
 
-## How to contribute
+make forest_commit=<commit_hash> all
 
-* Iterating on the workload (tests)
-* Define and implement test properties via Antithesis SDKs
-* Improve the setup of the localnet
-* Devops and CI integration
-* Documentation 
+This builds Drand (v2.0.4), Lotus (v1.29.1), and Forest nodes for the specified commit. Example:
 
-## Todo
+make forest_commit=4eefcc25cb66b2d0449979d4d6532f74344f160b all
 
-**Immediate**
+For advanced usage, specify different versions of Drand and Lotus:
 
-* Basic workload implementation (Transaction Spammer)
-* Initial Test property implementation
-* Create code coverage instrumentation 
-* Creating CI jobs to automate build, push and testing
+make forest_commit=<commit_hash> drand_tag=<drand_version> lotus_tag=<lotus_version> all
 
-**Longer term**
+Shutdown and clean up the localnet with:
 
-* Create and submit a pull request for Forest that removes the dependency for live Drand API endpoint
-* Create and submit a pull request for Lotus that removes the dependency for live Drand API endpoint
+make cleanup
+
+* * * * *
+
+How to Contribute
+-----------------
+
+Contributions to the project can include iterating on workloads, improving test properties, or enhancing the setup. Below are guidelines for adding tests:
+
+1.  **Creating CLI Flags:**
+
+    -   Add a new CLI flag in `main.go`.
+    -   Use the helper RPC wrapper (`rpc.py`) for Forest, if needed.
+2.  **Test Structure:**
+
+    -   Place the new test in the `main` directory.
+    -   Follow naming conventions (e.g., `parallel_driver_test.sh`, `anytime_test.sh`).
+    -   Refer to [Antithesis Test Composer Reference](https://antithesis.com/docs/test_templates/test_composer_reference/) for templates.
+3.  **Examples:**
+
+    -   Initialize wallets using `first_check.sh`.
+    -   Run tests such as `anytime_node_height_progression.sh` or `parallel_driver_spammer.py`.
+
+* * * * *
+
+Todo
+----
+
+### Completed Tasks
+
+-   Implement basic workloads (e.g., Transaction Spammer).
+-   Define and implement initial test properties.
+-   Integrate code coverage instrumentation.
+-   Create CI jobs for build, push, and testing automation.
+-   Initialize and manage wallets (create, fund, and delete).
+-   Perform randomized transactions between wallets.
+-   Upload and invoke smart contracts.
+-   Manage node connectivity (connect/disconnect).
+
+### Longer-Term Goals
+
+-   Integrate Curio for enhanced testing.
+-   Implement fuzz testing for bad inputs.
+-   Expand Ethereum-based workloads.
