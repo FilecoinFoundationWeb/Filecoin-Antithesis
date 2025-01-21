@@ -59,7 +59,7 @@ To run the localnet stack:
 
 make forest_commit=<commit_hash> all
 
-This builds Drand (v2.0.4), Lotus (v1.29.1), and Forest nodes for the specified commit. Example:
+This builds Drand (v2.0.4), Lotus (v1.31.0), and Forest nodes for the specified commit. Example:
 
 make forest_commit=4eefcc25cb66b2d0449979d4d6532f74344f160b all
 
