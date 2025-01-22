@@ -1,19 +1,28 @@
 #!/bin/bash
 
-sleep 35
+# url="http://10.0.0.28:3456"
+# max_attempts=10
+# attempts=0
 
-# Waiting for forest node to be up
-forest_ready=0
-while [[ ${forest_ready?} -eq 0 ]]
-do
-   echo "forest-connector: checking if forest is ready.."
-   if [[ -e "/container_ready/forest" ]]; then
-       echo "forest-connector: forest is ready!"
-       echo "forest-connector: continuing startup..."
-       forest_ready=1
-   fi
-   sleep 5
-done
+# while true; do
+#     http_response=$(curl "$url")
+
+#     if [[ "$http_response" -eq 200 ]]; then
+#         echo "Connection successful to forest!"
+#         break
+#     fi
+
+#     ((attempts++))
+#     if [ "$attempts" -ge "$max_attempts" ]; then
+#         echo "Max attempts reached. Exiting."
+#         break
+#     fi
+
+#     echo "Connection failed. Retrying... (Attempt $attempts/$max_attempts)"
+#     sleep 3
+# done
+
+sleep 30
 
 set -euxo pipefail
 export TOKEN=$(cat ${FOREST_DATA_DIR}/jwt)
@@ -26,3 +35,4 @@ forest-wallet new bls
 forest-cli net connect $(cat ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr)
 forest-cli sync wait
 echo "Done"
+exit 0

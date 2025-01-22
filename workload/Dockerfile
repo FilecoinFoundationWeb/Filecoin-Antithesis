@@ -19,20 +19,20 @@ ENV GOPATH="/go"
 WORKDIR /opt/antithesis
 
 # Copy the necessary Go files and resources
-COPY ./resources /opt/antithesis/resources
+COPY ./entrypoint ./entrypoint
+COPY ./resources ./resources
 COPY go.mod ./go.mod
 COPY go.sum ./go.sum
 COPY main.go ./main.go
-COPY ./main /opt/antithesis/test/v1/main
+COPY ./main ./test/v1/main
 
 # Download Go dependencies
 RUN go mod download
 
 # Build the Go application
-RUN go build -o /opt/antithesis/app ./main.go
+RUN go build -o ./app ./main.go
 
 RUN rm ./main.go
 
 # Set the entrypoint to an idle state
-ENTRYPOINT ["sleep", "infinity"]
-
+ENTRYPOINT ["CMD", "/opt/antithesis/entrypoint/entrypoint.sh"]

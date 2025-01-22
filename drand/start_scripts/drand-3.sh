@@ -1,25 +1,5 @@
 #!/bin/bash
 
-# Wait until the leader is up
-tries=10
-echo "drand-3: waiting for drand-1 to be up..."
-while [ "$tries" -gt 0 ]; do
-    drand util check 10.20.20.21:8080
-    if [ $? -eq 0 ]
-    then
-        echo "drand-3: drand-1 is up!"
-        break
-    fi
-    tries=$(( tries - 1 ))
-    echo "drand-3: $tries connection attempts remaining..."
-    sleep 1
-done
-
-if [ "$tries" -eq 0 ]; then
-    echo "drand-3: failed to find drand-1"
-    exit 1
-fi
-
 # Generate the key pair for the third node
 drand generate-keypair --scheme bls-unchained-g1-rfc9380 --id default 10.20.20.23:8080 
 # Start the drand daemon for the third node
@@ -48,7 +28,5 @@ fi
 
 # Join the DKG process initiated by the leader
 drand dkg join --control 8888 
-
-touch /container_ready/drand-3
 
 sleep infinity
