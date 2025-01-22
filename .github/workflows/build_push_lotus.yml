@@ -6,7 +6,7 @@ on:
         lotus_tag:
           type: string
           required: true
-          default: 'v1.29.1'
+          default: 'v1.31.0'
           description: A lotus tag that can be found from (https://github.com/filecoin-project/lotus)
 
 jobs:
