@@ -15,6 +15,7 @@ import (
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 func parseFlags() (*string, *string, *string, *int, *string) {
@@ -224,52 +225,53 @@ func performDisconnectOperation(ctx context.Context, nodeConfig *resources.NodeC
 }
 
 func performDeploySimpleCoin(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) {
-	log.Printf("[INFO] Starting deployment and invocation of SimpleCoin contract on node '%s'.", nodeConfig.Name)
+	assert.Always(nodeConfig != nil, "NodeConfig cannot be nil", nil)
+	assert.Always(contractPath != "", "Contract path cannot be empty", nil)
 
 	// Connect to Lotus node
-	log.Printf("[INFO] Connecting to Lotus node '%s'.", nodeConfig.Name)
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	if err != nil {
-		log.Fatalf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-	}
+	assert.Always(err == nil, "Failed to connect to Lotus node", map[string]interface{}{
+		"node": nodeConfig.Name, "err": err,
+	})
 	defer closer()
-	log.Printf("[INFO] Successfully connected to Lotus node '%s'.", nodeConfig.Name)
 
 	// Deploy the contract
-	log.Printf("[INFO] Deploying SimpleCoin contract from path: %s", contractPath)
 	fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
-	log.Printf("[INFO] Contract deployed successfully. From Address: %s, Contract Address: %s", fromAddr, contractAddr)
-	{
-		// Generate input data for owner's address
-		log.Printf("[INFO] Generating input data for owner's address: %s", fromAddr)
-		inputData := resources.InputDataFromFrom(ctx, api, fromAddr)
-		log.Printf("[INFO] Input data for owner generated: %x", inputData)
+	assert.Always(fromAddr.String() != "", "Deployment failed: from address is empty", nil)
+	assert.Always(contractAddr.String() != "", "Deployment failed: contract address is empty", nil)
 
-		// Invoke contract for owner's balance
-		log.Printf("[INFO] Invoking 'getBalance(address)' on contract with owner's address.")
-		result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
-		if err != nil {
-			log.Fatalf("[ERROR] Failed to invoke SimpleCoin contract with owner's address: %v", err)
-		}
-		log.Printf("[INFO] Owner's balance retrieved successfully: %x", result)
-	}
-	{
-		inputData := resources.InputDataFromFrom(ctx, api, fromAddr)
-		// Modify input data for non-owner address
-		log.Printf("[INFO] Modifying input data for non-owner address.")
-		inputData[31]++
-		log.Printf("[INFO] Modified input data for non-owner: %x", inputData)
+	// Generate input data for owner's address
+	inputData := resources.InputDataFromFrom(ctx, api, fromAddr)
+	assert.Always(len(inputData) > 0, "Input data for owner's address cannot be empty", nil)
 
-		// Invoke contract for non-owner's balance
-		log.Printf("[INFO] Invoking 'getBalance(address)' on contract with non-owner's address.")
-		result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
-		if err != nil {
-			log.Fatalf("[ERROR] Failed to invoke SimpleCoin contract with non-owner's address: %v", err)
-		}
-		log.Printf("[INFO] Non-owner's balance retrieved successfully: %x", result)
-	}
-	log.Printf("[INFO] Completed deployment and invocation of SimpleCoin contract on node '%s'.", nodeConfig.Name)
+	// Invoke contract for owner's balance
+	result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
+	assert.Always(err == nil, "Failed to retrieve owner's balance", map[string]interface{}{
+		"fromAddr":      fromAddr,
+		"contractAddr":  contractAddr,
+		"function":      "getBalance(address)",
+		"err":           err,
+	})
+	expectedOwnerBalance := "0000000000000000000000000000000000000000000000000000000000002710" // Example balance in string format
+	assert.Always(hex.EncodeToString(result) == expectedOwnerBalance, "Owner's balance mismatch", map[string]interface{}{
+		"expected": expectedOwnerBalance, "actual": hex.EncodeToString(result),
+	})
+
+	// Modify input data for non-owner address
+	inputData[31]++
+	result, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
+	assert.Always(err == nil, "Failed to retrieve non-owner's balance", map[string]interface{}{
+		"fromAddr":      fromAddr,
+		"contractAddr":  contractAddr,
+		"function":      "getBalance(address)",
+		"err":           err,
+	})
+	expectedNonOwnerBalance := "0000000000000000000000000000000000000000000000000000000000000000" // Example balance in string format
+	assert.Always(hex.EncodeToString(result) == expectedNonOwnerBalance, "Non-owner's balance mismatch", map[string]interface{}{
+		"expected": expectedNonOwnerBalance, "actual": hex.EncodeToString(result),
+	})
 }
+
 
 func performDeployMCopy(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) {
 	log.Printf("Deploying and invoking MCopy contract on node '%s'...", nodeConfig.Name)
