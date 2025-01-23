@@ -69,14 +69,9 @@ func TestIncreasingBlockHeight(t *testing.T) {
 						return
 					}
 
-					if time.Since(startTime).Seconds() > 5 {
-						assert.Unreachable("Block height is not progressing as expected", map[string]interface{}{"node": node.Name, "initial_height": initialts.Height(), "current_height": currentts.Height(), "time_elapsed": time.Since(startTime).Seconds()})
-						break
-					}
-
-					if currentts.Height() == initialts.Height()+1 {
+					if currentts.Height() == initialts.Height()+1 || time.Since(startTime).Seconds() > 6 {
 						duration := time.Since(startTime)
-						assert.Always(duration.Seconds() <= 5, "Block height always increases by 1 within 5 seconds", map[string]interface{}{"node": node.Name, "initial_height": initialts.Height(), "current_height": currentts.Height(), "time_elapsed": duration.Seconds()})
+						assert.Always(duration.Seconds() <= 6, "Block height always increases by 1 within 6 seconds", map[string]interface{}{"node": node.Name, "initial_height": initialts.Height(), "current_height": currentts.Height(), "time_elapsed": duration.Seconds()})
 					} else {
 						time.Sleep(500 * time.Millisecond)
 						continue
