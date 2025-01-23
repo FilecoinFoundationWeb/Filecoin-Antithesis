@@ -1,19 +1,6 @@
 #!/bin/bash
 
-echo "lotus-1: waiting for drand dkg to be executed"
-drand_1_ready=0
-while [[ ${drand_1_ready} -eq 0 ]]
-do
-    echo "lotus-1: checking if drand-1 is ready.."
-    if [[ -e "/container_ready/drand-1" ]]
-    then
-        echo "lotus-1: drand-1 is ready!"
-        echo "lotus-1: continuing startup..."
-        drand_1_ready=1
-        break
-    fi
-    sleep 5
-done
+sleep 5
 
 # Waiting for chain_info to be good
 tries=10
@@ -56,5 +43,4 @@ lotus net listen > ${LOTUS_1_DATA_DIR}/ipv4addr
 cat ${LOTUS_1_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr
 lotus net id > ${LOTUS_1_DATA_DIR}/p2pID
 lotus auth create-token --perm admin > ${LOTUS_1_DATA_DIR}/jwt
-touch /container_ready/lotus-1
 sleep infinity

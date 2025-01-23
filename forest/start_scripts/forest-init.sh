@@ -2,23 +2,6 @@
 # Enable strict mode to catch errors and undefined variables
 set -euo pipefail
 
-sleep 30
-
-# Waiting for lotus node 1 to be up
-lotus_1_ready=0
-while [[ ${lotus_1_ready?} -eq 0 ]]
-do
-    echo "forest: checking if lotus-1 is up.."
-    if [[ -e "/container_ready/lotus-1" ]]
-    then
-        echo "forest: lotus-1 is ready!"
-        echo "forest: continuing startup..."
-        lotus_1_ready=1
-        break
-    fi
-    sleep 5
-done
-
 # Fetch and save DRAND chain information
 curl 10.20.20.21/info | jq -c > chain_info
 export DRAND_CHAIN_INFO=chain_info
@@ -40,5 +23,4 @@ RUST_LOG=error,forest_filecoin=warn,error forest --genesis "${LOTUS_1_DATA_DIR}/
        --p2p-listen-address /ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT} \
        --skip-load-actors &
 
-touch /container_ready/forest
 sleep infinity

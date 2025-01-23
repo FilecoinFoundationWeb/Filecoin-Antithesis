@@ -8,12 +8,16 @@ services:
       - .env
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
-      - ./container_ready:/container_ready
     entrypoint: /go/drand/scripts/drand-1.sh
     networks:
       antithesis-net:
         ipv4_address: ${DRAND_1_IP}
-
+    healthcheck:
+      test: drand util ping http://10.20.20.21:8080
+      interval: 5s
+      timeout: 2s
+      retries: 10
+  
   # Drand service for node 2
   drand-2:
     container_name: drand-2
@@ -23,11 +27,13 @@ services:
       - .env
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
-      - ./container_ready:/container_ready
     entrypoint: /go/drand/scripts/drand-2.sh
     networks:
       antithesis-net:
         ipv4_address: ${DRAND_2_IP}
+    depends_on:
+      drand-1: 
+        condition: service_started
 
   # Drand service for node 3
   drand-3:
@@ -38,11 +44,13 @@ services:
       - .env
     volumes:
       - ./drand/start_scripts/:/go/drand/scripts/
-      - ./container_ready:/container_ready
     entrypoint: /go/drand/scripts/drand-3.sh
     networks:
       antithesis-net:
         ipv4_address: ${DRAND_3_IP}
+    depends_on:
+      drand-1: 
+        condition: service_started
 
   # Lotus node 1 service
   lotus-1:
@@ -52,7 +60,6 @@ services:
     volumes:
       - ./data/lotus-1:${LOTUS_1_DATA_DIR}
       - ./lotus/start_scripts/lotus-1.sh:${LOTUS_1_DATA_DIR}/lotus-1.sh
-      - ./container_ready:/container_ready
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
       - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
@@ -70,6 +77,15 @@ services:
     networks:
       antithesis-net:
         ipv4_address: ${LOTUS_1_IP}
+    depends_on:
+      drand-1: 
+        condition: service_healthy
+    healthcheck:
+      test: curl http://10.20.20.24:1234/health/readyz
+      start_period: 30s
+      interval: 5s
+      timeout: 2s
+      retries: 10
 
   # Lotus miner 1 service
   lotus-miner-1:
@@ -78,7 +94,6 @@ services:
     volumes:
       - ./data/lotus-1:${LOTUS_1_DATA_DIR}
       - ./lotus/start_scripts/lotus-miner-1.sh:${LOTUS_1_DATA_DIR}/lotus-miner-1.sh
-      - ./container_ready:/container_ready
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
       - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
@@ -99,6 +114,9 @@ services:
     networks:
       antithesis-net:
         ipv4_address: ${LOTUS_MINER_1_IP}
+    depends_on:
+      lotus-1: 
+        condition: service_healthy
    
     # Lotus node 2 service
   lotus-2:
@@ -109,7 +127,6 @@ services:
       - ./data/lotus-1:${LOTUS_1_DATA_DIR}
       - ./data/lotus-2:${LOTUS_2_DATA_DIR}
       - ./lotus/start_scripts/lotus-2.sh:${LOTUS_2_DATA_DIR}/lotus-2.sh
-      - ./container_ready:/container_ready
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
       - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
@@ -128,6 +145,15 @@ services:
     networks:
       antithesis-net:
         ipv4_address: ${LOTUS_2_IP}
+    depends_on:
+      lotus-1: 
+        condition: service_healthy
+    healthcheck:
+      test: curl http://10.20.20.26:1235/health/readyz
+      start_period: 40s
+      interval: 5s
+      timeout: 2s
+      retries: 10
 
   # Lotus miner 2 service
   lotus-miner-2:
@@ -136,7 +162,6 @@ services:
     volumes:
       - ./data/lotus-2:${LOTUS_2_DATA_DIR}
       - ./lotus/start_scripts/lotus-miner-2.sh:${LOTUS_2_DATA_DIR}/lotus-miner-2.sh
-      - ./container_ready:/container_ready
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
       - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
@@ -157,6 +182,9 @@ services:
     networks:
       antithesis-net:
         ipv4_address: ${LOTUS_MINER_2_IP}
+    depends_on:
+      lotus-2: 
+        condition: service_healthy
 
   # Forest service
   forest:
@@ -168,7 +196,6 @@ services:
       - ./data/forest:${FOREST_DATA_DIR}
       - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
       - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
-      - ./container_ready:/container_ready
     environment:
       - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${LOTUS_MINER_1_ACTOR_ADDRESS}
       - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
@@ -189,6 +216,16 @@ services:
     networks:
       antithesis-net:
         ipv4_address: ${FOREST_IP}
+    depends_on:
+      lotus-1: 
+        condition: service_healthy
+    healthcheck:
+      test: curl http://10.0.0.28:3456/livez?verbose
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 40s
+    
 
   # Forest <-> Lotus connector service
   forest-connecter:
@@ -199,7 +236,6 @@ services:
       - ./data/lotus-2:${LOTUS_2_DATA_DIR}
       - ./data/forest:${FOREST_DATA_DIR}
       - ./forest/start_scripts/forest-connector.sh:${FOREST_DATA_DIR}/forest-connector.sh
-      - ./container_ready:/container_ready
     environment:
       - FOREST_CONNECTOR_IP=${FOREST_CONNECTOR_IP}
     env_file:
@@ -208,6 +244,9 @@ services:
     networks:
       antithesis-net:
         ipv4_address: ${FOREST_CONNECTOR_IP}
+    depends_on:
+      forest: 
+        condition: service_started
 
   # Workload service
   workload:
@@ -220,7 +259,10 @@ services:
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.30
-
+    depends_on:
+      lotus-2:
+        condition: service_healthy
+ 
 networks:
   antithesis-net:
     ipam:
