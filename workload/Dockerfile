@@ -35,4 +35,4 @@ RUN go build -o ./app ./main.go
 RUN rm ./main.go
 
 # Set the entrypoint to an idle state
-ENTRYPOINT ["CMD", "/opt/antithesis/entrypoint/entrypoint.sh"]
+ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]

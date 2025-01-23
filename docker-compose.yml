@@ -13,10 +13,10 @@ services:
       antithesis-net:
         ipv4_address: ${DRAND_1_IP}
     healthcheck:
-      test: ["CMD", "curl", "--silent", "--fail", "http://localhost:8080/status", "|", "jq", "-e", ".status == \"ok\" and .dkg_done == true", "||", "exit", "1"]
-      interval: 10s
-      timeout: 5s
-      retries: 8
+      test: drand util ping http://10.20.20.21:8080
+      interval: 5s
+      timeout: 2s
+      retries: 10
   
   # Drand service for node 2
   drand-2:
@@ -81,10 +81,11 @@ services:
       drand-1: 
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "--silent", "--fail", "http://10.20.20.21:8080/api/v0/id", "||", "exit", "1"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
+      test: curl http://10.20.20.24:1234/health/readyz
+      start_period: 30s
+      interval: 5s
+      timeout: 2s
+      retries: 10
 
   # Lotus miner 1 service
   lotus-miner-1:
@@ -148,10 +149,11 @@ services:
       lotus-1: 
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "--silent", "--fail", "http://10.20.20.26:1235/api/v0/id", "||", "exit", "1"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
+      test: curl http://10.20.20.26:1235/health/readyz
+      start_period: 40s
+      interval: 5s
+      timeout: 2s
+      retries: 10
 
   # Lotus miner 2 service
   lotus-miner-2:
@@ -218,10 +220,11 @@ services:
       lotus-1: 
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "--silent", "--fail", "http://localhost:1801/api/v0/id", "||", "exit", "1"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
+      test: curl http://10.0.0.28:3456/livez?verbose
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 40s
     
 
   # Forest <-> Lotus connector service
@@ -243,7 +246,7 @@ services:
         ipv4_address: ${FOREST_CONNECTOR_IP}
     depends_on:
       forest: 
-        condition: service_healthy
+        condition: service_started
 
   # Workload service
   workload:
@@ -256,7 +259,10 @@ services:
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.30
-
+    depends_on:
+      lotus-2:
+        condition: service_healthy
+ 
 networks:
   antithesis-net:
     ipam:

@@ -22,7 +22,7 @@
 #     sleep 3
 # done
 
-sleep 30
+sleep 10
 
 set -euxo pipefail
 export TOKEN=$(cat ${FOREST_DATA_DIR}/jwt)
