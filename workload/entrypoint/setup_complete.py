@@ -4,4 +4,4 @@ from antithesis.lifecycle import (
     setup_complete,
 )
 
-setup_complete({"Message":"Forest has reached blockheight 10"})
+setup_complete({"Message":"Lotus-1 has reached blockheight 10"})
