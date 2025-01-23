@@ -1,3 +1,3 @@
 #!/bin/bash
 
-go test -v -count=1 /opt/antithesis/test/v1/main/tipset_sync_test.go
+go test -v -count=1 /opt/antithesis/go-test-scripts/tipset_sync_test.go
