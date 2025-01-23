@@ -57,26 +57,26 @@ This section provides an overview of the files and goals for running Antithesis 
 
 To run the localnet stack:
 
-make forest_commit=<commit_hash> all
+`make forest_commit=<commit_hash> all`
 
-This builds Drand (v2.0.4), Lotus (v1.31.0), and Forest nodes for the specified commit. Example:
+This builds Drand (v2.0.4), Lotus (v1.31.0), and Forest nodes for the specified commit from the [Forest Github repository](https://github.com/ChainSafe/forest). Example:
 
-make forest_commit=4eefcc25cb66b2d0449979d4d6532f74344f160b all
+`make forest_commit=4eefcc25cb66b2d0449979d4d6532f74344f160b all`
 
 For advanced usage, specify different versions of Drand and Lotus:
 
-make forest_commit=<commit_hash> drand_tag=<drand_version> lotus_tag=<lotus_version> all
+`make forest_commit=<commit_hash> drand_tag=<drand_version> lotus_tag=<lotus_version> all`
 
 Shutdown and clean up the localnet with:
 
-make cleanup
+`make cleanup`
 
 * * * * *
 
 How to Contribute
 -----------------
 
-Contributions to the project can include iterating on workloads, improving test properties, or enhancing the setup. Below are guidelines for adding tests:
+Contributions to the project can include iterating on test templates, improving test properties, or enhancing the setup. Below are guidelines for adding tests:
 
 1.  **Creating CLI Flags:**
 

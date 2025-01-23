@@ -31,7 +31,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: antithesishq/antithesis-trigger-action@v0.6
+      - uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
           tenant: cobalt-bunny
@@ -57,7 +57,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: antithesishq/antithesis-trigger-action@v0.6
+      - uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
           tenant: cobalt-bunny
