@@ -1,59 +1,101 @@
-Antithesis Simulation for Filecoin Network
-==========================================
+# Antithesis Testing for the Filecoin Network
 
-This documentation outlines the structure, purpose, and guidelines for contributing to the Antithesis Simulation project for the Filecoin network. It provides insights into the main idea, the repository's structure, and the current state of the project.
+## Purpose
 
-* * * * *
+This README serves as a guide for both prospective and active contributers. We will walk through the setup structure, using Antithesis, best practices for contributions, and how to interpret the reports. You should be able to walk away with the purpose of continuous testing, why it is important, the current state of this project, and hopefully ideas to contribute!
 
-Repository Structure Overview
------------------------------
+## Setup
 
-The repository contains a containerized setup of a Filecoin localnet for Antithesis Autonomous Testing, including Lotus and Forest nodes patched to work with local Drand nodes. Below is a brief description of the key files and directories:
+There are 10 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 lotus and 2 forest nodes, 2 lotus miners, and a `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
 
-### Key Files and Directories
+The `workload` container has the test scripts where the endpoints are being called, the smart contracts deployed, transactions are requested, etc... The validations to assert correctness and guarantees also occur in this container using the [Antithesis SDK](https://antithesis.com/docs/using_antithesis/sdk/). We explain more on the SDK in a later section.
 
--   **cleanup.sh**: Cleans all the persisted data in the localnet setup.
+## Github Files and Directories
+
+The repository has the containerized setup explained above. Note: Antithesis is fully deterministic and requires our SUT to run without internet access since (a source of nondeterminism). We've made small patches for the Lotus and Forest nodes to work with a local Drand cluster.
+
+Below is a brief description of the key files and directories:
+
 -   **drand/**: Contains the Dockerfile and startup scripts for Drand nodes.
     -   **start_scripts/**: Includes scripts like `drand-1.sh`, `drand-2.sh`, and `drand-3.sh` to start specific Drand nodes.
--   **lotus/**: Similar to Drand but for Lotus. This directory also stores configuration and patch files to support interaction with other nodes.
+
+-   **forest/**: Contains the Dockerfile and startup scripts for the forest node. Also includes configuration templates.
+    -   **start_scripts/**: The `forest-init.sh` startup script will initialize a Forest node. The `forest-connector.sh`will connect a Forest node.
+
+-   **lotus/**: Contains the Dockerfile and startup scripts for the lotus node. Also includes configuration and patch files to support interaction with other nodes.
     -   **start_scripts/**: Contains scripts for starting Lotus nodes and miners (e.g., `lotus-1.sh`, `lotus-miner-1.sh`).
--   **forest/**: Similar to Drand but for Forest nodes. Includes configuration templates and startup scripts.
-    -   **start_scripts/**: Scripts like `forest-connector.sh` and `forest-init.sh` to initialize and connect Forest nodes.
+
 -   **workload/**: The main driver of the application, responsible for generating activity chains and asserting test properties. Includes:
     -   **main.go**: Entrypoint of the application, a Go binary with CLI flags for different operations.
-    -   **main/**: Contains driver scripts and tests categorized by naming conventions (e.g., `parallel`, `anytime`, `eventually`). These follow test templates from [Antithesis Test Composer Reference](https://antithesis.com/docs/test_templates/test_composer_reference/).
+    -   **main/**: Contains driver scripts and tests categorized by naming conventions (e.g., `parallel`, `anytime`, `eventually`). These are [Test Composer](https://antithesis.com/docs/test_templates/) commands that enable Antithesis to generate thousands of test cases that will run over a multitude of system states. Test Composer handles varying things like parallelism, test length, and command order.
         -   Examples: `parallel_driver_spammer.py`, `anytime_node_height_progression.sh`, `eventually_all_node_sync_status_check.py`.
     -   **resources/**: Helper files for workloads, such as `rpc.py`, `wallets.py`, and smart contract files (`SimpleCoin.sol`).
     -   **removed/**: Contains deprecated or removed tests for reference.
+    -   **go-test-scripts/**: Contains more Go tests. They are called from an executable in main. Allows for Test Composer to control these scripts.
 
-* * * * *
+-   **cleanup.sh**: Cleans the persisted data in a local setup
 
-How Antithesis Simulation Testing Works
----------------------------------------
+## Using Antithesis
 
-Antithesis Simulation tests distributed systems by generating various failure scenarios and validating system properties under stress. It automates the process of:
+Antithesis is an autonomous testing platform that finds the bugs in your software, with perfect reproducibility to help you fix them.
 
-1.  Injecting faults (e.g., crashes, network partitions) into the system.
-2.  Asserting test properties using the Antithesis SDKs.
-3.  Observing system behavior to ensure it meets reliability expectations.
+### Antithesis Fault Injector
 
-Key components of Antithesis testing include:
+Antithesis generates various failure scenarios. The FileCoin system should be resilient to these faults since they happen in production! We automate the process of injecting faults (e.g., crashes, network partitions, thread pausing) into the system, as well as observing system metrics like unexpected container exits and memory usage.
 
--   Fault injection using activity chains.
--   Monitoring system responses.
--   Asserting invariants (e.g., data consistency, fault tolerance).
+Note: Faults are not injected into the SUT until a "setup_complete" message is emitted. This message is emitted from the `entrypoint.py` script in the `workload` container.
+
+### Antithesis SDK & Test Properties
+
+To generate test cases, Antithesis relies on **test properties** you define. This short video walks through defining SDK assertions within the `workload` container. Assertions can defined in any container in the SUT.
+
+TODO: Video
+
+### Triaging the Report and viewing your Test Properties
+
+Triaging the reports is critical to determine if any of your test properties failed. This short video walks through the report test properties and how they relate to the assertions defined in the `workload` container.
+
+TODO: Video
+
+### Running an Antithesis Test from GitHub
+
+To run a manual Antithesis Test, we have implemented GitHub actions. There is also a cron job for nightly 10 hour runs. This short video explains how to run these actions with the branch your test properties are defined on.
+
+TODO: Video
+
+### Antithesis Test Composer
+
+[The Antithesis Test Composer](https://antithesis.com/docs/test_templates/first_test/) is a framework that gives the Antithesis system control over what is being executed. Hundreds of thousands of different scenarios are executed during a long enough test 
+
+TODO: Video
 
 For more details, refer to the [Antithesis Documentation](https://antithesis.com/docs/introduction/how_antithesis_works/).
 
-* * * * *
-
-Run Antithesis Testing
-----------------------
-
-This section provides an overview of the files and goals for running Antithesis testing:
 
 
-### Steps
+
+
+
+
+
+
+
+
+
+
+## Sanity Check Locally
+
+A good practice to confirm your test script functions correctly in Antithesis is to run it locally. Here are the steps:
+
+
+1. Build each image required by the docker-compose.yml. We need a total of 4 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`). Below is an example of building the lotus image while inside the lotus directory.
+
+`docker build . lotus:latest`
+
+2. Run `docker-compose up` from the root directory to start all containers defined in `docker-compose.yml`
+
+3. After the workload container has signaled `setupComplete` (or printed `system is healthy`), you can run any test command 1 to many times via `docker exec`:
+
 
 To run the localnet stack:
 
@@ -71,7 +113,13 @@ Shutdown and clean up the localnet with:
 
 `make cleanup`
 
-* * * * *
+
+
+
+
+
+
+
 
 How to Contribute
 -----------------
@@ -92,10 +140,8 @@ Contributions to the project can include iterating on test templates, improving 
     -   Initialize wallets using `first_check.sh`.
     -   Run tests such as `anytime_node_height_progression.sh` or `parallel_driver_spammer.py`.
 
-* * * * *
 
-Todo
-----
+## Todo
 
 ### Completed Tasks
 
@@ -113,3 +159,7 @@ Todo
 -   Integrate Curio for enhanced testing.
 -   Implement fuzz testing for bad inputs.
 -   Expand Ethereum-based workloads.
+
+## A Concrete Example
+
+Antithesis has [a public repository that tests ETCD](https://github.com/antithesishq/etcd-test-composer). It serves as a concrete example and a guide for using Test Composer and SDK assertions in various languages. You might find it helpful!
