@@ -1,4 +1,4 @@
-# Antithesis Testing for the Filecoin Network
+# Antithesis Testing with the Filecoin Network
 
 ## Purpose
 
@@ -6,13 +6,13 @@ This README serves as a guide for both prospective and active contributers. We w
 
 ## Setup
 
-There are 10 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 lotus and 2 forest nodes, 2 lotus miners, and a `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
+There are 10 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 lotus and 2 forest nodes, 2 lotus miners, and 1 `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
 
-The `workload` container has the test scripts where the endpoints are being called, the smart contracts deployed, transactions are requested, etc... The validations to assert correctness and guarantees also occur in this container using the [Antithesis SDK](https://antithesis.com/docs/using_antithesis/sdk/). We explain more on the SDK in a later section.
+The `workload` container has the test scripts where endpoints are called, smart contracts deployed, transactions requested, etc... There are also validations to assert correctness and guarantees also occur in this container using the [Antithesis SDK](https://antithesis.com/docs/using_antithesis/sdk/). We explain more on the SDK in a later section.
 
 ## Github Files and Directories
 
-The repository has the containerized setup explained above. Note: Antithesis is fully deterministic and requires our SUT to run without internet access since (a source of nondeterminism). We've made small patches for the Lotus and Forest nodes to work with a local Drand cluster.
+The repository has the containerized setup explained above. Note: Antithesis is fully deterministic and requires our SUT to run without internet access (it is source of nondeterminism). We've made small patches for the Lotus and Forest nodes to work with a local Drand cluster.
 
 Below is a brief description of the key files and directories:
 
