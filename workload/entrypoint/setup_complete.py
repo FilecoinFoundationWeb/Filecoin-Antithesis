@@ -5,3 +5,4 @@ from antithesis.lifecycle import (
 )
 
 setup_complete({"Message":"Lotus-1 has reached blockheight 10"})
+print("system is healthy")
