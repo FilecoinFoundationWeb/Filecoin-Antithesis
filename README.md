@@ -71,22 +71,9 @@ TODO: Video
 
 For more details, refer to the [Antithesis Documentation](https://antithesis.com/docs/introduction/how_antithesis_works/).
 
-
-
-
-
-
-
-
-
-
-
-
-
 ## Sanity Check Locally
 
-A good practice to confirm your test script functions correctly in Antithesis is to run it locally. Here are the steps:
-
+A good practice to confirm your test script works correctly in Antithesis is to run it locally. Here are the steps:
 
 1. Build each image required by the docker-compose.yml. We need a total of 4 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`). Below is an example of building the lotus image while inside the lotus directory.
 
@@ -96,33 +83,11 @@ A good practice to confirm your test script functions correctly in Antithesis is
 
 3. After the workload container has signaled `setupComplete` (or printed `system is healthy`), you can run any test command 1 to many times via `docker exec`:
 
+`docker exec workload /opt/antithesis/test/v1/main/parallel_driver_create_wallets.sh`
 
-To run the localnet stack:
+4. We should see the command successfully complete. You've now validated that your test is ready to run on the Antithesis platform! (Note that SDK assertions won't be evaluated locally).
 
-`make forest_commit=<commit_hash> all`
-
-This builds Drand (v2.0.4), Lotus (v1.31.0), and Forest nodes for the specified commit from the [Forest Github repository](https://github.com/ChainSafe/forest). Example:
-
-`make forest_commit=4eefcc25cb66b2d0449979d4d6532f74344f160b all`
-
-For advanced usage, specify different versions of Drand and Lotus:
-
-`make forest_commit=<commit_hash> drand_tag=<drand_version> lotus_tag=<lotus_version> all`
-
-Shutdown and clean up the localnet with:
-
-`make cleanup`
-
-
-
-
-
-
-
-
-
-How to Contribute
------------------
+## How to Contribute
 
 Contributions to the project can include iterating on test templates, improving test properties, or enhancing the setup. Below are guidelines for adding tests:
 
@@ -130,16 +95,17 @@ Contributions to the project can include iterating on test templates, improving 
 
     -   Add a new CLI flag in `main.go`.
     -   Use the helper RPC wrapper (`rpc.py`) for Forest, if needed.
+
 2.  **Test Structure:**
 
     -   Place the new test in the `main` directory.
     -   Follow naming conventions (e.g., `parallel_driver_test.sh`, `anytime_test.sh`).
     -   Refer to [Antithesis Test Composer Reference](https://antithesis.com/docs/test_templates/test_composer_reference/) for templates.
+
 3.  **Examples:**
 
     -   Initialize wallets using `first_check.sh`.
     -   Run tests such as `anytime_node_height_progression.sh` or `parallel_driver_spammer.py`.
-
 
 ## Todo
 
