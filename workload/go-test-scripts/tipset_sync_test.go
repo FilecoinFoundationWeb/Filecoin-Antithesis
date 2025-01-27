@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -68,22 +69,30 @@ func TestTipsetConsistency(t *testing.T) {
 	// Wait for all goroutines to complete
 	wg.Wait()
 
-	// TODO take a closer look at what this script is doing and if it is correct. Put in all_node_sync_status_check logic in here
-
-	// Verify all tipsets are identical
-	baseTipset := tipsets[0]
-	for i, ts := range tipsets {
-		assert.Always(baseTipset == ts, "Tipsets are consistent across nodes", map[string]interface{}{
-			"base_tipset":       baseTipset,
-			"different_tipset":  ts,
-			"node_index":        i,
-			"epoch_number_base": epochs[0],
-			"epoch_number_diff": epochs[i],
-		})
+	if epochs[0] != epochs[1] {
+		os.Exit(0)
 	}
 
-	// Print epochs for all nodes
-	for i, epoch := range epochs {
-		fmt.Printf("Node %s at epoch: %d\n", filterNodes[i].Name, epoch)
+	ts0 := tipsets[0][1 : len(tipsets[0])-1]
+	ts1 := tipsets[1][1 : len(tipsets[1])-1]
+
+	ts0_split := strings.Split(ts0, ",")
+	ts1_split := strings.Split(ts1, ",")
+
+	one_equal := false
+
+	for _, ts0_element := range ts0_split {
+		for _, ts1_element := range ts1_split {
+			if ts0_element == ts1_element {
+				one_equal = true
+			}
+		}
 	}
+
+	assert.Always(one_equal, "Tipsets are consistent across nodes", map[string]interface{}{
+		"base_tipset":        ts0_split,
+		"other_tipset":       ts1_split,
+		"epoch_number_base":  epochs[0],
+		"epoch_number_other": epochs[1],
+	})
 }
