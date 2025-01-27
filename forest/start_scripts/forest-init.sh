@@ -16,6 +16,17 @@ echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
 cat ${FOREST_DATA_DIR}/forest_config.toml
 # export FULLNODE_API_INFO=$TOKEN:/ip4/10.20.20.27/tcp/${FOREST_RPC_PORT}/http
 # Start the forest service with the specified configuration
+
+D_LIBRARY_PATH=/usr/lib/libvoidstar.so RUSTFLAGS=" \
+    -Ccodegen-units=1 \
+    -Cpasses=sancov-module \
+    -Cllvm-args=-sanitizer-coverage-level=3 \
+    -Cllvm-args=-sanitizer-coverage-trace-pc-guard \
+    -Clink-args=-Wl,--build-id  \
+    -L/usr/lib/libvoidstar.so \
+    -lvoidstar" \
+    cargo build --bin forest
+
 RUST_LOG=error,forest_filecoin=warn,error forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
        --save-token "${FOREST_DATA_DIR}/jwt" \
