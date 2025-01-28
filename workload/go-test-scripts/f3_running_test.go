@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 
@@ -30,7 +29,6 @@ func TestF3IsRunningEquality(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	results := make(map[string]bool)
 
 	for _, node := range filterNodes {
 		wg.Add(1)
@@ -49,29 +47,18 @@ func TestF3IsRunningEquality(t *testing.T) {
 			assert.Always(err == nil, "Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
 
 			if err != nil {
+				t.Logf("Error fetching F3 status for node: %v", node.Name)
 				return
 			}
 
-			results[node.Name] = isRunning
-
-			if !isRunning {
-				t.Logf("Node: %v not running F3", node.Name)
+			if isRunning {
+				assert.Sometimes(isRunning, "F3 is running on node", map[string]interface{}{"node": node.Name})
+			} else {
+				t.Logf("Node: %v is not running F3", node.Name)
 			}
 		}(node)
 	}
 
 	// Wait for all goroutines to complete
 	wg.Wait()
-
-	// Validate results
-	for node, isRunning := range results {
-		fmt.Print(node)
-		if node == "Lotus1" {
-			assert.Sometimes(isRunning, "F3 is running on lotus node 1", map[string]interface{}{"node": node})
-		} else if node == "Lotus2" {
-			assert.Sometimes(isRunning, "F3 is running on lotus node 2", map[string]interface{}{"node": node})
-		} else if node == "Forest" {
-			assert.Sometimes(isRunning, "F3 is running on forest", map[string]interface{}{"node": node})
-		}
-	}
 }

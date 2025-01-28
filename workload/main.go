@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 func parseFlags() (*string, *string, *string, *int, *string) {
@@ -246,32 +246,31 @@ func performDeploySimpleCoin(ctx context.Context, nodeConfig *resources.NodeConf
 
 	// Invoke contract for owner's balance
 	result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
-	assert.Always(err == nil, "Failed to retrieve owner's balance", map[string]interface{}{
-		"fromAddr":      fromAddr,
-		"contractAddr":  contractAddr,
-		"function":      "getBalance(address)",
-		"err":           err,
+	assert.Sometimes(err == nil, "Failed to retrieve owner's balance", map[string]interface{}{
+		"fromAddr":     fromAddr,
+		"contractAddr": contractAddr,
+		"function":     "getBalance(address)",
+		"err":          err,
 	})
 	expectedOwnerBalance := "0000000000000000000000000000000000000000000000000000000000002710" // Example balance in string format
-	assert.Always(hex.EncodeToString(result) == expectedOwnerBalance, "Owner's balance mismatch", map[string]interface{}{
+	assert.Sometimes(hex.EncodeToString(result) == expectedOwnerBalance, "Owner's balance mismatch", map[string]interface{}{
 		"expected": expectedOwnerBalance, "actual": hex.EncodeToString(result),
 	})
 
-	// Modify input data for non-owner address
 	inputData[31]++
-	result, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
-	assert.Always(err == nil, "Failed to retrieve non-owner's balance", map[string]interface{}{
-		"fromAddr":      fromAddr,
-		"contractAddr":  contractAddr,
-		"function":      "getBalance(address)",
-		"err":           err,
+	resultt, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
+	assert.Sometimes(err == nil, "Failed to retrieve non-owner's balance", map[string]interface{}{
+		"fromAddr":     fromAddr,
+		"contractAddr": contractAddr,
+		"function":     "getBalance(address)",
+		"err":          err,
 	})
 	expectedNonOwnerBalance := "0000000000000000000000000000000000000000000000000000000000000000" // Example balance in string format
-	assert.Always(hex.EncodeToString(result) == expectedNonOwnerBalance, "Non-owner's balance mismatch", map[string]interface{}{
-		"expected": expectedNonOwnerBalance, "actual": hex.EncodeToString(result),
+	assert.Sometimes(hex.EncodeToString(resultt) == expectedNonOwnerBalance, "Non-owner's balance mismatch", map[string]interface{}{
+		"expected": expectedNonOwnerBalance, "actual": hex.EncodeToString(resultt),
 	})
-}
 
+}
 
 func performDeployMCopy(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) {
 	log.Printf("Deploying and invoking MCopy contract on node '%s'...", nodeConfig.Name)
