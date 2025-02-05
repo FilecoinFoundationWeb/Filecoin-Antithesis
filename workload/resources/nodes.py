@@ -32,9 +32,9 @@ def get_url_and_token(node_type:str):
     return rpc_url, auth_token
 
 def select_random_node():
-    nodes = ["forest"]
+    nodes = ["forest", "lotus-1"]
     return random.choice(nodes)
 
 def get_all_nodes():
-    nodes = ["forest"]
+    nodes = ["forest", "lotus-1"]
     return nodes

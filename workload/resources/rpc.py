@@ -23,14 +23,10 @@ def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     })
     response = request(node_type, rpc_url, auth_token, "post", payload)
     if response['response'].status_code != 200:
-        if node_type == "forest":
-            always(False, "Forest: List existing wallets on the chain", {"node_type":node_type,"response":response['response']})
         if node_type == "lotus":
             always(False, "Lotus: List existing wallets on the chain", {"node_type":node_type,"response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during get_genesis_wallet for {method} on a {node_type} node")
         return None
-    if node_type == "forest":
-        always(True, "Forest: List existing wallets on the chain", None)
     if node_type == "lotus":
         always(True, "Lotus: List existing wallets on the chain", None)
     print(f"Workload [rpc.py]: good response status code during get_genesis_wallet for {method} on a {node_type} node")
@@ -39,14 +35,10 @@ def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     # questionable way to pick out genesis wallet. its hash is much longer than a regular wallet...
     for w in response_body['result']:
         if len(w) > 41:
-            if node_type == "forest":
-                always(True, "Forest: Found the genesis wallet", None)
             if node_type == "lotus":
                 always(True, "Lotus: Found the genesis wallet", None)
             print("Workload [rpc.py]: found the genesis wallet. returning its hash")
             return w
-    if node_type == "forest":
-        always(False, "Forest: Found the genesis wallet", {"List of wallets":response_body['result']})
     if node_type == "lotus":
         always(False, "Lotus: Found the genesis wallet", {"List of wallets":response_body['result']})
     print("Workload [rpc.py]: failed to find genesis wallet")
