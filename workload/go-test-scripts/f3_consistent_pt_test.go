@@ -13,7 +13,7 @@ func TestF3ApiCalls(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Loading the resources config", map[string]interface{}{"error": err})
 
 	// Hardcoded list of Lotus nodes to test
 	nodeNames := []string{"Lotus1", "Lotus2"}
@@ -30,7 +30,11 @@ func TestF3ApiCalls(t *testing.T) {
 
 	for _, node := range filteredNodes {
 		api, closer, err := resources.ConnectToNode(ctx, node)
-		assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node.Name, "error": err})
+		if node.Name == "Forest" {
+			assert.Always(err == nil, "Forest: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+		} else if node.Name == "Lotus1" || node.Name == "Lotus2" {
+			assert.Always(err == nil, "Lotus: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+		}
 		if err != nil {
 			continue
 		}
@@ -40,28 +44,32 @@ func TestF3ApiCalls(t *testing.T) {
 
 		// F3GetManifest
 		_, err = api.F3GetManifest(ctx)
-		assert.Always(err == nil, "F3GetManifest call successful", map[string]interface{}{"node": node.Name, "error": err})
+		assert.Always(err == nil, "Lotus: Get the F3 Manifest", map[string]interface{}{"node": node.Name, "error": err})
 
 		// F3GetECPowerTable
 		ts, err := api.ChainHead(ctx)
-		assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node.Name, "error": err})
+		assert.Always(err == nil, "Workload: Getting the chainhead for a node", map[string]interface{}{"node": node.Name, "error": err})
 
 		// F3GetF3PowerTable
 		if err == nil {
 			_, err = api.F3GetF3PowerTable(ctx, ts.Key())
-			assert.Always(err == nil, "F3GetF3PowerTable call successful", map[string]interface{}{"node": node.Name, "error": err})
+			assert.Always(err == nil, "Lotus: Get the F3 PowerTable", map[string]interface{}{"node": node.Name, "error": err})
 		}
 
 		// F3IsRunning
 		_, err = api.F3IsRunning(ctx)
-		assert.Always(err == nil, "F3IsRunning call successful", map[string]interface{}{"node": node.Name, "error": err})
+		if node.Name == "Forest" {
+			assert.Always(err == nil, "Forest: Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+		} else if node.Name == "Lotus1" || node.Name == "Lotus2" {
+			assert.Always(err == nil, "Lotus: Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+		}
 
 		// F3GetProgress
 		_, err = api.F3GetProgress(ctx)
-		assert.Always(err == nil, "F3GetProgress call successful", map[string]interface{}{"node": node.Name, "error": err})
+		assert.Always(err == nil, "Lotus: Get the F3 Progress", map[string]interface{}{"node": node.Name, "error": err})
 
 		// F3ListParticipants
 		_, err = api.F3ListParticipants(ctx)
-		assert.Always(err == nil, "F3ListParticipants call successful", map[string]interface{}{"node": node.Name, "error": err})
+		assert.Always(err == nil, "Lotus: List the F3 Participants", map[string]interface{}{"node": node.Name, "error": err})
 	}
 }

@@ -13,9 +13,9 @@ import (
 
 func mockTipSet(t *testing.T) *types.TipSet {
 	minerAct, err := address.NewIDAddress(0)
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Loading the resources config", map[string]interface{}{"error": err})
 	c, err := cid.Decode("QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Loading the resources config", map[string]interface{}{"error": err})
 
 	blks := []*types.BlockHeader{
 		{
@@ -37,6 +37,6 @@ func mockTipSet(t *testing.T) *types.TipSet {
 	}
 	ts, err := types.NewTipSet(blks)
 	fmt.Println(ts)
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Loading the resources config", map[string]interface{}{"error": err})
 	return ts
 }

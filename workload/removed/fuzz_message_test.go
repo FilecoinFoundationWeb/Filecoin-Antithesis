@@ -47,7 +47,7 @@ func FuzzBuildAndSignMessages(f *testing.F) {
 	const timeoutDuration = 10 * time.Second
 
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Loading the resources config", map[string]interface{}{"error": err})
 
 	nodeNames := []string{"Lotus1"}
 	var filteredNodes []resources.NodeConfig

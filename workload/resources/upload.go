@@ -28,7 +28,7 @@ func DeployContractWithValue(ctx context.Context, api api.FullNode, sender addre
 	initcode := abi.CborBytes(bytecode)
 
 	params, Actorerr := actors.SerializeParams(&initcode)
-	assert.Always(Actorerr == nil, "Serialize contract initialization parameters", map[string]interface{}{"error": Actorerr})
+	assert.Always(Actorerr == nil, "Workload: Serialize contract initialization parameters", map[string]interface{}{"error": Actorerr})
 
 	msg := &types.Message{
 		To:     builtin.EthereumAddressManagerActorAddr,
@@ -39,17 +39,17 @@ func DeployContractWithValue(ctx context.Context, api api.FullNode, sender addre
 	}
 
 	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
-	assert.Always(err == nil, "Push a create contract message", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Lotus: Push a create contract message", map[string]interface{}{"error": err})
 	time.Sleep(5 * time.Second)
 
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
-	assert.Always(err == nil, "Wait for message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
-	assert.Always(wait.Receipt.ExitCode.IsSuccess(), "Contract installation failed", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
+	assert.Always(err == nil, "Lotus: State waiting for message to execute successful", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
+	assert.Always(wait.Receipt.ExitCode.IsSuccess(), "Lotus: Contract installation successful", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
 
 	var result eam.CreateReturn
 	r := bytes.NewReader(wait.Receipt.Return)
 	err = result.UnmarshalCBOR(r)
-	assert.Always(err == nil, "Unmarshal CBOR result", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Unmarshal CBOR result", map[string]interface{}{"error": err})
 
 	return result
 }
@@ -60,19 +60,19 @@ func DeployContract(ctx context.Context, api api.FullNode, sender address.Addres
 
 func DeployContractFromFilenameWithValue(ctx context.Context, api api.FullNode, binFilename string, value big.Int) (address.Address, address.Address) {
 	contractHex, err := os.ReadFile(binFilename)
-	assert.Always(err == nil, "Read smart contract file", map[string]interface{}{"filePath": binFilename, "error": err})
+	assert.Always(err == nil, "Workload: Read smart contract file", map[string]interface{}{"filePath": binFilename, "error": err})
 
 	contractHex = bytes.TrimRight(contractHex, "\n")
 	contract, err := hex.DecodeString(string(contractHex))
-	assert.Always(err == nil, "Decode smart contract hex string", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Decode smart contract hex string", map[string]interface{}{"error": err})
 
 	fromAddr, err := api.WalletDefaultAddress(ctx)
-	assert.Always(err == nil, "Retrieve default wallet address", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Lotus: Retrieve default wallet address", map[string]interface{}{"error": err})
 
 	result := DeployContractWithValue(ctx, api, fromAddr, contract, value)
 
 	idAddr, err := address.NewIDAddress(result.ActorID)
-	assert.Always(err == nil, "Create ID address from ActorID", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Lotus: Create ID address from ActorID", map[string]interface{}{"error": err})
 	return fromAddr, idAddr
 }
 
@@ -88,12 +88,12 @@ func InvokeContractByFuncName(ctx context.Context, api api.FullNode, fromAddr ad
 	entryPoint := CalcFuncSignature(funcSignature)
 
 	wait, err := InvokeSolidity(ctx, api, fromAddr, idAddr, entryPoint, inputData)
-	assert.Sometimes(err == nil, "Invoke Solidity function", map[string]interface{}{"error": err})
+	assert.Sometimes(err == nil, "Lotus: Invoke Solidity function", map[string]interface{}{"error": err})
 	if err != nil {
 		return nil, wait, fmt.Errorf("failed to invoke Solidity function: %w", err)
 	}
 
-	assert.Sometimes(wait.Receipt.ExitCode.IsSuccess(), "Check if contract execution succeeded", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
+	assert.Sometimes(wait.Receipt.ExitCode.IsSuccess(), "Lotus: Check if contract execution succeeded", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
 	if !wait.Receipt.ExitCode.IsSuccess() {
 		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
 		assert.Sometimes(replayErr == nil, "Replay failed message", map[string]interface{}{"error": replayErr})
@@ -104,7 +104,7 @@ func InvokeContractByFuncName(ctx context.Context, api api.FullNode, fromAddr ad
 	}
 
 	result, err := cbg.ReadByteArray(bytes.NewBuffer(wait.Receipt.Return), uint64(len(wait.Receipt.Return)))
-	assert.Sometimes(err == nil, "Read return data from contract execution", map[string]interface{}{"error": err})
+	assert.Sometimes(err == nil, "Workload: Read return data from contract execution", map[string]interface{}{"error": err})
 	return result, wait, err
 }
 
@@ -112,7 +112,7 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 	params := append(selector, inputData...)
 	var buffer bytes.Buffer
 	err := cbg.WriteByteArray(&buffer, params)
-	assert.Always(err == nil, "Write byte array to buffer", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Write byte array to buffer", map[string]interface{}{"error": err})
 	params = buffer.Bytes()
 
 	msg := &types.Message{
@@ -125,14 +125,14 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 	}
 
 	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
-	assert.Sometimes(err == nil, "Push message to invoke contract", map[string]interface{}{"error": err})
+	assert.Sometimes(err == nil, "Lotus: Push message to invoke contract", map[string]interface{}{"error": err})
 	time.Sleep(5 * time.Second)
 	if err != nil {
 		return nil, err
 	}
 	time.Sleep(5 * time.Second)
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
-	assert.Sometimes(err == nil, "Wait for invoke message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
+	assert.Sometimes(err == nil, "Lotus: Wait for invoke message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
 
 	if !wait.Receipt.ExitCode.IsSuccess() {
 		replayResult, err := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
@@ -150,10 +150,10 @@ func CalcFuncSignature(funcName string) []byte {
 
 func InputDataFromFrom(ctx context.Context, api api.FullNode, from address.Address) []byte {
 	fromID, err := api.StateLookupID(ctx, from, types.EmptyTSK)
-	assert.Always(err == nil, "Lookup ID address for sender", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Lotus: Lookup ID address for sender successful", map[string]interface{}{"error": err})
 
 	senderEthAddr, err := ethtypes.EthAddressFromFilecoinAddress(fromID)
-	assert.Always(err == nil, "Convert Filecoin address to Ethereum address", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Lotus: Convert Filecoin address to Ethereum address", map[string]interface{}{"error": err})
 
 	inputData := make([]byte, 32)
 	copy(inputData[32-len(senderEthAddr):], senderEthAddr[:])

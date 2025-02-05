@@ -19,6 +19,5 @@ def delete_wallets():
     wallets.delete_wallets_locally(wallets_to_delete)
     wallets_to_delete = list(wallets_to_delete.keys())
     wallets.delete_wallets(node, rpc_url, auth_token, wallets_to_delete)
-    reachable("Script execution: 'parallel_driver_delete_wallets.py' ran", {"node_type":node})
 
 delete_wallets()

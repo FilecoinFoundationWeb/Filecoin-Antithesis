@@ -39,10 +39,16 @@ def make_transaction(node_type:str, rpc_url:str, auth_token:str, from_wallet:str
     txn_response = rpc.mpool_push_message(node_type=node_type, rpc_url=rpc_url, auth_token=auth_token, from_wallet=from_wallet, from_wallet_pk=from_wallet_pk, to_wallet=to_wallet, fil=fil_amount, gas_info=gas_info, cid=cid)
     if txn_response:
         print(f"Workload [transaction.py]: a successful transaction on a {node_type} node")
-        always(True, "Executed a transaction", None)
+        if node_type == "forest":
+            always(True, "Forest: Executed a transaction", None)
+        if node_type == "lotus":
+            always(True, "Lotus: Executed a transaction", None)
         return True
     print(f"Workload [transaction.py]: a failed transaction on a {node_type} node")
-    always(False, "Executed a transaction", {"node_type":node_type,"response":txn_response})
+    if node_type == "forest":
+        always(False, "Forest: Executed a transaction", {"node_type":node_type,"response":txn_response})
+    if node_type == "lotus":
+        always(False, "Lotus: Executed a transaction", {"node_type":node_type,"response":txn_response})
     return False
 
 
@@ -61,7 +67,10 @@ def feed_wallets(node_type:str, rpc_url:str, auth_token:str, genesis_wallet:str,
     print(f"Workload [transaction.py]: attempting to give FIL to {num_wallets} wallets from the genesis wallet")
     while wallets_fed < num_wallets:
         if backoff >= 16:
-            unreachable("Timeout: give wallets FIL from genesis wallet", None)
+            if node_type == "forest":
+                unreachable("Forest: Timeout occurred when giving wallets FIL from genesis wallet", None)
+            if node_type == "lotus":
+                unreachable("Lotus: Timeout occurred when giving wallets FIL from genesis wallet", None)
             print(f"Workload [transaction.py]: failed to give wallet FIL after a long time on a {node_type} node. this is a serious issue. only finished {num_wallets} wallets. finishing early.")
             return
         succeed = make_transaction(node_type=node_type, rpc_url=rpc_url, auth_token=auth_token, from_wallet=genesis_wallet, from_wallet_pk=genesis_wallet_pk, to_wallet=to_wallets[wallets_fed], attoFIL=attoFIL)
@@ -73,5 +82,9 @@ def feed_wallets(node_type:str, rpc_url:str, auth_token:str, genesis_wallet:str,
             backoff += 1
             print(f"Workload [transaction.py]: failed to give FIL to wallet. retrying... attempt {backoff+1} for wallet #{wallets_fed+1}")
             time.sleep(backoff)
-    reachable("Give wallets FIL from the genesis wallet", None)
+    
+    if node_type == "forest":
+        reachable("Forest: Able to give wallets FIL from the genesis wallet", None)
+    if node_type == "lotus":
+        reachable("Lotus: Able to give wallets FIL from the genesis wallet", None)
     print(f"Workload [transaction.py]: successfully gave FIL to wallets from the genesis wallet")

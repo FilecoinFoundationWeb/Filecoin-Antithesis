@@ -41,7 +41,11 @@ def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict
 
         func = getattr(requests, method)
         response = func(rpc_url, headers=headers, **kwargs)
-        reachable("A RPC request was send and a response was received", None)
+        
+        if node_type == "forest":
+            reachable("Forest: A RPC request was send and a response was received", None)
+        if node_type == "lotus":
+            reachable("Lotus: A RPC request was send and a response was received", None)
 
         return {
             'request': {
@@ -53,5 +57,8 @@ def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict
         }
     
     print(f"Workload [request.py]: No request was sent because method was {method}")
-    unreachable("Invalid HTTP method in a RPC request", {"invalid http method":method})
+    if node_type == "forest":
+        unreachable("Forest: Invalid HTTP method in a RPC request", {"invalid http method":method})
+    if node_type == "lotus":
+        unreachable("Lotus: Invalid HTTP method in a RPC request", {"invalid http method":method})
     return None

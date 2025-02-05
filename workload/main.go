@@ -225,48 +225,48 @@ func performDisconnectOperation(ctx context.Context, nodeConfig *resources.NodeC
 }
 
 func performDeploySimpleCoin(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) {
-	assert.Always(nodeConfig != nil, "NodeConfig cannot be nil", nil)
-	assert.Always(contractPath != "", "Contract path cannot be empty", nil)
+	assert.Always(nodeConfig != nil, "Workload: NodeConfig cannot be nil", nil)
+	assert.Always(contractPath != "", "Workload: Contract path cannot be empty", nil)
 
 	// Connect to Lotus node
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	assert.Always(err == nil, "Failed to connect to Lotus node", map[string]interface{}{
+	assert.Always(err == nil, "Lotus: Successful http jsonrpc client connection", map[string]interface{}{
 		"node": nodeConfig.Name, "err": err,
 	})
 	defer closer()
 
 	// Deploy the contract
 	fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
-	assert.Always(fromAddr.String() != "", "Deployment failed: from address is empty", nil)
-	assert.Always(contractAddr.String() != "", "Deployment failed: contract address is empty", nil)
+	assert.Always(fromAddr.String() != "", "Lotus: Deployment address is not empty", nil)
+	assert.Always(contractAddr.String() != "", "Lotus: Deployment contract address is not empty", nil)
 
 	// Generate input data for owner's address
 	inputData := resources.InputDataFromFrom(ctx, api, fromAddr)
-	assert.Always(len(inputData) > 0, "Input data for owner's address cannot be empty", nil)
+	assert.Always(len(inputData) > 0, "Lotus: Input data for owner's address is not empty", nil)
 
 	// Invoke contract for owner's balance
 	result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
-	assert.Sometimes(err == nil, "Failed to retrieve owner's balance", map[string]interface{}{
+	assert.Sometimes(err == nil, "Lotus: Failed to retrieve owner's balance", map[string]interface{}{
 		"fromAddr":     fromAddr,
 		"contractAddr": contractAddr,
 		"function":     "getBalance(address)",
 		"err":          err,
 	})
 	expectedOwnerBalance := "0000000000000000000000000000000000000000000000000000000000002710" // Example balance in string format
-	assert.Sometimes(hex.EncodeToString(result) == expectedOwnerBalance, "Owner's balance mismatch", map[string]interface{}{
+	assert.Sometimes(hex.EncodeToString(result) == expectedOwnerBalance, "Lotus: Owner's balance mismatch", map[string]interface{}{
 		"expected": expectedOwnerBalance, "actual": hex.EncodeToString(result),
 	})
 
 	inputData[31]++
 	resultt, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
-	assert.Sometimes(err == nil, "Failed to retrieve non-owner's balance", map[string]interface{}{
+	assert.Sometimes(err == nil, "Lotus: Failed to retrieve non-owner's balance", map[string]interface{}{
 		"fromAddr":     fromAddr,
 		"contractAddr": contractAddr,
 		"function":     "getBalance(address)",
 		"err":          err,
 	})
 	expectedNonOwnerBalance := "0000000000000000000000000000000000000000000000000000000000000000" // Example balance in string format
-	assert.Sometimes(hex.EncodeToString(resultt) == expectedNonOwnerBalance, "Non-owner's balance mismatch", map[string]interface{}{
+	assert.Sometimes(hex.EncodeToString(resultt) == expectedNonOwnerBalance, "Lotus: Non-owner's balance mismatch occurred", map[string]interface{}{
 		"expected": expectedNonOwnerBalance, "actual": hex.EncodeToString(resultt),
 	})
 

@@ -14,7 +14,7 @@ func TestF3GetCertificateEquality(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Loading the resources config", map[string]interface{}{"error": err})
 
 	nodeNames := []string{"Lotus1", "Lotus2"}
 	var filterNodes []resources.NodeConfig
@@ -31,7 +31,11 @@ func TestF3GetCertificateEquality(t *testing.T) {
 	var certificates []interface{}
 	for _, node := range filterNodes {
 		api, closer, err := resources.ConnectToNode(ctx, node)
-		assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node.Name, "error": err})
+		if node.Name == "Forest" {
+			assert.Always(err == nil, "Forest: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+		} else if node.Name == "Lotus1" || node.Name == "Lotus2" {
+			assert.Always(err == nil, "Lotus: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+		}
 
 		if err != nil {
 			return
@@ -39,7 +43,11 @@ func TestF3GetCertificateEquality(t *testing.T) {
 		defer closer()
 
 		isRunning, err := api.F3IsRunning(ctx)
-		assert.Always(err == nil, "Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+		if node.Name == "Forest" {
+			assert.Always(err == nil, "Forest: Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+		} else if node.Name == "Lotus1" || node.Name == "Lotus2" {
+			assert.Always(err == nil, "Lotus: Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+		}
 
 		if !isRunning {
 			return

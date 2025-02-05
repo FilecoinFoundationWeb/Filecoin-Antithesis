@@ -16,7 +16,7 @@ func TestTipsetConsistency(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Loading the resources config", map[string]interface{}{"error": err})
 
 	nodeNames := []string{"Lotus1", "Lotus2"}
 
@@ -43,7 +43,11 @@ func TestTipsetConsistency(t *testing.T) {
 		go func(i int, node resources.NodeConfig) {
 			defer wg.Done()
 			api, closer, err := resources.ConnectToNode(ctx, node)
-			assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node, "error": err})
+			if node.Name == "Forest" {
+				assert.Always(err == nil, "Forest: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+			} else if node.Name == "Lotus1" || node.Name == "Lotus2" {
+				assert.Always(err == nil, "Lotus: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+			}
 			if err != nil {
 				return
 			}
@@ -51,7 +55,7 @@ func TestTipsetConsistency(t *testing.T) {
 
 			// Fetch ChainHead
 			head, err := api.ChainHead(ctx)
-			assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node, "error": err})
+			assert.Always(err == nil, "Workload: Getting the chainhead for a node", map[string]interface{}{"node": node, "error": err})
 			if err != nil {
 				return
 			}

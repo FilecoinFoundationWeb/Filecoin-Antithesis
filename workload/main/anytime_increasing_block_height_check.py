@@ -29,7 +29,10 @@ def check_increasing_block_height(n=3, time_limit=7.5):
                 e = time.monotonic_ns()
                 diff = round((s - e)/1_000_000_000, 2)
                 print(f"Workload [main][anytime_increasing_block_height_check.py]: time difference between block height {height} and block height {new_height} was {diff} seconds")
-                always(diff < time_limit, "Chainhead increases within the time boundary (7.5s)", {"old height":height,"new height":new_height,"time difference":diff})
+                if node == "forest":
+                    always(diff < time_limit, "Forest: Chainhead increases within the time boundary (7.5s)", {"old height":height,"new height":new_height,"time difference":diff})
+                if node == "lotus":
+                    always(diff < time_limit, "Lotus: Chainhead increases within the time boundary (7.5s)", {"old height":height,"new height":new_height,"time difference":diff})
                 break
             time.sleep(0.5)
 

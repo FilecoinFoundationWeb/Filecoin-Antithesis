@@ -31,7 +31,7 @@ def init_wallets(node_type):
     transaction.feed_wallets(node_type, rpc_url, auth_token, genesis_wallet, genesis_wallet_pk, new_wallets, 40000)
 
     # reached the end of the script without error
-    reachable("Successful 'initialize_wallets.py' script execution", {"node":node_type})
+    reachable("Lotus: Initialized wallets", {"node":node_type})
   
 
 if __name__ == "__main__":

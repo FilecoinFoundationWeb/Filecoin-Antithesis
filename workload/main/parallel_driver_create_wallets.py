@@ -16,6 +16,5 @@ def create_wallets():
     new_wallets_pks = wallets.get_wallets_private_keys(node_type=node, rpc_url=rpc_url, auth_token=auth_token, wallets=new_wallets)
     wallet_pk_dict = dict(zip(new_wallets, new_wallets_pks))
     wallets.write_wallets_locally(wallet_pk=wallet_pk_dict)
-    reachable("Script execution: 'parallel_driver_create_wallets.py' ran", {"node_type":node})
 
 create_wallets()

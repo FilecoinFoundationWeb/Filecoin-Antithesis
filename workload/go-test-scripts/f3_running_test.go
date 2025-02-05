@@ -14,7 +14,7 @@ func TestF3IsRunningEquality(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Loading the resources config", map[string]interface{}{"error": err})
 
 	nodeNames := []string{"Lotus1", "Lotus2", "Forest"}
 	var filterNodes []resources.NodeConfig
@@ -36,7 +36,11 @@ func TestF3IsRunningEquality(t *testing.T) {
 			defer wg.Done()
 
 			api, closer, err := resources.ConnectToNode(ctx, node)
-			assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node.Name, "error": err})
+			if node.Name == "Forest" {
+				assert.Always(err == nil, "Forest: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+			} else if node.Name == "Lotus1" || node.Name == "Lotus2" {
+				assert.Always(err == nil, "Lotus: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+			}
 
 			if err != nil {
 				return
@@ -44,7 +48,11 @@ func TestF3IsRunningEquality(t *testing.T) {
 			defer closer()
 
 			isRunning, err := api.F3IsRunning(ctx)
-			assert.Always(err == nil, "Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+			if node.Name == "Forest" {
+				assert.Always(err == nil, "Forest: Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+			} else if node.Name == "Lotus1" || node.Name == "Lotus2" {
+				assert.Always(err == nil, "Lotus: Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+			}
 
 			if err != nil {
 				t.Logf("Error fetching F3 status for node: %v", node.Name)
@@ -52,7 +60,11 @@ func TestF3IsRunningEquality(t *testing.T) {
 			}
 
 			if isRunning {
-				assert.Sometimes(isRunning, "F3 is running on node", map[string]interface{}{"node": node.Name})
+				if node.Name == "Forest" {
+					assert.Sometimes(isRunning, "Forest: F3 is running", map[string]interface{}{"node": node.Name})
+				} else if node.Name == "Lotus1" || node.Name == "Lotus2" {
+					assert.Sometimes(isRunning, "Lotus: F3 is running", map[string]interface{}{"node": node.Name})
+				}
 			} else {
 				t.Logf("Node: %v is not running F3", node.Name)
 			}

@@ -15,7 +15,7 @@ func TestNodeHeightProgression(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Loading the resources config", map[string]interface{}{"error": err})
 
 	// Hardcoded list of Lotus nodes to test
 	nodeNames := []string{"Lotus1", "Lotus2"}
@@ -39,7 +39,11 @@ func TestNodeHeightProgression(t *testing.T) {
 	// Test chain height progression for each filtered node
 	for _, node := range filteredNodes {
 		api, closer, err := resources.ConnectToNode(ctx, node)
-		assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node, "error": err})
+		if node.Name == "Forest" {
+			assert.Always(err == nil, "Forest: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+		} else if node.Name == "Lotus1" || node.Name == "Lotus2" {
+			assert.Always(err == nil, "Lotus: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+		}
 
 		if err != nil {
 			return
@@ -48,7 +52,7 @@ func TestNodeHeightProgression(t *testing.T) {
 
 		// Get initial chain height
 		initialHead, err := api.ChainHead(ctx)
-		assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node, "error": err})
+		assert.Always(err == nil, "Workload: Getting the chainhead for a node", map[string]interface{}{"node": node, "error": err})
 
 		if err != nil {
 			return
@@ -66,14 +70,14 @@ func TestNodeHeightProgression(t *testing.T) {
 		for {
 			select {
 			case <-time.After(timeout):
-				assert.Always(false, "Chain height for a node progresses when checked", map[string]interface{}{
+				assert.Always(false, "Lotus: Chain height progresses when checked", map[string]interface{}{
 					"node":           node,
 					"initial_height": initialHeight,
 					"error":          nil,
 				})
 			case <-ticker.C:
 				currentHead, err := api.ChainHead(ctx)
-				assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node, "error": err})
+				assert.Always(err == nil, "Workload: Getting the chainhead for a node", map[string]interface{}{"node": node, "error": err})
 
 				if err != nil {
 					return
@@ -83,7 +87,7 @@ func TestNodeHeightProgression(t *testing.T) {
 
 				if currentHeight > initialHeight {
 
-					assert.Always(true, "Chain height for a node progresses when checked", map[string]interface{}{
+					assert.Always(true, "Lotus: Chain height progresses when checked", map[string]interface{}{
 						"node":           node,
 						"initial_height": initialHeight,
 						"current_height": currentHeight,

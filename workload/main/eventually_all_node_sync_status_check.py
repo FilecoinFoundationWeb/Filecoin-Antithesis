@@ -30,6 +30,6 @@ def all_node_sync_status():
     # each height is an int
     within_one = max(node_height_dict.values()) - min(node_height_dict.values()) <= 1
 
-    always(within_one, "All nodes are synced (within 1) during period of no faults", node_height_dict)
+    always(within_one, "Workload: All nodes are synced (within 1) during period of no faults", node_height_dict)
 
 all_node_sync_status()

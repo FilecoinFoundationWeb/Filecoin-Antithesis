@@ -45,8 +45,6 @@ def spam_hard(n_wallets:int=10):
         print(f"Workload [main][spammer.py]: amount of attoFIL for the next transaction: {amount}")
         make_transaction(node, rpc_url, auth_token, from_w, from_pk, to_w, amount)
         time.sleep(cooldown)
-    
-    reachable("Script execution: 'parallel_driver_spammer.py' ran", {"node_type":node})
 
 
 spam_hard()

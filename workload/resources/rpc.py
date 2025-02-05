@@ -23,20 +23,32 @@ def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     })
     response = request(node_type, rpc_url, auth_token, "post", payload)
     if response['response'].status_code != 200:
-        always(False, "List existing wallets on the chain", {"node_type":node_type,"response":response['response']})
+        if node_type == "forest":
+            always(False, "Forest: List existing wallets on the chain", {"node_type":node_type,"response":response['response']})
+        if node_type == "lotus":
+            always(False, "Lotus: List existing wallets on the chain", {"node_type":node_type,"response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during get_genesis_wallet for {method} on a {node_type} node")
         return None
-    always(True, "List existing wallets on the chain", None)
+    if node_type == "forest":
+        always(True, "Forest: List existing wallets on the chain", None)
+    if node_type == "lotus":
+        always(True, "Lotus: List existing wallets on the chain", None)
     print(f"Workload [rpc.py]: good response status code during get_genesis_wallet for {method} on a {node_type} node")
     response_body = response['response'].json()
 
     # questionable way to pick out genesis wallet. its hash is much longer than a regular wallet...
     for w in response_body['result']:
         if len(w) > 41:
-            always(True, "Found the genesis wallet", None)
+            if node_type == "forest":
+                always(True, "Forest: Found the genesis wallet", None)
+            if node_type == "lotus":
+                always(True, "Lotus: Found the genesis wallet", None)
             print("Workload [rpc.py]: found the genesis wallet. returning its hash")
             return w
-    always(False, "Found the genesis wallet", {"List of wallets":response_body['result']})
+    if node_type == "forest":
+        always(False, "Forest: Found the genesis wallet", {"List of wallets":response_body['result']})
+    if node_type == "lotus":
+        always(False, "Lotus: Found the genesis wallet", {"List of wallets":response_body['result']})
     print("Workload [rpc.py]: failed to find genesis wallet")
     return None
 
@@ -57,10 +69,16 @@ def create_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        always(False, "Create a new wallet", {"node_type":node_type,"response":response['response']})
+        if node_type == "lotus":
+            always(False, "Lotus: Create a new wallet", {"node_type":node_type,"response":response['response']})
+        if node_type == "forest":
+            always(False, "Forest: Create a new wallet", {"node_type":node_type,"response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during create_wallet for {method} on a {node_type} node")
         return None
-    always(True, "Create a new wallet", None)
+    if node_type == "lotus":
+        always(True, "Lotus: Create a new wallet", None)
+    if node_type == "forest":
+        always(True, "Forest: Create a new wallet", None)
     print(f"Workload [rpc.py]: good response status code during create_wallet for {method} on a {node_type} node")
     return response['response'].json()['result']
 
@@ -81,10 +99,16 @@ def delete_wallet(node_type:str, rpc_url:str, auth_token:str, wallet:str) -> boo
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        always(False, "Delete a wallet", {"node type":node_type,"response":response['response']})
+        if node_type == "forest":
+            always(False, "Forest: Delete a wallet", {"node type":node_type,"response":response['response']})
+        if node_type == "lotus":
+            always(False, "Lotus: Delete a wallet", {"node type":node_type,"response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during delete_wallet for {method} on a {node_type} node")
         return False
-    always(True, "Delete a wallet", None)
+    if node_type == "forest":
+        always(True, "Forest: Delete a wallet", None)
+    if node_type == "lotus":
+        always(True, "Lotus: Delete a wallet", None)
     print(f"Workload [rpc.py]: good response status code during delete_wallet for {method} on a {node_type} node")
     return True
 
@@ -106,10 +130,16 @@ def get_wallet_private_key(node_type:str, rpc_url:str, auth_token:str, wallet:st
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        always(False, "Get a wallet private key", {"node type":node_type,"response":response['response']})
+        if node_type == "forest":
+            always(False, "Forest: Get a wallet private key", {"node type":node_type,"response":response['response']})
+        if node_type == "lotus":
+            always(False, "Lotus: Get a wallet private key", {"node type":node_type,"response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during get_wallet_private_key for {method} on a {node_type} node")
         return None
-    always(True, "Get a wallet private key", None)
+    if node_type == "forest":
+        always(True, "Forest: Get a wallet private key", None)
+    if node_type == "lotus":
+        always(True, "Lotus: Get a wallet private key", None)
     print(f"Workload [rpc.py]: good response status code during get_wallet_private_key for {method} on a {node_type} node")
     return response['response'].json()['result']['PrivateKey']
 
@@ -155,10 +185,16 @@ def get_chainhead(node_type, rpc_url:str, auth_token:str) -> str:
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        always(False, "Get the chainhead", {"node type":node_type,"response":response['response']})
+        if node_type == "forest":
+            always(False, "Forest: Get the chainhead", {"node type":node_type,"response":response['response']})
+        if node_type == "lotus":
+            always(False, "Lotus: Get the chainhead", {"node type":node_type,"response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during get_chainhead for {method} on a {node_type} node")
         return None
-    always(True, "Get the chainhead", None)
+    if node_type == "forest":
+        always(True, "Forest: Get the chainhead", None)
+    if node_type == "lotus":
+        always(True, "Lotus: Get the chainhead", None)
     print(f"Workload [rpc.py]: good response status code during get_chainhead for {method} on a {node_type} node")
     response_body = response['response'].json()
 
@@ -203,10 +239,16 @@ def estimate_message_gas(node_type:str, rpc_url:str, auth_token:str, from_wallet
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        always(False, "Estimate message gas for a transaction", {"node type":node_type,"response":response['response']})
+        if node_type == "forest":
+            always(False, "Forest: Estimate message gas for a transaction", {"node type":node_type,"response":response['response']})
+        if node_type == "lotus":
+            always(False, "Lotus: Estimate message gas for a transaction", {"node type":node_type,"response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during estimate_message_gas for {method} on a {node_type} node")
         return None
-    always(True, "Estimate message gas for a transaction", None)
+    if node_type == "forest":
+        always(True, "Forest: Estimate message gas for a transaction", None)
+    if node_type == "lotus":
+        always(True, "Lotus: Estimate message gas for a transaction", None)
     print(f"Workload [rpc.py]: good response status code during estimate_message_gas for {method} on a {node_type} node")
     return response['response'].json()['result']
 
@@ -255,10 +297,16 @@ def mpool_push_message(node_type:str, rpc_url:str, auth_token:str, from_wallet:s
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
     if response['response'].status_code != 200:
-        always(False, "Push message to mpool", {"node type":node_type,"response":response['response']})
+        if node_type == "forest":
+            always(False, "Forest: Push message to mpool", {"node type":node_type,"response":response['response']})
+        if node_type == "lotus":
+            always(False, "Lotus: Push message to mpool", {"node type":node_type,"response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during push_message for {method} on a {node_type} node")
         return None
-    always(True, "Push message to mpool", None)
+    if node_type == "forest":
+        always(True, "Forest: Push message to mpool", None)
+    if node_type == "lotus":
+        always(True, "Lotus: Push message to mpool", None)
     print(f"Workload [rpc.py]: good response status code during push_message for {method} on a {node_type} node")
     return response
 

@@ -15,7 +15,7 @@ func TestSamePowerTableAcrossNodes(t *testing.T) {
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	assert.Always(err == nil, "Workload: Loading the resources config", map[string]interface{}{"error": err})
 
 	// Ensure there are nodes in the configuration
 	if len(config.Nodes) == 0 {
@@ -31,7 +31,11 @@ func TestSamePowerTableAcrossNodes(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			api, closer, err := resources.ConnectToNode(ctx, node)
-			assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node.Name, "error": err})
+			if node.Name == "Forest" {
+				assert.Always(err == nil, "Forest: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+			} else if node.Name == "Lotus1" || node.Name == "Lotus2" {
+				assert.Always(err == nil, "Lotus: Successful http jsonrpc client connection", map[string]interface{}{"node": node.Name, "error": err})
+			}
 			if err != nil {
 				errChan <- err
 				return
