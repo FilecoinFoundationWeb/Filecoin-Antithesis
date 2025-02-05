@@ -6,7 +6,7 @@ This README serves as a guide for both prospective and active contributers. We w
 
 ## Setup
 
-There are 10 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 lotus and 2 forest nodes, 2 lotus miners, and 1 `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
+There are 10 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 `lotus` and 2 `forest` nodes, 2 `lotus miners`, and 1 `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
 
 The `workload` container has the test scripts where endpoints are called, smart contracts deployed, transactions requested, etc... There are also validations to assert correctness and guarantees also occur in this container using the [Antithesis SDK](https://antithesis.com/docs/using_antithesis/sdk/). We explain more on the SDK in a later section.
 
@@ -65,7 +65,7 @@ To run a manual Antithesis Test, we have implemented GitHub actions. There is al
 
 ### Antithesis Test Composer
 
-[The Antithesis Test Composer](https://antithesis.com/docs/test_templates/first_test/) is a framework that gives the Antithesis system control over what is being executed. Hundreds of thousands of different scenarios are executed during a long enough test 
+[The Antithesis Test Composer](https://antithesis.com/docs/test_templates/first_test/) is a framework that gives the Antithesis system control over what is being executed. Hundreds of thousands of different scenarios are executed during a long enough test. It looks for executables with a specific naming convention in a specific directory (explained in the video below).
 
 [Test Composer Video](https://drive.google.com/file/d/1MLk_NAVMfq5BsBT_DPkiksqh5oSQpB2m/view?usp=drive_link)
 
@@ -85,7 +85,7 @@ A good practice to confirm your test script works correctly in Antithesis is to 
 
 `docker exec workload /opt/antithesis/test/v1/main/parallel_driver_create_wallets.sh`
 
-4. We should see the command successfully complete. You've now validated that your test is ready to run on the Antithesis platform! (Note that SDK assertions won't be evaluated locally).
+4. We should see the command successfully complete. You've now validated this test is ready to run on the Antithesis platform! (Note that SDK assertions won't be evaluated locally).
 
 ## How to Contribute
 
