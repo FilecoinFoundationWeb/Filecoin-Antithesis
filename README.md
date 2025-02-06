@@ -20,42 +20,6 @@ The `cleanup.sh` executable will clear the data directory. This data directory i
 
 There are supplementary READMEs located in the drand, forest, lotus, and workload directories. These provide some description specific to their respective folders. 
 
-## Using Antithesis
-
-Antithesis is an autonomous testing platform that finds the bugs in your software, with perfect reproducibility to help you fix them.
-
-### Antithesis Fault Injector
-
-Antithesis generates various failure scenarios. The FileCoin system should be resilient to these faults since they happen in production! We automate the process of injecting faults (e.g., crashes, network partitions, thread pausing) into the system, as well as observing system metrics like unexpected container exits and memory usage.
-
-Note: Faults are not injected into the SUT until a "setup_complete" message is emitted. This message is emitted from the `entrypoint.py` script in the `workload` container.
-
-### Antithesis SDK & Test Properties
-
-To generate test cases, Antithesis relies on **test properties** you define. This short video walks through defining SDK assertions within the `workload` container. Assertions can defined in any container in the SUT.
-
-[SDK & Test Properties Video](https://drive.google.com/file/d/1x5VbelH-0WmMvIV4u8vWOgR046A0oubq/view?usp=drive_link)
-
-### Triaging the Report and viewing your Test Properties
-
-Triaging the reports is critical to determine if any of your test properties failed. This short video walks through the report test properties and how they relate to the assertions defined in the `workload` container.
-
-[Triage the Report Video](https://drive.google.com/file/d/1ESQRLXBJitEv9H5e0mcAe6yWiylu0MPd/view?usp=drive_link)
-
-### Running an Antithesis Test from GitHub
-
-To run a manual Antithesis Test, we have implemented GitHub actions. There is also a cron job for nightly 10 hour runs. This short video explains how to run these actions with the branch your test properties are defined on.
-
-[GitHub Actions Video](https://drive.google.com/file/d/1dFBuBnVcFcE-vSFsnIh-jcSVY5m9ALQK/view?usp=drive_link)
-
-### Antithesis Test Composer
-
-[The Antithesis Test Composer](https://antithesis.com/docs/test_templates/first_test/) is a framework that gives the Antithesis system control over what is being executed. Hundreds of thousands of different scenarios are executed during a long enough test. It looks for executables with a specific naming convention in a specific directory (explained in the video below).
-
-[Test Composer Video](https://drive.google.com/file/d/1MLk_NAVMfq5BsBT_DPkiksqh5oSQpB2m/view?usp=drive_link)
-
-For more details, refer to the [Antithesis Documentation](https://antithesis.com/docs/introduction/how_antithesis_works/).
-
 ## Sanity Check Locally
 
 A good practice to confirm your test script works correctly in Antithesis is to run it locally. Here are the steps:
@@ -71,6 +35,44 @@ A good practice to confirm your test script works correctly in Antithesis is to 
 `docker exec workload /opt/antithesis/test/v1/main/parallel_driver_create_wallets.sh`
 
 4. We should see the command successfully complete. You've now validated this test is ready to run on the Antithesis platform! (Note that SDK assertions won't be evaluated locally).
+
+5. When finished, run `docker-compose down` to stop all the running containers. Complete a local iteration cycle by running the `cleanup.sh` command.
+
+## Using Antithesis
+
+Antithesis is an autonomous testing platform that finds the bugs in your software, with perfect reproducibility to help you fix them.
+
+### Antithesis Fault Injector
+
+Antithesis generates various failure scenarios. The FileCoin system should be resilient to these faults since they happen in production! We automate the process of injecting faults (e.g., crashes, network partitions, thread pausing) into the system, as well as observing system metrics like unexpected container exits and memory usage.
+
+Note: Faults are not injected into the SUT until a "setup_complete" message is emitted. This message is emitted from the `entrypoint.py` script in the `workload` container.
+
+### Antithesis SDK & Test Properties
+
+To generate test cases, Antithesis relies on **test properties** you define. This short video walks through defining SDK assertions within the `workload` container. Assertions can defined in any container in the SUT.
+
+[<img src="1.png">](https://drive.google.com/file/d/1x5VbelH-0WmMvIV4u8vWOgR046A0oubq/view?usp=drive_link)
+
+### Triaging the Report and viewing your Test Properties
+
+Triaging the reports is critical to determine if any of your test properties failed. This short video walks through the report test properties and how they relate to the assertions defined in the `workload` container.
+
+[<img src="2.png">](https://drive.google.com/file/d/1ESQRLXBJitEv9H5e0mcAe6yWiylu0MPd/view?usp=drive_link)
+
+### Running an Antithesis Test from GitHub
+
+To run a manual Antithesis Test, we have implemented GitHub actions. There is also a cron job for nightly 10 hour runs. This short video explains how to run these actions with the branch your test properties are defined on.
+
+[<img src="3.png">](https://drive.google.com/file/d/1dFBuBnVcFcE-vSFsnIh-jcSVY5m9ALQK/view?usp=drive_link)
+
+### Antithesis Test Composer
+
+[The Antithesis Test Composer](https://antithesis.com/docs/test_templates/first_test/) is a framework that gives the Antithesis system control over what is being executed. Hundreds of thousands of different scenarios are executed during a long enough test. It looks for executables with a specific naming convention in a specific directory (explained in the video below).
+
+[<img src="4.png">](https://drive.google.com/file/d/1MLk_NAVMfq5BsBT_DPkiksqh5oSQpB2m/view?usp=drive_link)
+
+For more details, refer to the [Antithesis Documentation](https://antithesis.com/docs/introduction/how_antithesis_works/).
 
 ## How to Contribute
 
