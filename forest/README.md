@@ -1,0 +1,2 @@
+-   **forest/**: Contains the Dockerfile and startup scripts for the forest node. Also includes configuration templates.
+    -   **start_scripts/**: The `forest-init.sh` startup script will initialize a Forest node. The `forest-connector.sh`will connect a Forest node.

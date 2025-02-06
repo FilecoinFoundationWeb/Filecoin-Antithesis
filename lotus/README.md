@@ -1,0 +1,2 @@
+-   **lotus/**: Contains the Dockerfile and startup scripts for the lotus node. Also includes configuration and patch files to support interaction with other nodes.
+    -   **start_scripts/**: Contains scripts for starting Lotus nodes and miners (e.g., `lotus-1.sh`, `lotus-miner-1.sh`).

@@ -6,34 +6,19 @@ This README serves as a guide for both prospective and active contributers. We w
 
 ## Setup
 
-There are 10 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 `lotus` and 2 `forest` nodes, 2 `lotus miners`, and 1 `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
+There are 10 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 lotus nodes (`lotus-1`, `lotus-2`), 2 forest nodes (`forest`, `forest-connector`), 2 lotus miners (`lotus-miner-1`, `lotus-miner-2`), and 1 `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
 
-The `workload` container has the test scripts where endpoints are called, smart contracts deployed, transactions requested, etc... There are also validations to assert correctness and guarantees also occur in this container using the [Antithesis SDK](https://antithesis.com/docs/using_antithesis/sdk/). We explain more on the SDK in a later section.
+The `workload` container has the [test commands](https://antithesis.com/docs/test_templates/first_test/#test-commands) where endpoints are called, smart contracts deployed, transactions requested, etc... There are also validations to assert correctness and guarantees also occur in this container using the [Antithesis SDK](https://antithesis.com/docs/using_antithesis/sdk/). We explain more on the SDK in a later section.
 
 ## Github Files and Directories
 
-The repository has the containerized setup explained above. Note: Antithesis is fully deterministic and requires our SUT to run without internet access (it is source of nondeterminism). We've made small patches for the Lotus and Forest nodes to work with a local Drand cluster.
+In this repository, we have directories that build all the images referenced in the setup above. 
 
-Below is a brief description of the key files and directories:
+We've made small patches for the Lotus and Forest nodes to work with a local Drand cluster. Antithesis is fully deterministic and requires our SUT to run without internet access (a source of nondeterminism).
 
--   **drand/**: Contains the Dockerfile and startup scripts for Drand nodes.
-    -   **start_scripts/**: Includes scripts like `drand-1.sh`, `drand-2.sh`, and `drand-3.sh` to start specific Drand nodes.
+The `cleanup.sh` executable will clear the data directory. This data directory is used when running the docker-compose locally, so emptying this is necessary after shutting down the system.
 
--   **forest/**: Contains the Dockerfile and startup scripts for the forest node. Also includes configuration templates.
-    -   **start_scripts/**: The `forest-init.sh` startup script will initialize a Forest node. The `forest-connector.sh`will connect a Forest node.
-
--   **lotus/**: Contains the Dockerfile and startup scripts for the lotus node. Also includes configuration and patch files to support interaction with other nodes.
-    -   **start_scripts/**: Contains scripts for starting Lotus nodes and miners (e.g., `lotus-1.sh`, `lotus-miner-1.sh`).
-
--   **workload/**: The main driver of the application, responsible for generating activity chains and asserting test properties. Includes:
-    -   **main.go**: Entrypoint of the application, a Go binary with CLI flags for different operations.
-    -   **main/**: Contains driver scripts and tests categorized by naming conventions (e.g., `parallel`, `anytime`, `eventually`). These are [Test Composer](https://antithesis.com/docs/test_templates/) commands that enable Antithesis to generate thousands of test cases that will run over a multitude of system states. Test Composer handles varying things like parallelism, test length, and command order.
-        -   Examples: `parallel_driver_spammer.py`, `anytime_node_height_progression.sh`, `eventually_all_node_sync_status_check.py`.
-    -   **resources/**: Helper files for workloads, such as `rpc.py`, `wallets.py`, and smart contract files (`SimpleCoin.sol`).
-    -   **removed/**: Contains deprecated or removed tests for reference.
-    -   **go-test-scripts/**: Contains more Go tests. They are called from an executable in main. Allows for Test Composer to control these scripts.
-
--   **cleanup.sh**: Cleans the persisted data in a local setup
+There are supplementary READMEs located in the drand, forest, lotus, and workload directories. These provide some description specific to their respective folders. 
 
 ## Using Antithesis
 
