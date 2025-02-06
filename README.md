@@ -20,6 +20,24 @@ The `cleanup.sh` executable will clear the data directory. This data directory i
 
 There are supplementary READMEs located in the drand, forest, lotus, and workload directories. These provide some description specific to their respective folders. 
 
+## Sanity Check Locally
+
+A good practice to confirm your test script works correctly in Antithesis is to run it locally. Here are the steps:
+
+1. Build each image required by the docker-compose.yml. We need a total of 4 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`). Below is an example of building the lotus image while inside the lotus directory.
+
+`docker build . lotus:latest`
+
+2. Run `docker-compose up` from the root directory to start all containers defined in `docker-compose.yml`
+
+3. After the workload container has signaled `setupComplete` (or printed `system is healthy`), you can run any test command 1 to many times via `docker exec`:
+
+`docker exec workload /opt/antithesis/test/v1/main/parallel_driver_create_wallets.sh`
+
+4. We should see the command successfully complete. You've now validated this test is ready to run on the Antithesis platform! (Note that SDK assertions won't be evaluated locally).
+
+5. When finished, run `docker-compose down` to stop all the running containers. Complete a local iteration cycle by running the `cleanup.sh` command.
+
 ## Using Antithesis
 
 Antithesis is an autonomous testing platform that finds the bugs in your software, with perfect reproducibility to help you fix them.
@@ -33,6 +51,8 @@ Note: Faults are not injected into the SUT until a "setup_complete" message is e
 ### Antithesis SDK & Test Properties
 
 To generate test cases, Antithesis relies on **test properties** you define. This short video walks through defining SDK assertions within the `workload` container. Assertions can defined in any container in the SUT.
+
+![Alt text](1.png)
 
 [SDK & Test Properties Video](https://drive.google.com/file/d/1x5VbelH-0WmMvIV4u8vWOgR046A0oubq/view?usp=drive_link)
 
@@ -55,22 +75,6 @@ To run a manual Antithesis Test, we have implemented GitHub actions. There is al
 [Test Composer Video](https://drive.google.com/file/d/1MLk_NAVMfq5BsBT_DPkiksqh5oSQpB2m/view?usp=drive_link)
 
 For more details, refer to the [Antithesis Documentation](https://antithesis.com/docs/introduction/how_antithesis_works/).
-
-## Sanity Check Locally
-
-A good practice to confirm your test script works correctly in Antithesis is to run it locally. Here are the steps:
-
-1. Build each image required by the docker-compose.yml. We need a total of 4 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`). Below is an example of building the lotus image while inside the lotus directory.
-
-`docker build . lotus:latest`
-
-2. Run `docker-compose up` from the root directory to start all containers defined in `docker-compose.yml`
-
-3. After the workload container has signaled `setupComplete` (or printed `system is healthy`), you can run any test command 1 to many times via `docker exec`:
-
-`docker exec workload /opt/antithesis/test/v1/main/parallel_driver_create_wallets.sh`
-
-4. We should see the command successfully complete. You've now validated this test is ready to run on the Antithesis platform! (Note that SDK assertions won't be evaluated locally).
 
 ## How to Contribute
 

@@ -1,2 +1,8 @@
--   **forest/**: Contains the Dockerfile and startup scripts for the forest node. Also includes configuration templates.
-    -   **start_scripts/**: The `forest-init.sh` startup script will initialize a Forest node. The `forest-connector.sh`will connect a Forest node.
+## forest
+ 
+* Dockerfile to build forest image
+* Startup scripts for forest nodes
+    * `forest-init.sh` will create a forest node
+    * `forest-connector.sh` will connect another forest node to the chain
+* `forest_config.toml.tpl` is a configuration template that is used in `forest-init.sh`
+* `forest.patch` is a patch to allow drand to run offline

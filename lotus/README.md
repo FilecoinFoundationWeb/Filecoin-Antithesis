@@ -1,2 +1,7 @@
--   **lotus/**: Contains the Dockerfile and startup scripts for the lotus node. Also includes configuration and patch files to support interaction with other nodes.
-    -   **start_scripts/**: Contains scripts for starting Lotus nodes and miners (e.g., `lotus-1.sh`, `lotus-miner-1.sh`).
+## lotus
+ 
+* Dockerfile to build lotus image
+* `exclusion.txt` is used in the Dockerfile for instrumentation. It excludes certain diractories from being instrumented. It was put in place to prevent some errors.
+* Startup scripts for lotus nodes.
+* `config-*.toml` files are used in the `lotus-*.sh` startup scripts for configuration
+* Patches for local drand and building lotus with data race checker
