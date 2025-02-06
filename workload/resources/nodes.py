@@ -18,7 +18,7 @@ def get_url_and_token(node_type:str):
         token_txt = "jwt"
         auth_token = get_token(f'{base_path}/{token_txt}')
         reachable("Forest: Got an authentication token", {"node":node_type,"rpc_url":rpc_url,"auth_token":auth_token})
-    elif node_type == "lotus-1":
+    elif node_type == "lotus":
         rpc_url = "http://10.20.20.24:1234/rpc/v0"
         base_path = "/root/devgen/lotus-1"
         token_txt = "jwt"
@@ -32,9 +32,9 @@ def get_url_and_token(node_type:str):
     return rpc_url, auth_token
 
 def select_random_node():
-    nodes = ["forest", "lotus-1"]
+    nodes = ["forest", "lotus"]
     return random.choice(nodes)
 
 def get_all_nodes():
-    nodes = ["forest", "lotus-1"]
+    nodes = ["forest", "lotus"]
     return nodes
