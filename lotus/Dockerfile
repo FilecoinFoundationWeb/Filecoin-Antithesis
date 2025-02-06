@@ -7,7 +7,7 @@ RUN apt-get update && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-ARG GIT_BRANCH="v1.31.0"
+ARG GIT_BRANCH="v1.31.1"
 
 RUN git clone --depth=1 --branch="${GIT_BRANCH}" https://github.com/filecoin-project/lotus.git /lotus
 
@@ -18,8 +18,8 @@ COPY ./lotus.patch ./lotus.patch
 RUN git apply lotus.patch
 
 # Adding race flags
-COPY ./make.patch ./make.patch
-RUN git apply make.patch
+# COPY ./make.patch ./make.patch
+# RUN git apply make.patch
 
 COPY ./config-1.toml .
 COPY ./config-2.toml .
