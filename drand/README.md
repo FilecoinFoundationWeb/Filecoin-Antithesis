@@ -1,2 +1,5 @@
--   **drand/**: Contains the Dockerfile and startup scripts for Drand nodes.
-    -   **start_scripts/**: Includes scripts like `drand-1.sh`, `drand-2.sh`, and `drand-3.sh` to start specific Drand nodes.
+## drand
+ 
+* Dockerfile to build drand image
+* Startup scripts for drand nodes.
+    * Ex: `drand-1` will execute the `drand-1.sh` script
