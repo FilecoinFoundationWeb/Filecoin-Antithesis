@@ -82,9 +82,6 @@ def feed_wallets(node_type:str, rpc_url:str, auth_token:str, genesis_wallet:str,
             backoff += 1
             print(f"Workload [transaction.py]: failed to give FIL to wallet. retrying... attempt {backoff+1} for wallet #{wallets_fed+1}")
             time.sleep(backoff)
-    
-    if node_type == "forest":
-        reachable("Forest: Able to give wallets FIL from the genesis wallet", None)
     if node_type == "lotus":
         reachable("Lotus: Able to give wallets FIL from the genesis wallet", None)
     print(f"Workload [transaction.py]: successfully gave FIL to wallets from the genesis wallet")

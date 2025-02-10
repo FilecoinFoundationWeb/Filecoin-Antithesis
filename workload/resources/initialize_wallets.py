@@ -10,8 +10,8 @@ from antithesis.assertions import (
 def init_wallets(node_type):
 
     # get genesis wallet & pk, use lotus node? not sure if I can do any of this on the forest node
-    lotus_rpc_url, lotus_auth_token = get_url_and_token(node_type="lotus-1")
-    genesis_wallet = wallets.get_genesis_wallet(node_type="lotus-1", rpc_url=lotus_rpc_url, auth_token=lotus_auth_token)
+    lotus_rpc_url, lotus_auth_token = get_url_and_token(node_type="lotus")
+    genesis_wallet = wallets.get_genesis_wallet(node_type="lotus", rpc_url=lotus_rpc_url, auth_token=lotus_auth_token)
     genesis_wallet_pk = wallets.get_wallets_private_keys(node_type=node_type, rpc_url=lotus_rpc_url, auth_token=lotus_auth_token, wallets=[genesis_wallet])[0]
 
     # get rpc_url and auth_token for node
