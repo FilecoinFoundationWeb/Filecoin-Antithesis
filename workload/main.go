@@ -30,13 +30,13 @@ func parseFlags() (*string, *string, *string, *int, *string) {
 }
 
 func validateInputs(operation, nodeName, contractPath *string) {
-	if *operation != "create" && *operation != "delete" && *operation != "spam" && *operation != "connect" && *operation != "disconnect" && *operation != "deploySimpleCoin" && *operation != "deployMCopy" {
+	if *operation != "create" && *operation != "delete" && *operation != "spam" && *operation != "connect" && *operation != "disconnect" && *operation != "deploySimpleCoin" && *operation != "deployMCopy" && *operation != "deployTStore" {
 		log.Fatalf("Invalid operation: %s. Use 'create', 'delete', 'spam', 'connect', 'disconnect', 'deploySimpleCoin', or 'deployMCopy'.", *operation)
 	}
-	if (*operation == "create" || *operation == "delete" || *operation == "connect" || *operation == "disconnect" || *operation == "deploySimpleCoin" || *operation == "deployMCopy") && *nodeName == "" {
+	if (*operation == "create" || *operation == "delete" || *operation == "connect" || *operation == "disconnect" || *operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore") && *nodeName == "" {
 		log.Fatalf("Node name is required for the '%s' operation.", *operation)
 	}
-	if (*operation == "deploySimpleCoin" || *operation == "deployMCopy") && *contractPath == "" {
+	if (*operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore") && *contractPath == "" {
 		log.Fatalf("Contract path is required for the '%s' operation.", *operation)
 	}
 }
@@ -72,7 +72,7 @@ func main() {
 			break
 		}
 	}
-	if (*operation == "create" || *operation == "delete" || *operation == "connect" || *operation == "disconnect" || *operation == "deploySimpleCoin" || *operation == "deployMCopy") && nodeConfig == nil {
+	if (*operation == "create" || *operation == "delete" || *operation == "connect" || *operation == "disconnect" || *operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore") && nodeConfig == nil {
 		log.Fatalf("Node '%s' not found in config.json.", *nodeName)
 	}
 
@@ -95,6 +95,8 @@ func main() {
 		performDeploySimpleCoin(ctx, nodeConfig, *contractPath)
 	case "deployMCopy":
 		performDeployMCopy(ctx, nodeConfig, *contractPath)
+	case "deployTStore":
+		performDeployTStore(ctx, nodeConfig, *contractPath)
 	}
 }
 
@@ -297,4 +299,46 @@ func performDeployMCopy(ctx context.Context, nodeConfig *resources.NodeConfig, c
 	} else {
 		log.Printf("MCopy invocation result: %x\n", result)
 	}
+}
+
+func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) {
+	log.Printf("Deploying and invoking TStore contract on node '%s'...", nodeConfig.Name)
+
+	// Connect to Lotus node
+	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Fatalf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+	}
+	defer closer()
+
+	// Deploy the contract
+	fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
+
+	inputData := make([]byte, 0)
+
+	// Run initial tests
+	if _, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "runTests()", inputData); err != nil {
+		log.Fatalf("Failed to invoke runTests(): %v", err)
+	}
+
+	// Validate lifecycle in subsequent transactions
+	if _, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testLifecycleValidationSubsequentTransaction()", inputData); err != nil {
+		log.Fatalf("Failed to invoke testLifecycleValidationSubsequentTransaction(): %v", err)
+	}
+
+	// Deploy a second contract instance for further testing
+	fromAddr, contractAddr2 := resources.DeployContractFromFilename(ctx, api, contractPath)
+	inputDataContract := resources.InputDataFromFrom(ctx, api, contractAddr2)
+
+	// Test re-entry scenarios
+	if _, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testReentry(address)", inputDataContract); err != nil {
+		log.Fatalf("Failed to invoke testReentry(address): %v", err)
+	}
+
+	// Test nested contract interactions
+	if _, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testNestedContracts(address)", inputDataContract); err != nil {
+		log.Fatalf("Failed to invoke testNestedContracts(address): %v", err)
+	}
+
+	log.Printf("TStore contract successfully deployed and tested on node '%s'.", nodeConfig.Name)
 }
