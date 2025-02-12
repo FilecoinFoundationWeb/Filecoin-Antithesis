@@ -22,8 +22,8 @@ formatted_json=$(jq --arg server "$DRAND_SERVER" '
 }' <<< "$json")
 
 # Export the formatted JSON as an environment variable
-export DRAND_QUICKNET_CONFIG="$formatted_json"
-echo $DRAND_QUICKNET_CONFIG
+export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
+echo $FOREST_DRAND_QUICKNET_CONFIG
 # Extract network name from localnet.json and set it as an environment variable
 export NETWORK_NAME=$(grep -o "localnet.*" "${LOTUS_1_DATA_DIR}/localnet.json" | tr -d '",' )
 forest --version
@@ -35,7 +35,7 @@ echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
 cat ${FOREST_DATA_DIR}/forest_config.toml
 # export FULLNODE_API_INFO=$TOKEN:/ip4/10.20.20.27/tcp/${FOREST_RPC_PORT}/http
 # Start the forest service with the specified configuration
-RUST_LOG=error,forest_filecoin=warn,error forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
+ forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
        --save-token "${FOREST_DATA_DIR}/jwt" \
        --rpc-address ${FOREST_IP}:${FOREST_RPC_PORT} \
