@@ -2,9 +2,28 @@
 # Enable strict mode to catch errors and undefined variables
 set -euo pipefail
 
-# Fetch and save DRAND chain information
-curl 10.20.20.21/info | jq -c > chain_info
-export DRAND_CHAIN_INFO=chain_info
+DRAND_SERVER="http://10.20.20.21"
+
+# Fetch JSON from the Drand endpoint
+json=$(curl -s "$DRAND_SERVER/info")
+
+# Format the JSON into the required structure
+formatted_json=$(jq --arg server "$DRAND_SERVER" '
+{
+  servers: [$server],
+  chain_info: {
+    public_key: .public_key,
+    period: .period,
+    genesis_time: .genesis_time,
+    hash: .hash,
+    groupHash: .groupHash
+  },
+  network_type: "Quicknet"
+}' <<< "$json")
+
+# Export the formatted JSON as an environment variable
+export DRAND_QUICKNET_CONFIG="$formatted_json"
+echo $DRAND_QUICKNET_CONFIG
 # Extract network name from localnet.json and set it as an environment variable
 export NETWORK_NAME=$(grep -o "localnet.*" "${LOTUS_1_DATA_DIR}/localnet.json" | tr -d '",' )
 forest --version
