@@ -16,7 +16,7 @@ RUN latest_version=$(git tag -l 'v*' | sort -V -r | head -n 1)
 COPY ./lotus.patch ./lotus.patch
 RUN git apply lotus.patch
 
-
+RUN git checkout ${GIT_BRANCH}
 # COPY ./make.patch ./make.patch
 # RUN git apply make.patch
 
