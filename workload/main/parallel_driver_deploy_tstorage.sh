@@ -2,9 +2,9 @@
 
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-OPERATION="deploySimpleCoin"
-NODE_NAMES=("Lotus1")
-CONTRACT_FILE="/opt/antithesis/resources/smart-contracts/SimpleCoin.hex"
+OPERATION="deployTStore"
+NODE_NAMES=("Lotus1" "Lotus2")  # Ensure no extra commas here
+CONTRACT_FILE="/opt/antithesis/resources/smart-contracts/TransientStorage.hex"
 
 # Ensure the application binary exists
 if [ ! -f "$APP_BINARY" ]; then
@@ -30,7 +30,8 @@ select_random_node() {
     echo "${NODE_NAMES[$index]}"
 }
 
-random_node=$(select_random_node)
+# Select and sanitize the node name
+random_node=$(select_random_node | tr -d '[:space:]')
 
 echo "Deploying smart contract $CONTRACT_FILE on node $random_node"
 

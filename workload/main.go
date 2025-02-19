@@ -317,28 +317,24 @@ func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	inputData := make([]byte, 0)
 
 	// Run initial tests
-	if _, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "runTests()", inputData); err != nil {
-		log.Fatalf("Failed to invoke runTests(): %v", err)
-	}
+	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "runTests()", inputData)
+	assert.Always(err == nil, "Failed to invoke runTests()", map[string]interface{}{"err": err})
 
 	// Validate lifecycle in subsequent transactions
-	if _, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testLifecycleValidationSubsequentTransaction()", inputData); err != nil {
-		log.Fatalf("Failed to invoke testLifecycleValidationSubsequentTransaction(): %v", err)
-	}
+	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testLifecycleValidationSubsequentTransaction()", inputData)
+	assert.Always(err == nil, "Failed to invoke testLifecycleValidationSubsequentTransaction()", map[string]interface{}{"err": err})
 
 	// Deploy a second contract instance for further testing
 	fromAddr, contractAddr2 := resources.DeployContractFromFilename(ctx, api, contractPath)
 	inputDataContract := resources.InputDataFromFrom(ctx, api, contractAddr2)
 
 	// Test re-entry scenarios
-	if _, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testReentry(address)", inputDataContract); err != nil {
-		log.Fatalf("Failed to invoke testReentry(address): %v", err)
-	}
+	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testReentry(address)", inputDataContract)
+	assert.Always(err == nil, "Failed to invoke testReentry(address)", map[string]interface{}{"err": err})
 
 	// Test nested contract interactions
-	if _, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testNestedContracts(address)", inputDataContract); err != nil {
-		log.Fatalf("Failed to invoke testNestedContracts(address): %v", err)
-	}
+	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testNestedContracts(address)", inputDataContract)
+	assert.Always(err == nil, "Failed to invoke testNestedContracts(address)", map[string]interface{}{"err": err})
 
 	log.Printf("TStore contract successfully deployed and tested on node '%s'.", nodeConfig.Name)
 }
