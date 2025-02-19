@@ -17,7 +17,7 @@ while [ "$tries" -gt 0 ]; do
     tries=$(( tries - 1 ))
     echo "lotus-1: $tries connection attempts remaining..."
 done
-export LOTUS_F3_BOOTSTRAP_EPOCH=901
+export LOTUS_F3_BOOTSTRAP_EPOCH=21
 export LOTUS_PATH=${LOTUS_1_PATH}
 export LOTUS_MINER_PATH=${LOTUS_MINER_1_PATH}
 export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}

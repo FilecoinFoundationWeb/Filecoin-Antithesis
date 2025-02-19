@@ -46,3 +46,31 @@
  	},
  	DrandTestnet: {
  		Servers: []string{
+--- a/chain/lf3/config.go	2025-02-18 22:04:46
++++ b/chain/lf3/config.go	2025-02-18 22:04:19
+@@ -11,7 +11,6 @@
+ 	"github.com/filecoin-project/go-state-types/abi"
+ 
+ 	"github.com/filecoin-project/lotus/build/buildconstants"
+-	"github.com/filecoin-project/lotus/chain/actors/policy"
+ 	"github.com/filecoin-project/lotus/node/modules/dtypes"
+ )
+ 
+@@ -53,7 +52,7 @@
+ 		CatchUpAlignment:  ecPeriod / 2,
+ 		Gpbft:             manifest.DefaultGpbftConfig,
+ 		EC: manifest.EcConfig{
+-			Period:                   ecPeriod,
++			Period:                   20,
+ 			Finality:                 int64(finality),
+ 			DelayMultiplier:          manifest.DefaultEcConfig.DelayMultiplier,
+ 			BaseDecisionBackoffTable: manifest.DefaultEcConfig.BaseDecisionBackoffTable,
+@@ -86,7 +85,7 @@
+ 	if buildconstants.F3BootstrapEpoch >= 0 {
+ 		c.StaticManifest = NewManifest(
+ 			c.BaseNetworkName,
+-			policy.ChainFinality,
++			20,
+ 			buildconstants.F3BootstrapEpoch,
+ 			time.Duration(buildconstants.BlockDelaySecs)*time.Second,
+ 			buildconstants.F3InitialPowerTableCID,
