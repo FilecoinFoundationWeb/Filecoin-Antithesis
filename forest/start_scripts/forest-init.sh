@@ -2,9 +2,28 @@
 # Enable strict mode to catch errors and undefined variables
 set -euo pipefail
 
-# Fetch and save DRAND chain information
-curl 10.20.20.21/info | jq -c > chain_info
-export DRAND_CHAIN_INFO=chain_info
+DRAND_SERVER="http://10.20.20.21"
+
+# Fetch JSON from the Drand endpoint
+json=$(curl -s "$DRAND_SERVER/info")
+
+# Format the JSON into the required structure
+formatted_json=$(jq --arg server "$DRAND_SERVER" '
+{
+  servers: [$server],
+  chain_info: {
+    public_key: .public_key,
+    period: .period,
+    genesis_time: .genesis_time,
+    hash: .hash,
+    groupHash: .groupHash
+  },
+  network_type: "Quicknet"
+}' <<< "$json")
+
+# Export the formatted JSON as an environment variable
+export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
+echo $FOREST_DRAND_QUICKNET_CONFIG
 # Extract network name from localnet.json and set it as an environment variable
 export NETWORK_NAME=$(grep -o "localnet.*" "${LOTUS_1_DATA_DIR}/localnet.json" | tr -d '",' )
 forest --version
@@ -16,7 +35,7 @@ echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
 cat ${FOREST_DATA_DIR}/forest_config.toml
 # export FULLNODE_API_INFO=$TOKEN:/ip4/10.20.20.27/tcp/${FOREST_RPC_PORT}/http
 # Start the forest service with the specified configuration
-RUST_LOG=error,forest_filecoin=warn,error forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
+ forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
        --save-token "${FOREST_DATA_DIR}/jwt" \
        --rpc-address ${FOREST_IP}:${FOREST_RPC_PORT} \

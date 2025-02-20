@@ -9,15 +9,14 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 ARG GIT_BRANCH="v1.31.1"
 
-RUN git clone --depth=1 --branch="${GIT_BRANCH}" https://github.com/filecoin-project/lotus.git /lotus
-
+RUN git clone https://github.com/filecoin-project/lotus.git /lotus
 WORKDIR /lotus
 RUN latest_version=$(git tag -l 'v*' | sort -V -r | head -n 1)
 
 COPY ./lotus.patch ./lotus.patch
 RUN git apply lotus.patch
 
-
+RUN git checkout ${GIT_BRANCH}
 # COPY ./make.patch ./make.patch
 # RUN git apply make.patch
 
