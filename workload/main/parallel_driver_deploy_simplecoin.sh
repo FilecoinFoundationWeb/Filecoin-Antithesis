@@ -3,7 +3,7 @@
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
 OPERATION="deploySimpleCoin"
-NODE_NAMES=("Lotus1", "Lotus2")
+NODE_NAMES=("Lotus1" "Lotus2")
 CONTRACT_FILE="/opt/antithesis/resources/smart-contracts/SimpleCoin.hex"
 
 # Ensure the application binary exists
