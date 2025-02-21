@@ -57,8 +57,8 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:${{ github.events.inputs.drand }};forest:${{ github.events.inputs.forest }};lotus:${{ github.events.inputs.lotus }};workload:${{ github.events.inputs.workload }}
-          config_image: config:${{ github.events.inputs.config }}
+          images: drand:${{ github.event.inputs.drand }};forest:${{ github.event.inputs.forest }};lotus:${{ github.events.input.lotus }};workload:${{ github.event.inputs.workload }}
+          config_image: config:${{ github.event.inputs.config }}
           description: "Running the latest container images"
           email_recipients: ${{ github.event.inputs.emails }}
           # test_name: Filecoin localnet (latest)
