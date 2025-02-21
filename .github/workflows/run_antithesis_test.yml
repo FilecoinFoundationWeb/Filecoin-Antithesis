@@ -57,17 +57,15 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest
-          config_image: config:latest
+          images: drand:${{ github.events.inputs.drand }};forest::${{ github.events.inputs.forest }};lotus:${{ github.events.inputs.lotus }};workload:${{ github.events.inputs.workload }}
+          config_image: config:${{ github.events.inputs.config }}
           description: "Running the latest container images"
           email_recipients: ${{ github.event.inputs.emails }}
           # test_name: Filecoin localnet (latest)
           additional_parameters: |-
             custom.duration=${{ github.event.inputs.duration }}
-            antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
-            antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
-            antithesis.images=us-central1-docker.pkg.dev/molten-verve-216720/filecoin-antithesis-internal-repository/drand:${{ github.events.inputs.drand }};us-central1-docker.pkg.dev/molten-verve-216720/filecoin-antithesis-internal-repository/forest:${{ github.events.inputs.forest }};us-central1-docker.pkg.dev/molten-verve-216720/filecoin-antithesis-internal-repository/lotus:${{ github.events.inputs.lotus }};us-central1-docker.pkg.dev/molten-verve-216720/filecoin-antithesis-internal-repository/workload:${{ github.events.inputs.workload }}
-            antithesis.config_image=us-central1-docker.pkg.dev/molten-verve-216720/filecoin-antithesis-internal-repository/config:${{ github.events.inputs.config }}
+# antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
+# antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
 
   # Todo: build latest forest before run
   scheduled_run:
