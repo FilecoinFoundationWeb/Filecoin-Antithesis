@@ -28,6 +28,7 @@ RUN git submodule update --init
 # Perform code coverage instrumentation (source transformation)
 RUN go get github.com/antithesishq/antithesis-sdk-go@latest
 RUN go get github.com/filecoin-project/go-jsonrpc@v0.7.1
+RUN go get github.com/filecoin-project/go-f3@v0.8.2
 RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-instrumentor@latest
 RUN go mod tidy
 RUN mkdir /lotus_instrumented
