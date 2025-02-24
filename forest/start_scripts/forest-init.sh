@@ -24,6 +24,7 @@ formatted_json=$(jq --arg server "$DRAND_SERVER" '
 # Export the formatted JSON as an environment variable
 export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
 echo $FOREST_DRAND_QUICKNET_CONFIG
+export FOREST_F3_FINALITY=20
 # Extract network name from localnet.json and set it as an environment variable
 export NETWORK_NAME=$(grep -o "localnet.*" "${LOTUS_1_DATA_DIR}/localnet.json" | tr -d '",' )
 forest --version

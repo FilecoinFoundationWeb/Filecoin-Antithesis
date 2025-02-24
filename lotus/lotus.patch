@@ -46,3 +46,22 @@
  	},
  	DrandTestnet: {
  		Servers: []string{
+--- a/chain/lf3/config.go	2025-02-24 18:13:08
++++ b/chain/lf3/config.go	2025-02-24 18:13:27
+@@ -12,7 +12,6 @@
+ 	"github.com/filecoin-project/go-state-types/abi"
+ 
+ 	"github.com/filecoin-project/lotus/build/buildconstants"
+-	"github.com/filecoin-project/lotus/chain/actors/policy"
+ 	"github.com/filecoin-project/lotus/node/modules/dtypes"
+ )
+ 
+@@ -104,7 +103,7 @@
+ 	if buildconstants.F3BootstrapEpoch >= 0 {
+ 		c.StaticManifest = NewManifest(
+ 			c.BaseNetworkName,
+-			policy.ChainFinality,
++			20,
+ 			buildconstants.F3BootstrapEpoch,
+ 			time.Duration(buildconstants.BlockDelaySecs)*time.Second,
+ 			buildconstants.F3InitialPowerTableCID,
