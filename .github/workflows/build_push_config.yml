@@ -3,11 +3,11 @@ name: Build & Push Config
 on:
   workflow_dispatch:
     inputs:
-      tag:
+      config_tag:
         type: string
         required: true
         default: 'latest'
-        description: Tag for the image
+        description: A config tag
 
 jobs:
   antithesis:
@@ -44,7 +44,7 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/config
         tags: |
           type=sha
-          ${{ inputs.tag }}
+          ${{ inputs.config_tag }}
     - name: Build and push config
       uses: docker/build-push-action@v5
       with:

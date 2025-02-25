@@ -1,12 +1,13 @@
 name: Build & Push Forest
 
 on: 
-    workflow_dispatch:
-      inputs:
-        forest_commit:
-          type: string
-          required: true
-          description: A commit hash that can be found from (https://github.com/ChainSafe/forest)
+  workflow_dispatch:
+    inputs:
+      forest_commit:
+        type: string
+        required: true
+        default: 'ead9ffc'
+        description: A commit hash that can be found from (https://github.com/ChainSafe/forest)
 
 jobs:
   antithesis:
