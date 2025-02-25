@@ -28,7 +28,7 @@ on:
       drand:
         type: string
         required: true
-        default: ${{ variables.default_manual_drand_tag }}
+        default: $(variables.default_manual_drand_tag)
         description: The drand image tag used for the test run
       forest:
         type: string
