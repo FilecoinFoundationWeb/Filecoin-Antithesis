@@ -5,9 +5,6 @@ variables:
   default_nightly_lotus_tag: '746995e'
   default_nightly_drand_tag: 'v2.0.4'
 
-  default_manual_forest_tag: 'ead9ffc'
-  default_manual_lotus_tag: '746995e'
-
 on: 
   schedule:
     # midnight EST
@@ -27,17 +24,17 @@ on:
       drand:
         type: string
         required: true
-        default: ${{ env.DEFAULT_MANUAL_DRAND_TAG }}
+        default: 'v2.0.4'
         description: The drand image tag used for the test run
       forest:
         type: string
         required: true
-        default: ${{ variables.default_manual_forest_tag }}
+        default: 'ead9ffc'
         description: The forest image tag used for the test run
       lotus:
         type: string
         required: true
-        default: ${{ variables.default_manual_lotus_tag }}
+        default: '746995e'
         description: The lotus image tag used for the test run
       workload:
         type: string
@@ -54,8 +51,6 @@ jobs:
   manual_run:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    env:
-      DEFAULT_MANUAL_DRAND_TAG: 'v2.0.4'
     permissions:
       contents: read
       packages: write
