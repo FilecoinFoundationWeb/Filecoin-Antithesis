@@ -1,13 +1,13 @@
 name: Build & Push Lotus
 
 on: 
-    workflow_dispatch:
-      inputs:
-        lotus_tag:
-          type: string
-          required: true
-          default: 'v1.31.0'
-          description: A lotus tag that can be found from (https://github.com/filecoin-project/lotus)
+  workflow_dispatch:
+    inputs:
+      lotus_tag:
+        type: string
+        required: true
+        default: '746995e'
+        description: A commit hash that can be found from (https://github.com/filecoin-project/lotus)
 
 jobs:
   antithesis:

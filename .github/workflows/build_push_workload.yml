@@ -1,6 +1,13 @@
 name: Build & Push Workload
 
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
+    inputs:
+      workload_tag:
+        type: string
+        required: true
+        default: 'latest'
+        description: A workload tag
 
 jobs:
   antithesis:
