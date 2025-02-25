@@ -7,16 +7,17 @@ RUN apt-get update && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-ARG GIT_BRANCH="v1.31.1"
+ARG GIT_BRANCH="746995e"
 
 RUN git clone https://github.com/filecoin-project/lotus.git /lotus
 WORKDIR /lotus
 RUN latest_version=$(git tag -l 'v*' | sort -V -r | head -n 1)
 
+RUN git checkout ${GIT_BRANCH}
+
 COPY ./lotus.patch ./lotus.patch
 RUN git apply lotus.patch
 
-RUN git checkout ${GIT_BRANCH}
 # COPY ./make.patch ./make.patch
 # RUN git apply make.patch
 
