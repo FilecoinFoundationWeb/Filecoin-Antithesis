@@ -1,10 +1,5 @@
 name: Run Antithesis Test
 
-variables:
-  default_nightly_forest_tag: 'ead9ffc'
-  default_nightly_lotus_tag: '746995e'
-  default_nightly_drand_tag: 'v2.0.4'
-
 on: 
   schedule:
     # midnight EST
@@ -87,7 +82,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:${{ variables.default_nightly_drand_tag }};forest:${{ variables.default_nightly_forest_tag }};lotus:${{ variables.default_nightly_lotus_tag }};workload:latest
+          images: drand:v2.0.4;forest:ead9ffc;lotus:746995e;workload:latest
           config_image: config:latest
           description: "Nightly Filecoin continuous testing"
           email_recipients: "filecoin-notifications.0607b605acbba4a098334f1cf7aad48b.show-sender.prefer-html@streams.zulipchat.com"
