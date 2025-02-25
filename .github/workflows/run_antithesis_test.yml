@@ -1,5 +1,14 @@
 name: Run Antithesis Test
 
+variables:
+  default_nightly_forest_tag: 'ead9ffc'
+  default_nightly_lotus_tag: '746995e'
+  default_nightly_drand_tag: 'v2.0.4'
+
+  default_manual_forest_tag: 'ead9ffc'
+  default_manual_lotus_tag: '746995e'
+  default_manual_drand_tag: 'v2.0.4'
+
 on: 
   schedule:
     # midnight EST
@@ -19,17 +28,17 @@ on:
       drand:
         type: string
         required: true
-        default: 'v2.0.4'
+        default: ${{ variables.default_manual_drand_tag }}
         description: The drand image tag used for the test run
       forest:
         type: string
         required: true
-        default: 'main'
+        default: ${{ variables.default_manual_forest_tag }}
         description: The forest image tag used for the test run
       lotus:
         type: string
         required: true
-        default: 'v1.31.1'
+        default: ${{ variables.default_manual_lotus_tag }}
         description: The lotus image tag used for the test run
       workload:
         type: string
@@ -64,8 +73,8 @@ jobs:
           # test_name: Filecoin localnet (latest)
           additional_parameters: |-
             custom.duration=${{ github.event.inputs.duration }}
-# antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
-# antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
+            antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
+            antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
 
   # Todo: build latest forest before run
   scheduled_run:
@@ -82,7 +91,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest
+          images: drand:${{ variables.default_nightly_drand_tag }};forest:${{ variables.default_nightly_forest_tag }};lotus:${{ variables.default_nightly_lotus_tag }};workload:latest
           config_image: config:latest
           description: "Nightly Filecoin continuous testing"
           email_recipients: "filecoin-notifications.0607b605acbba4a098334f1cf7aad48b.show-sender.prefer-html@streams.zulipchat.com"
