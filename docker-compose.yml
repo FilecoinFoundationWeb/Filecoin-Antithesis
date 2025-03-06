@@ -261,6 +261,8 @@ services:
       - ./data/lotus-1:/root/devgen/lotus-1
       - ./data/lotus-2:/root/devgen/lotus-2
       - ./data/forest:/root/devgen/forest
+    env_file:
+      - .env
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.30
