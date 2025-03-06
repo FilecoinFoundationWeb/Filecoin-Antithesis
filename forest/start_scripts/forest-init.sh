@@ -34,7 +34,6 @@ echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
 
 # Load the token and set the full node API information
 cat ${FOREST_DATA_DIR}/forest_config.toml
-# export FULLNODE_API_INFO=$TOKEN:/ip4/10.20.20.27/tcp/${FOREST_RPC_PORT}/http
 # Start the forest service with the specified configuration
 forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
@@ -42,5 +41,4 @@ forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --rpc-address ${FOREST_IP}:${FOREST_RPC_PORT} \
        --p2p-listen-address /ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT} \
        --skip-load-actors &
-
 sleep infinity
