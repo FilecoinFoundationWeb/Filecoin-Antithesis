@@ -6,7 +6,7 @@ on:
       forest_commit:
         type: string
         required: true
-        default: '8fd4395'
+        default: 'ead9ffc'
         description: A commit hash that can be found from (https://github.com/ChainSafe/forest)
 
 jobs:
