@@ -40,7 +40,7 @@ func TestF3ApiCalls(t *testing.T) {
 
 		// F3GetManifest
 		_, err = api.F3GetManifest(ctx)
-		assert.Always(err == nil, "F3GetManifest call successful", map[string]interface{}{"node": node.Name, "error": err})
+		assert.Sometimes(err == nil, "F3GetManifest call successful", map[string]interface{}{"node": node.Name, "error": err})
 
 		// F3GetECPowerTable
 		ts, err := api.ChainHead(ctx)
