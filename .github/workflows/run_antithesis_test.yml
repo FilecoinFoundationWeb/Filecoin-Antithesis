@@ -24,12 +24,12 @@ on:
       forest:
         type: string
         required: true
-        default: 'ead9ffc'
+        default: '8fd4395'
         description: The forest image tag used for the test run
       lotus:
         type: string
         required: true
-        default: '746995e'
+        default: 'f8bce11'
         description: The lotus image tag used for the test run
       workload:
         type: string
