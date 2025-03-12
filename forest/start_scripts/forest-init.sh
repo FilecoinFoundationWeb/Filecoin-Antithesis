@@ -41,6 +41,7 @@ forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --save-token "${FOREST_DATA_DIR}/jwt" \
        --rpc-address ${FOREST_IP}:${FOREST_RPC_PORT} \
        --p2p-listen-address /ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT} \
+       --healthcheck-address ${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT} \
        --skip-load-actors &
 
 sleep infinity
