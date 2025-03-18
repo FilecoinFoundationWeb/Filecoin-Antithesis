@@ -3,7 +3,7 @@ name: Run Antithesis Test
 on: 
   schedule:
     # midnight EST
-    - cron: '0 2 * * *'
+    - cron: '0 4 * * *'
   #manual run
   workflow_dispatch:
     inputs:
