@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"math/rand"
 	"os"
 	"testing"
 	"time"
@@ -16,7 +17,6 @@ import (
 
 const helloID = "/fil/hello/1.0.0"
 
-// helloMsg is a sample valid hello message (serialized payload).
 var helloMsg = []byte{
 	0x84, 0x83, 0xd8, 0x2a, 0x58, 0x27, 0x00, 0x01, 0x71, 0xa0,
 	0xe4, 0x02, 0x20, 0xab, 0xf8, 0x4e, 0xf8, 0xff, 0x64, 0x55,
@@ -39,19 +39,36 @@ var helloMsg = []byte{
 	0x17, 0x9d, 0x63, 0x78, 0xd8, 0xcd,
 }
 
-// FuzzHello sends fuzzed hello messages to the target peer.
-// It seeds the corpus with a known valid helloMsg.
-func FuzzHello(f *testing.F) {
-	// Seed corpus with a valid hello message.
-	f.Add(helloMsg)
+func mutateHelloMessage(b []byte) []byte {
+	mutated := make([]byte, len(b))
+	copy(mutated, b)
+	switch rand.Intn(4) {
+	case 0:
+		if len(mutated) > 0 {
+			newLen := rand.Intn(len(mutated))
+			return mutated[:newLen]
+		}
+	case 1:
+		extra := make([]byte, rand.Intn(10)+1)
+		rand.Read(extra)
+		return append(mutated, extra...)
+	case 2:
+		idx := rand.Intn(len(mutated))
+		mutated[idx] ^= 0xFF
+		return mutated
+	case 3:
+		pos := rand.Intn(len(mutated))
+		return append(mutated[:pos], append([]byte{byte(rand.Intn(256))}, mutated[pos:]...)...)
+	}
+	return mutated
+}
 
-	// Retrieve target multiaddress from the environment.
+func FuzzHello(f *testing.F) {
+	f.Add(helloMsg)
 	target, ok := os.LookupEnv("LOTUS_TARGET")
 	if !ok {
 		f.Skip("LOTUS_TARGET environment variable not set")
 	}
-
-	// Parse the target multiaddress.
 	targetMaddr, err := ma.NewMultiaddr(target)
 	if err != nil {
 		f.Skip("failed to parse LOTUS_TARGET multiaddr")
@@ -60,42 +77,35 @@ func FuzzHello(f *testing.F) {
 	if err != nil {
 		f.Skip("failed to extract peer info from LOTUS_TARGET multiaddr")
 	}
-
-	// Fuzz function: receives a fuzzed byte slice which is used as the hello payload.
 	f.Fuzz(func(t *testing.T, data []byte) {
 		ctx := context.Background()
-
-		// Create a new libp2p host for this fuzz iteration.
 		host, err := libp2p.New()
 		if err != nil {
 			t.Fatalf("failed to create libp2p host: %v", err)
 		}
 		defer host.Close()
-
-		// Connect to the target peer.
+		delay := time.Duration(rand.Intn(100)+50) * time.Millisecond
+		time.Sleep(delay)
 		if err := host.Connect(ctx, *ai); err != nil {
 			t.Skip("failed to connect to target peer: " + err.Error())
 		}
-
-		// Allow a brief moment for connection establishment.
-		time.Sleep(100 * time.Millisecond)
-
-		// Open a new stream using the hello protocol.
 		stream, err := host.NewStream(ctx, ai.ID, helloID)
 		if err != nil {
 			t.Skip("failed to open stream: " + err.Error())
 		}
 		defer stream.Close()
-
-		// Send the fuzzed payload.
-		n, err := stream.Write(data)
-		if err != nil {
-			t.Errorf("failed to write fuzz data: %v", err)
+		var payload []byte
+		if len(data)%2 == 0 {
+			payload = append(helloMsg, data...)
 		} else {
-			t.Logf("Wrote %d bytes from fuzz input: %x", n, data)
+			payload = mutateHelloMessage(helloMsg)
 		}
-
-		// Close the write side of the stream.
+		n, err := stream.Write(payload)
+		if err != nil {
+			t.Errorf("failed to write payload: %v", err)
+		} else {
+			t.Logf("Sent %d bytes payload: %x", n, payload)
+		}
 		if err := stream.CloseWrite(); err != nil {
 			t.Errorf("failed to close stream write: %v", err)
 		}
