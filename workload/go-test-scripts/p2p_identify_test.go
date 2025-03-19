@@ -63,7 +63,10 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 	seeds := []string{
 		"/ip4/127.0.0.1/tcp/4001",
 		"/ip4/192.168.1.1/tcp/1234",
+		"/ip4/10.0.0.1/tcp/4001",
+		"/ip4/10.0.0.2/tcp/4001",
 		"/ip6/::1/tcp/4001",
+		"/ip6/::2/tcp/4001",
 		"/ip6zone/0",
 	}
 
