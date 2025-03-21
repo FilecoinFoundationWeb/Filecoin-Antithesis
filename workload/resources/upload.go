@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -113,6 +114,7 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 	var buffer bytes.Buffer
 	err := cbg.WriteByteArray(&buffer, params)
 	assert.Always(err == nil, "Write byte array to buffer", map[string]interface{}{"error": err})
+
 	params = buffer.Bytes()
 
 	msg := &types.Message{
@@ -135,7 +137,10 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 	assert.Sometimes(err == nil, "Wait for invoke message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
 
 	if !wait.Receipt.ExitCode.IsSuccess() {
+		log.Print("We are here!")
 		replayResult, err := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
+		log.Printf("StateReplay Error (err): %s", err)
+		log.Printf("StateReplay Error (replayResult.Error): %s", replayResult.Error)
 		assert.Sometimes(err == nil, "Replay failed invoke message", map[string]interface{}{"error": err})
 		return nil, fmt.Errorf("invoke failed with error: %v", replayResult.Error)
 	}

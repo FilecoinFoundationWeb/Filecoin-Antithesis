@@ -37,7 +37,7 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/workload
         tags: |
           type=sha
-          latest
+          ${{ github.event.inputs.workload_tag }}
     - name: Build and push workload
       uses: docker/build-push-action@v5
       with:
