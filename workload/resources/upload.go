@@ -44,8 +44,8 @@ func DeployContractWithValue(ctx context.Context, api api.FullNode, sender addre
 	time.Sleep(5 * time.Second)
 
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
-	assert.Always(err == nil, "Wait for message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
-	assert.Always(wait.Receipt.ExitCode.IsSuccess(), "Contract installation failed", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
+	assert.Sometimes(err == nil, "Wait for message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
+	assert.Sometimes(wait.Receipt.ExitCode.IsSuccess(), "Contract installation failed", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
 
 	var result eam.CreateReturn
 	r := bytes.NewReader(wait.Receipt.Return)

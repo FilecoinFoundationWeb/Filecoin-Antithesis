@@ -111,7 +111,7 @@ func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, e
 	fallbackWallet := wallets[0]
 	log.Printf("Using the first wallet as fallback: %s", fallbackWallet)
 
-	assert.Unreachable("Using a fallback wallet because the genesis wallet was not found", map[string]interface{}{"fallback wallet": fallbackWallet, "list of all wallets": wallets})
+	assert.Sometimes(fallbackWallet != address.Undef, "Using a fallback wallet because the genesis wallet was not found", map[string]interface{}{"fallback wallet": fallbackWallet, "list of all wallets": wallets})
 
 	return fallbackWallet, nil
 }

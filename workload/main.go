@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/hex"
 	"flag"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"math/big"
 	"math/rand"
+	"os"
 	"time"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
@@ -117,30 +120,19 @@ func performCreateOperation(ctx context.Context, nodeConfig *resources.NodeConfi
 
 func performDeleteOperation(ctx context.Context, nodeConfig *resources.NodeConfig) {
 	log.Printf("Deleting wallets on node '%s'...", nodeConfig.Name)
-	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	if err != nil {
-		log.Fatalf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+	dataDir := os.Getenv("LOTUS_1_DATA_DIR")
+	if dataDir == "" {
+		log.Fatal("LOTUS_1_DATA_DIR environment variable is not set")
 	}
-	defer closer()
+	filePath := dataDir + "/lotus-1-ipv4addr"
 
-	allWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		log.Fatalf("Failed to list wallets on node '%s': %v", nodeConfig.Name, err)
-	}
-	if len(allWallets) == 0 {
-		log.Printf("No wallets available to delete on node '%s'.", nodeConfig.Name)
-		return
+		log.Fatalf("Failed to read file %s: %v", filePath, err)
 	}
 
-	rand.Seed(time.Now().UnixNano())
-	numToDelete := rand.Intn(len(allWallets)) + 1
-	walletsToDelete := allWallets[:numToDelete]
-
-	err = resources.DeleteWallets(ctx, api, walletsToDelete)
-	if err != nil {
-		log.Fatalf("Failed to delete wallets on node '%s': %v", nodeConfig.Name, err)
-	}
-	log.Printf("Deleted %d wallets successfully on node '%s'.", numToDelete, nodeConfig.Name)
+	multiaddr := string(data)
+	fmt.Println("Multiaddr from file:", multiaddr)
 }
 
 func performSpamOperation(ctx context.Context, config *resources.Config) {
@@ -318,27 +310,25 @@ func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, 
 
 	// Run initial tests
 	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "runTests()", inputData)
-	//assert.Sometimes(err == nil, "Failed to invoke runTests()", map[string]interface{}{"err": err})
-	log.Printf("InvokeContractByFuncName Error: %s", err)
-
+	assert.Sometimes(err == nil, "Failed to invoke runTests()", map[string]interface{}{"err": err})
+	fmt.Printf("InvokeContractByFuncName Error: %s", err)
 	// Validate lifecycle in subsequent transactions
 	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testLifecycleValidationSubsequentTransaction()", inputData)
-	//assert.Sometimes(err == nil, "Failed to invoke testLifecycleValidationSubsequentTransaction()", map[string]interface{}{"err": err})
-	log.Printf("InvokeContractByFuncName Error: %s", err)
-
+	assert.Sometimes(err == nil, "Failed to invoke testLifecycleValidationSubsequentTransaction()", map[string]interface{}{"err": err})
+	fmt.Printf("InvokeContractByFuncName Error: %s", err)
 	// Deploy a second contract instance for further testing
 	fromAddr, contractAddr2 := resources.DeployContractFromFilename(ctx, api, contractPath)
 	inputDataContract := resources.InputDataFromFrom(ctx, api, contractAddr2)
-
+	fmt.Printf("InvokeContractByFuncName Error: %s", err)
 	// Test re-entry scenarios
 	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testReentry(address)", inputDataContract)
-	//assert.Sometimes(err == nil, "Failed to invoke testReentry(address)", map[string]interface{}{"err": err})
-	log.Printf("InvokeContractByFuncName Error: %s", err)
+	assert.Sometimes(err == nil, "Failed to invoke testReentry(address)", map[string]interface{}{"err": err})
+	fmt.Printf("InvokeContractByFuncName Error: %s", err)
 
 	// Test nested contract interactions
 	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testNestedContracts(address)", inputDataContract)
-	//assert.Sometimes(err == nil, "Failed to invoke testNestedContracts(address)", map[string]interface{}{"err": err})
-	log.Printf("InvokeContractByFuncName Error: %s", err)
+	assert.Sometimes(err == nil, "Failed to invoke testNestedContracts(address)", map[string]interface{}{"err": err})
+	fmt.Printf("InvokeContractByFuncName Error: %s", err)
 
 	log.Printf("TStore contract successfully deployed and tested on node '%s'.", nodeConfig.Name)
 }

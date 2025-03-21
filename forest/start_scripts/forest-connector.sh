@@ -31,7 +31,7 @@ echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 
 forest-wallet --remote-wallet import ${LOTUS_1_DATA_DIR}/key
 forest-wallet new bls
-
+forest-cli net listen > ${FOREST_DATA_DIR}/forest-listen-addr
 forest-cli net connect $(cat ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr)
 forest-cli sync wait
 echo "Done"
