@@ -230,7 +230,7 @@ services:
       interval: 5s
       timeout: 2s
       retries: 10
-      start_period: 40s
+      start_period: 70s
     
 
   # Forest <-> Lotus connector service
