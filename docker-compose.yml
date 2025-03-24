@@ -88,13 +88,13 @@ services:
       timeout: 2s
       retries: 10
 
-  # Lotus miner 1 service
-  lotus-miner-1:
-    image: lotus:${LOTUS_TAG:-latest}
-    container_name: lotus-miner-1
+  # Curio service
+  curio:
+    image: curio:${LOTUS_TAG:-latest}
+    container_name: curio
     volumes:
       - ./data/lotus-1:${LOTUS_1_DATA_DIR}
-      - ./lotus/start_scripts/lotus-miner-1.sh:${LOTUS_1_DATA_DIR}/lotus-miner-1.sh
+      - ./curio/start_scripts/curio.sh:${LOTUS_1_DATA_DIR}/curio.sh
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
       - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
@@ -104,18 +104,18 @@ services:
       - LOTUS_DRAGON_HEIGHT=${DRAGON_HEIGHT}
       - LOTUS_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
       - LOTUS_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
-      - LOTUS_MINER_1_IP=${LOTUS_MINER_1_IP}
+      - CURIO_IP=${CURIO_IP}
       - LOTUS_TUKTUK_HEIGHT=${TUKTUK_HEIGHT}
       - LOTUS_TEEP_HEIGHT=${TEEP_HEIGHT}
     ports:
-      - ${LOTUS_MINER_1_RPC_PORT}:${LOTUS_MINER_1_RPC_PORT}
+      - ${CURIO_RPC_PORT}:${CURIO_RPC_PORT}
     env_file:
       - .env
     restart: on-failure
-    entrypoint: ["${LOTUS_1_DATA_DIR}/lotus-miner-1.sh"]
+    entrypoint: ["${LOTUS_1_DATA_DIR}/curio.sh"]
     networks:
       antithesis-net:
-        ipv4_address: ${LOTUS_MINER_1_IP}
+        ipv4_address: ${CURIO_IP}
     depends_on:
       lotus-1: 
         condition: service_healthy
@@ -190,6 +190,25 @@ services:
       lotus-2: 
         condition: service_healthy
 
+  # Yugabyte Database Service
+  yugabyte:
+    image: yugabyte:${YUGABYTE_COMMIT:-latest}
+    container_name: yugabyte
+    environment:
+      - YUGABYTE_IP=${YUGABYTE_IP}
+    ports:
+      - ${YUGABYTE_PORT}:${YUGABYTE_PORT}
+    env_file:
+      - .env
+    entrypoint: ["bin/yb-tserver", "--tserver_master_addrs=127.0.0.1:7100", "--fs_data_dirs=$YB_DATA_DIR"]
+    networks:
+      antithesis-net:
+        ipv4_address: ${YUGABYTE_IP}
+    depends_on:
+      lotus-1:
+        condition: service_healthy
+
+
   # Forest service
   forest:
     image: forest:${FOREST_COMMIT:-latest}
@@ -201,7 +220,7 @@ services:
       - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
       - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
     environment:
-      - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${LOTUS_MINER_1_ACTOR_ADDRESS}
+      - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${LOTUS_MINER_2_ACTOR_ADDRESS}
       - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
       - FOREST_SHARK_HEIGHT=${SHARK_HEIGHT}
       - FOREST_HYGGE_HEIGHT=${HYGGE_HEIGHT}
