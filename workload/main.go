@@ -6,11 +6,9 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/big"
 	"math/rand"
-	"os"
 	"time"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
@@ -120,19 +118,32 @@ func performCreateOperation(ctx context.Context, nodeConfig *resources.NodeConfi
 
 func performDeleteOperation(ctx context.Context, nodeConfig *resources.NodeConfig) {
 	log.Printf("Deleting wallets on node '%s'...", nodeConfig.Name)
-	dataDir := os.Getenv("LOTUS_1_DATA_DIR")
-	if dataDir == "" {
-		log.Fatal("LOTUS_1_DATA_DIR environment variable is not set")
-	}
-	filePath := dataDir + "/lotus-1-ipv4addr"
-
-	data, err := ioutil.ReadFile(filePath)
+	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Fatalf("Failed to read file %s: %v", filePath, err)
+		log.Fatalf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+	}
+	defer closer()
+
+	allWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+	if err != nil {
+		log.Fatalf("Failed to list wallets on node '%s': %v", nodeConfig.Name, err)
+	}
+	if len(allWallets) == 0 {
+		// rand.Intn panics if allWallets == 0
+		log.Printf("No wallets available to delete on node '%s'.", nodeConfig.Name)
+		return
 	}
 
-	multiaddr := string(data)
-	fmt.Println("Multiaddr from file:", multiaddr)
+	// Delete a random number of wallets
+	rand.Seed(time.Now().UnixNano())
+	numToDelete := rand.Intn(len(allWallets)) + 1
+	walletsToDelete := allWallets[:numToDelete]
+
+	err = resources.DeleteWallets(ctx, api, walletsToDelete)
+	if err != nil {
+		log.Fatalf("Failed to delete wallets on node '%s': %v", nodeConfig.Name, err)
+	}
+	log.Printf("Deleted %d wallets successfully on node '%s'.", numToDelete, nodeConfig.Name)
 }
 
 func performSpamOperation(ctx context.Context, config *resources.Config) {
