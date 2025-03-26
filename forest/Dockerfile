@@ -26,22 +26,24 @@ COPY ./forest_config.toml.tpl .
 # COPY ./forest.patch ./forest.patch
 # RUN git apply ./forest.patch
 
-
 # Step 5: make install + Rust instrumentation for code coverage 
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
 ENV LD_LIBRARY_PATH=/usr/local/lib
-ENV RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 -Cllvm-args=-sanitizer-coverage-trace-pc-guard -Clink-arg=-Wl,-z,undefs -Clink-args=-Wl,--build-id -L/usr/local/lib -lvoidstar"
+ENV RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 \ 
+-Cllvm-args=-sanitizer-coverage-trace-pc-guard -Clink-arg=-Wl,-z,undefs \ 
+-Clink-args=-Wl,--build-id -L/usr/local/lib -lvoidstar"
+# Set Antithesis runtime library and rustflags
 RUN make install
-# from make install -> forest binary is /usr/local/cargo/bin/forest
 RUN cargo build --bin forest
 RUN mv /forest/target/debug/forest /usr/local/cargo/bin/forest
-# from cargo build -> forest in forest/target/debug/forest
+# from make install -> forest binary is /usr/local/cargo/bin/forest
+# from cargo build -> forest binary is forest/target/debug/forest
+# cargo build compiles the binary with instrumentation
 WORKDIR /
-RUN mkdir /symbols
-RUN ln -s /usr/local/cargo/bin/forest /symbols/forest
-# confirm that the binary has correctly linked to the Antithesis runtime library
+RUN mkdir /symbols && ln -s /usr/local/cargo/bin/forest /symbols/forest
 RUN ldd /symbols/forest | grep "libvoidstar" 
 RUN nm /symbols/forest | grep "sanitizer_cov_trace_pc_guard"
+# confirm that the binary has correctly linked to the Antithesis runtime library
 WORKDIR /forest
 
 # Step 6: Set up environment variables and fetch necessary parameters
@@ -54,4 +56,3 @@ RUN forest-tool state-migration actor-bundle $FOREST_ACTOR_BUNDLE_PATH
 
 # Step 8: Keep the container alive
 ENTRYPOINT ["sleep", "infinity"]
-
