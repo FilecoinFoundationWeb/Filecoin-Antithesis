@@ -1,16 +1,18 @@
 FROM docker.io/rust:1.81-bookworm as builder
 
 # Pin forest to a specific branch
-ARG GIT_COMMIT="8fd4395"
+ARG GIT_COMMIT="ead9ffc"
 
 # Step 1: Install dependencies
 RUN apt-get update && \
-    apt-get install --no-install-recommends jq -y build-essential clang curl git ca-certificates && \
+    apt-get install --no-install-recommends jq -y build-essential clang curl git ca-certificates cargo protobuf-compiler && \
     update-ca-certificates
+
 RUN curl -OL https://golang.org/dl/go1.23.1.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go1.23.1.linux-amd64.tar.gz && \
     rm go1.23.1.linux-amd64.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
+
 # Step 2: Install Rust (this is cached unless Rust changes)
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}" 
@@ -24,8 +26,23 @@ COPY ./forest_config.toml.tpl .
 # COPY ./forest.patch ./forest.patch
 # RUN git apply ./forest.patch
 
-# Step 5: Build and install the project
+
+# Step 5: make install + Rust instrumentation for code coverage 
+COPY libvoidstar.so /usr/local/lib/libvoidstar.so
+ENV LD_LIBRARY_PATH=/usr/local/lib
+ENV RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 -Cllvm-args=-sanitizer-coverage-trace-pc-guard -Clink-arg=-Wl,-z,undefs -Clink-args=-Wl,--build-id -L/usr/local/lib -lvoidstar"
 RUN make install
+# from make install -> forest binary is /usr/local/cargo/bin/forest
+RUN cargo build --bin forest
+RUN mv /forest/target/debug/forest /usr/local/cargo/bin/forest
+# from cargo build -> forest in forest/target/debug/forest
+WORKDIR /
+RUN mkdir /symbols
+RUN ln -s /usr/local/cargo/bin/forest /symbols/forest
+# confirm that the binary has correctly linked to the Antithesis runtime library
+RUN ldd /symbols/forest | grep "libvoidstar" 
+RUN nm /symbols/forest | grep "sanitizer_cov_trace_pc_guard"
+WORKDIR /forest
 
 # Step 6: Set up environment variables and fetch necessary parameters
 ENV FIL_PROOFS_PARAMETER_CACHE="/var/tmp/filecoin-proof-parameters"
