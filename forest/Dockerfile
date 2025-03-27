@@ -27,13 +27,13 @@ COPY ./forest_config.toml.tpl .
 # RUN git apply ./forest.patch
 
 # Step 5: make install + Rust instrumentation for code coverage 
+RUN make install
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
 ENV LD_LIBRARY_PATH=/usr/local/lib
 ENV RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 \ 
 -Cllvm-args=-sanitizer-coverage-trace-pc-guard -Clink-arg=-Wl,-z,undefs \ 
 -Clink-args=-Wl,--build-id -L/usr/local/lib -lvoidstar"
 # Set Antithesis runtime library and rustflags
-RUN make install
 RUN cargo build --bin forest
 RUN mv /forest/target/debug/forest /usr/local/cargo/bin/forest
 # from make install -> forest binary is /usr/local/cargo/bin/forest
