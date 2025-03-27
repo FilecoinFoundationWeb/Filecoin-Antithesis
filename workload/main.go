@@ -31,10 +31,10 @@ func parseFlags() (*string, *string, *string, *int, *string) {
 }
 
 func validateInputs(operation, nodeName, contractPath *string) {
-	if *operation != "create" && *operation != "delete" && *operation != "spam" && *operation != "connect" && *operation != "disconnect" && *operation != "deploySimpleCoin" && *operation != "deployMCopy" && *operation != "deployTStore" {
+	if *operation != "create" && *operation != "delete" && *operation != "spam" && *operation != "connect" && *operation != "disconnect" && *operation != "deploySimpleCoin" && *operation != "deployMCopy" && *operation != "deployTStore" && *operation != "spamInvalidMessages" {
 		log.Fatalf("Invalid operation: %s. Use 'create', 'delete', 'spam', 'connect', 'disconnect', 'deploySimpleCoin', or 'deployMCopy'.", *operation)
 	}
-	if (*operation == "create" || *operation == "delete" || *operation == "connect" || *operation == "disconnect" || *operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore") && *nodeName == "" {
+	if (*operation == "create" || *operation == "delete" || *operation == "connect" || *operation == "disconnect" || *operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore" || *operation == "spamInvalidMessages") && *nodeName == "" {
 		log.Fatalf("Node name is required for the '%s' operation.", *operation)
 	}
 	if (*operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore") && *contractPath == "" {
@@ -73,7 +73,7 @@ func main() {
 			break
 		}
 	}
-	if (*operation == "create" || *operation == "delete" || *operation == "connect" || *operation == "disconnect" || *operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore") && nodeConfig == nil {
+	if (*operation == "create" || *operation == "delete" || *operation == "connect" || *operation == "disconnect" || *operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore" || *operation == "spamInvalidMessages") && nodeConfig == nil {
 		log.Fatalf("Node '%s' not found in config.json.", *nodeName)
 	}
 
@@ -98,6 +98,8 @@ func main() {
 		performDeployMCopy(ctx, nodeConfig, *contractPath)
 	case "deployTStore":
 		performDeployTStore(ctx, nodeConfig, *contractPath)
+	case "spamInvalidMessages":
+		spamInvalidMessages(ctx, nodeConfig)
 	}
 }
 
@@ -342,4 +344,20 @@ func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	fmt.Printf("InvokeContractByFuncName Error: %s", err)
 
 	log.Printf("TStore contract successfully deployed and tested on node '%s'.", nodeConfig.Name)
+}
+
+func spamInvalidMessages(ctx context.Context, nodeConfig *resources.NodeConfig) {
+	log.Printf("Spamming bad transactions on node '%s'...", nodeConfig.Name)
+	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+	}
+	defer closer()
+	wallet, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+	if err != nil || len(wallet) < 2 {
+		log.Printf("Failed to get wallet addresses: %v", err)
+	}
+	err = resources.SendInvalidTransactions(ctx, api, wallet[0], wallet[1], 100)
+	assert.Always(err == nil, "Invalid transaction should never pass", map[string]interface{}{"error": err})
+	log.Printf("Spammed bad transactions successfully on node '%s'.", nodeConfig.Name)
 }
