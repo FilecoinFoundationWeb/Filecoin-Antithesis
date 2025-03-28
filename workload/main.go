@@ -174,7 +174,7 @@ func performSpamOperation(ctx context.Context, config *resources.Config) {
 		log.Printf("[INFO] Retrieving wallets for node '%s'...", node.Name)
 		nodeWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
 		if err != nil {
-			log.Fatalf("[ERROR] Failed to retrieve wallets for node '%s': %v", node.Name, err)
+			log.Printf("[ERROR] Failed to retrieve wallets for node '%s': %v", node.Name, err)
 		}
 		log.Printf("[INFO] Retrieved %d wallets for node '%s'.", len(nodeWallets), node.Name)
 
@@ -348,16 +348,29 @@ func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, 
 
 func spamInvalidMessages(ctx context.Context, nodeConfig *resources.NodeConfig) {
 	log.Printf("Spamming bad transactions on node '%s'...", nodeConfig.Name)
+
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return
 	}
 	defer closer()
-	wallet, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
-	if err != nil || len(wallet) < 2 {
+
+	wallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+	if err != nil {
 		log.Printf("Failed to get wallet addresses: %v", err)
+		return
 	}
-	err = resources.SendInvalidTransactions(ctx, api, wallet[0], wallet[1], 100)
+
+	if len(wallets) < 2 {
+		log.Printf("[WARN] Not enough wallets (found %d). Skipping invalid tx spam.", len(wallets))
+		numWallets := 2
+		performCreateOperation(ctx, nodeConfig, &numWallets, abi.NewTokenAmount(10000))
+		return
+	}
+
+	err = resources.SendInvalidTransactions(ctx, api, wallets[0], wallets[1], 100)
 	assert.Always(err == nil, "Invalid transaction should never pass", map[string]interface{}{"error": err})
+
 	log.Printf("Spammed bad transactions successfully on node '%s'.", nodeConfig.Name)
 }
