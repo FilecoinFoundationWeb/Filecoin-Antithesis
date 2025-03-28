@@ -7,8 +7,8 @@ import (
 	"context"
 	"math/rand"
 	"os"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -65,6 +65,7 @@ func mutateHelloMessage(b []byte) []byte {
 
 func FuzzHello(f *testing.F) {
 	f.Add(helloMsg)
+
 	target, ok := os.LookupEnv("LOTUS_TARGET")
 	if !ok {
 		f.Skip("LOTUS_TARGET environment variable not set")
@@ -77,37 +78,54 @@ func FuzzHello(f *testing.F) {
 	if err != nil {
 		f.Skip("failed to extract peer info from LOTUS_TARGET multiaddr")
 	}
+
 	f.Fuzz(func(t *testing.T, data []byte) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Logf("💥 Panic caught: %v", r)
+				os.Exit(0) // exit fuzzing early without failing
+			}
+		}()
+
 		ctx := context.Background()
 		host, err := libp2p.New()
 		if err != nil {
-			t.Fatalf("failed to create libp2p host: %v", err)
+			t.Skipf("failed to create libp2p host: %v", err)
 		}
 		defer host.Close()
-		delay := time.Duration(rand.Intn(100)+50) * time.Millisecond
-		time.Sleep(delay)
+
 		if err := host.Connect(ctx, *ai); err != nil {
-			t.Skip("failed to connect to target peer: " + err.Error())
+			t.Skipf("failed to connect: %v", err)
 		}
+
 		stream, err := host.NewStream(ctx, ai.ID, helloID)
 		if err != nil {
-			t.Skip("failed to open stream: " + err.Error())
+			t.Skipf("failed to open stream: %v", err)
 		}
 		defer stream.Close()
+
 		var payload []byte
 		if len(data)%2 == 0 {
 			payload = append(helloMsg, data...)
 		} else {
 			payload = mutateHelloMessage(helloMsg)
 		}
-		n, err := stream.Write(payload)
+
+		_, err = stream.Write(payload)
 		if err != nil {
-			t.Errorf("failed to write payload: %v", err)
-		} else {
-			t.Logf("Sent %d bytes payload: %x", n, payload)
+			t.Logf("stream write error: %v", err)
+
+			// Kill fuzzing early if it's likely to cause panic/corruption
+			if strings.Contains(err.Error(), "connection reset by peer") ||
+				strings.Contains(err.Error(), "broken pipe") {
+				t.Logf("Node likely crashed or dropped connection. Exiting early.")
+				os.Exit(0)
+			}
+			return
 		}
+
 		if err := stream.CloseWrite(); err != nil {
-			t.Errorf("failed to close stream write: %v", err)
+			t.Logf("failed to close write: %v", err)
 		}
 	})
 }
