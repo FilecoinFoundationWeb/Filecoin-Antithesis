@@ -192,21 +192,25 @@ services:
 
   # Yugabyte Database Service
   yugabyte:
-    image: yugabyte:${YUGABYTE_COMMIT:-latest}
+    image: yugabytedb/yugabyte:latest
     container_name: yugabyte
     environment:
       - YUGABYTE_IP=${YUGABYTE_IP}
     ports:
-      - ${YUGABYTE_PORT}:${YUGABYTE_PORT}
+      - ${YUGABYTE_PORT_1}:${YUGABYTE_PORT_1}
+      - ${YUGABYTE_PORT_2}:${YUGABYTE_PORT_2}
+      - ${YUGABYTE_PORT_3}:${YUGABYTE_PORT_3}
+      - ${YUGABYTE_PORT_4}:${YUGABYTE_PORT_4}
+      - ${YUGABYTE_PORT_5}:${YUGABYTE_PORT_5}
     env_file:
       - .env
-    entrypoint: ["bin/yb-tserver", "--tserver_master_addrs=127.0.0.1:7100", "--fs_data_dirs=$YB_DATA_DIR"]
+    volumes:
+      - ./data/yugabyte:${YB_DATA_DIR}
+      - ./yugabyte/start_scripts/yugabyte.sh:/yugabyte.sh
+    entrypoint: ["/yugabyte.sh"]
     networks:
       antithesis-net:
         ipv4_address: ${YUGABYTE_IP}
-    depends_on:
-      lotus-1:
-        condition: service_healthy
 
 
   # Forest service

@@ -42,4 +42,3 @@ ARG RUSTFLAGS=""
 ARG GOFLAGS=""
 
 RUN make build
-
