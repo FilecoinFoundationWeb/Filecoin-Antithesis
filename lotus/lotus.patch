@@ -65,3 +65,23 @@
  			buildconstants.F3BootstrapEpoch,
  			time.Duration(buildconstants.BlockDelaySecs)*time.Second,
  			buildconstants.F3InitialPowerTableCID,
+--- a/node/hello/hello.go	2025-03-19 13:54:54
++++ b/node/hello/hello.go	2025-03-27 16:59:55
+@@ -77,7 +77,7 @@
+ 	if err := cborutil.ReadCborRPC(s, &hmsg); err != nil {
+ 		_ = s.SetReadDeadline(time.Time{})
+ 		log.Infow("failed to read hello message, disconnecting", "error", err)
+-		_ = s.Conn().Close()
++		_ = s.Close()
+ 		return
+ 	}
+ 	_ = s.SetReadDeadline(time.Time{})
+@@ -91,7 +91,7 @@
+ 
+ 	if hmsg.GenesisHash != hs.syncer.Genesis.Cids()[0] {
+ 		log.Debugf("other peer has different genesis! (%s)", hmsg.GenesisHash)
+-		_ = s.Conn().Close()
++		_ = s.Close()
+ 		return
+ 	}
+ 	go func() {
