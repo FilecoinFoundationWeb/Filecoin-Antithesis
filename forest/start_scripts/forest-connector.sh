@@ -22,7 +22,7 @@
 #     sleep 3
 # done
 
-sleep 10
+sleep 8
 
 set -euxo pipefail
 export TOKEN=$(cat ${FOREST_DATA_DIR}/jwt)
@@ -33,6 +33,7 @@ forest-wallet --remote-wallet import ${LOTUS_1_DATA_DIR}/key
 forest-wallet new bls
 forest-cli net listen > ${FOREST_DATA_DIR}/forest-listen-addr
 forest-cli net connect $(cat ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr)
+forest-cli net connect $(cat ${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr)
 forest-cli sync wait
 echo "Done"
 exit 0
