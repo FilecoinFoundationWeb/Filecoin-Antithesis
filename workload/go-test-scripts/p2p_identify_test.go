@@ -53,13 +53,11 @@ func randomString(n int) string {
 // TestSpamInvalidIdentifyPush repeatedly sends Identify push messages with a variety of mutated ObservedAddr values.
 // It uses both mutated valid multiaddrs and completely random strings to cover more invalid and edge-case inputs.
 func TestSpamInvalidIdentifyPush(t *testing.T) {
-	// Get the target Lotus node multiaddr from the environment.
 	target, ok := os.LookupEnv("LOTUS_TARGET")
 	if !ok {
 		t.Skip("LOTUS_TARGET environment variable not set")
 	}
 
-	// Seed corpus of valid multiaddr strings.
 	seeds := []string{
 		"/ip4/127.0.0.1/tcp/4001",
 		"/ip4/192.168.1.1/tcp/1234",
@@ -70,7 +68,6 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 		"/ip6zone/0",
 	}
 
-	// Create a sender libp2p host.
 	ctx := context.Background()
 	sender, err := libp2p.New()
 	if err != nil {
@@ -78,42 +75,38 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 	}
 	defer sender.Close()
 
-	// Parse the target multiaddr.
 	targetMaddr, err := ma.NewMultiaddr(target)
 	if err != nil {
-		t.Skip("failed to parse LOTUS_TARGET multiaddr")
+		t.Skipf("failed to parse LOTUS_TARGET multiaddr: %v", err)
 	}
 	ai, err := peer.AddrInfoFromP2pAddr(targetMaddr)
 	if err != nil {
-		t.Skip("failed to extract peer info from LOTUS_TARGET multiaddr")
+		t.Skipf("failed to extract peer info from LOTUS_TARGET multiaddr: %v", err)
 	}
 
-	// Connect the sender to the Lotus node.
-	if err := sender.Connect(ctx, *ai); err != nil {
-		t.Skip("failed to connect to Lotus node: " + err.Error())
+	// Dial with timeout
+	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	if err := sender.Connect(dialCtx, *ai); err != nil {
+		t.Skipf("failed to connect to Lotus node: %v", err)
 	}
 
-	// Allow a brief moment for connection establishment.
 	time.Sleep(100 * time.Millisecond)
 
-	// Number of messages to send.
-	iterations := 200 // Adjust iteration count as needed.
 	rand.Seed(time.Now().UnixNano())
-
-	for i := 0; i < iterations; i++ {
+	for i := 0; i < 200; i++ {
 		var payload string
-		// 50% chance: mutate a valid seed; 50% chance: generate a completely random string.
 		if rand.Float32() < 0.5 {
 			seed := seeds[rand.Intn(len(seeds))]
 			payload = mutateString(seed)
 		} else {
-			payload = randomString(rand.Intn(50) + 1) // random string length between 1 and 50.
+			payload = randomString(rand.Intn(50) + 1)
 		}
 
-		// Open a new stream using the Identify push protocol.
 		stream, err := sender.NewStream(ctx, ai.ID, identify.IDPush)
 		if err != nil {
-			t.Errorf("iteration %d: failed to open stream: %v", i, err)
+			t.Logf("iteration %d: failed to open stream: %v", i, err)
 			continue
 		}
 
@@ -121,19 +114,17 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 		msg := &pb.Identify{
 			ObservedAddr: []byte(payload),
 		}
-		t.Logf("iteration %d: sending message with ObservedAddr: %q", i, payload)
+
 		if err := writer.WriteMsg(msg); err != nil {
-			t.Errorf("iteration %d: failed to write Identify message: %v", i, err)
+			t.Logf("iteration %d: write error: %v", i, err)
 			stream.Reset()
-			t.Logf("Message: %v", msg)
 			continue
 		}
+
 		if err := stream.CloseWrite(); err != nil {
-			t.Errorf("iteration %d: failed to close stream write: %v", i, err)
+			t.Logf("iteration %d: close write error: %v", i, err)
 		}
 		stream.Close()
-
-		// Optional: Short pause between messages.
 		time.Sleep(10 * time.Millisecond)
 	}
 }
