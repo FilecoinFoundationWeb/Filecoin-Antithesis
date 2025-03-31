@@ -34,30 +34,62 @@ func TestReorgAfterDisconnectReconnect(t *testing.T) {
 		t.Fatal("Missing node definitions for Lotus1 or Lotus2")
 	}
 
-	api1, closer1, _ := resources.ConnectToNode(ctx, *node1)
+	api1, closer1, err := resources.ConnectToNode(ctx, *node1)
+	if err != nil {
+		t.Fatalf("failed to connect to Lotus1: %v", err)
+	}
 	defer closer1()
-	api2, closer2, _ := resources.ConnectToNode(ctx, *node2)
+
+	api2, closer2, err := resources.ConnectToNode(ctx, *node2)
+	if err != nil {
+		t.Fatalf("failed to connect to Lotus2: %v", err)
+	}
 	defer closer2()
 
-	head1, _ := api1.ChainHead(ctx)
-	head2, _ := api2.ChainHead(ctx)
+	head1, err := api1.ChainHead(ctx)
+	if err != nil || head1 == nil {
+		t.Fatalf("failed to get chain head for Lotus1: %v", err)
+	}
+	head2, err := api2.ChainHead(ctx)
+	if err != nil || head2 == nil {
+		t.Fatalf("failed to get chain head for Lotus2: %v", err)
+	}
 	t.Logf("Initial heads: Lotus1=%d, Lotus2=%d", head1.Height(), head2.Height())
 
 	pidStr := readFile(t, "/root/devgen/lotus-2/p2pID")
-	peerID, _ := peer.Decode(pidStr)
-	api1.NetDisconnect(ctx, peerID)
+	peerID, err := peer.Decode(pidStr)
+	if err != nil {
+		t.Fatalf("failed to decode peer ID: %v", err)
+	}
+	if err := api1.NetDisconnect(ctx, peerID); err != nil {
+		t.Fatalf("failed to disconnect Lotus1 from Lotus2: %v", err)
+	}
 
-	time.Sleep(180 * time.Second) // allow divergence
+	time.Sleep(180 * time.Second)
 
 	addrStr := readFile(t, "/root/devgen/lotus-2/lotus-2-ipv4addr")
-	maddr, _ := ma.NewMultiaddr(addrStr)
-	addrInfo, _ := peer.AddrInfoFromP2pAddr(maddr)
-	api1.NetConnect(ctx, *addrInfo)
+	maddr, err := ma.NewMultiaddr(addrStr)
+	if err != nil {
+		t.Fatalf("failed to parse multiaddr: %v", err)
+	}
+	addrInfo, err := peer.AddrInfoFromP2pAddr(maddr)
+	if err != nil {
+		t.Fatalf("failed to convert to AddrInfo: %v", err)
+	}
+	if err := api1.NetConnect(ctx, *addrInfo); err != nil {
+		t.Fatalf("failed to reconnect Lotus1 to Lotus2: %v", err)
+	}
 
 	time.Sleep(30 * time.Second) // wait for sync
 
-	final1, _ := api1.ChainHead(ctx)
-	final2, _ := api2.ChainHead(ctx)
+	final1, err := api1.ChainHead(ctx)
+	if err != nil || final1 == nil {
+		t.Fatalf("failed to get final chain head for Lotus1: %v", err)
+	}
+	final2, err := api2.ChainHead(ctx)
+	if err != nil || final2 == nil {
+		t.Fatalf("failed to get final chain head for Lotus2: %v", err)
+	}
 	t.Logf("Final heads: Lotus1=%d, Lotus2=%d", final1.Height(), final2.Height())
 
 	assert.Always(final1.Key() == final2.Key(), "Chains must match after reconnect", map[string]interface{}{
