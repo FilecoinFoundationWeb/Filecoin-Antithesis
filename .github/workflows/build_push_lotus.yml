@@ -6,7 +6,7 @@ on:
       lotus_tag:
         type: string
         required: true
-        default: '746995e'
+        default: '42d68a5'
         description: A commit hash that can be found from (https://github.com/filecoin-project/lotus)
 
 jobs:
