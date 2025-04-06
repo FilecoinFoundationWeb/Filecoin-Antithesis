@@ -28,6 +28,9 @@ COPY go.sum ./go.sum
 COPY main.go ./main.go
 COPY ./main ./test/v1/main
 
+# Make all files in ./test/v1/main executable
+RUN chmod +x ./test/v1/main/*
+
 # Download Go dependencies
 RUN go mod download
 
