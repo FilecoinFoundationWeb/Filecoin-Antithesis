@@ -1,6 +1,9 @@
 name: Build & Push Forest
 
-on: 
+on:
+  schedule:
+    # 6 PM EST, Mon & Thurs
+    - cron: '0 23 * * 1,4' 
   workflow_dispatch:
     inputs:
       forest_commit:
@@ -32,6 +35,12 @@ jobs:
         username: _json_key
         password: ${{ secrets.ANTITHESIS_GAR_KEY }}
 
+    # scheduled nightly
+    - name: Get latest forest commit hash
+      if: github.event_name == 'schedule'
+      id: latest-forest-commit
+      run: echo "commit-hash=$(git ls-remote https://github.com/ChainSafe/forest.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
+
     # There is a lot of copy-and-paste in these sections.
     # This could be streamlined by using a matrix configuration, which would
     # parameterize the extract and build stages. However, it would run both the
@@ -43,14 +52,14 @@ jobs:
       with:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/forest
         tags: |
-          type=sha
-          ${{ github.event.inputs.forest_commit }}
-          latest
+            type=sha
+            ${{ github.event.inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
+            latest
     - name: Build and push forest
       uses: docker/build-push-action@v5
       with:
         build-args: |
-          GIT_COMMIT=${{ github.event.inputs.forest_commit }}
+            GIT_COMMIT=${{ github.event.inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
         context: ./forest
         file: ./forest/Dockerfile
         push: true
