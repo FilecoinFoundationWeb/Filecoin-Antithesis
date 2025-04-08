@@ -58,10 +58,10 @@ jobs:
     - name: Build and push forest
       uses: docker/build-push-action@v5
       with:
-      build-args: |
-          GIT_COMMIT=${{ github.event.inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
-      context: ./forest
-      file: ./forest/Dockerfile
-      push: true
-      tags: ${{ steps.meta-forest.outputs.tags }}
-      labels: ${{ steps.meta-forest.outputs.labels }}
+        build-args: |
+            GIT_COMMIT=${{ github.event.inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
+        context: ./forest
+        file: ./forest/Dockerfile
+        push: true
+        tags: ${{ steps.meta-forest.outputs.tags }}
+        labels: ${{ steps.meta-forest.outputs.labels }}
