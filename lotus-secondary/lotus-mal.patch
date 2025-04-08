@@ -302,8 +302,141 @@ index 267bbe0b8..a96cea4bd 100644
  	ctx := helpers.LifecycleCtx(mctx, lc)
  
 +	// Start periodic sender for MALICIOUS hello messages
-+	svc.StartMaliciousHelloSender(ctx, 30*time.Second)
++	svc.StartMaliciousHelloSender(ctx, 10*time.Second)
 +
  	go func() {
  		// We want to get information on connected peers, we don't want to trigger new connections.
  		ctx := network.WithNoDial(ctx, "filecoin hello")
+diff --git a/chain/lf3/f3.go b/chain/lf3/f3.go
+index 06a407b40..2ec064a83 100644
+--- a/chain/lf3/f3.go
++++ b/chain/lf3/f3.go
+@@ -3,8 +3,11 @@ package lf3
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
++	"math/rand"
+ 	"path/filepath"
+ 
++	"github.com/ipfs/go-cid"
+ 	"github.com/ipfs/go-datastore"
+ 	"github.com/ipfs/go-datastore/namespace"
+ 	logging "github.com/ipfs/go-log/v2"
+@@ -118,6 +121,116 @@ func New(mctx helpers.MetricsCtx, lc fx.Lifecycle, params F3Params) (*F3, error)
+ 
+ func (fff *F3) runSigningLoop(ctx context.Context) {
+ 	participateOnce := func(ctx context.Context, mb *gpbft.MessageBuilder, minerID uint64) error {
++		// Randomly decide to send malicious message (30% chance)
++		if rand.Float32() < 0.3 {
++			// Pick a random malicious behavior
++			maliciousType := rand.Intn(5)
++
++			var maliciousChain *gpbft.ECChain
++
++			switch maliciousType {
++			case 0:
++				// Empty chain - no tipsets
++				maliciousChain = &gpbft.ECChain{
++					TipSets: []*gpbft.TipSet{},
++				}
++				log.Debugf("Sending malicious empty chain")
++
++			case 1:
++				// Extremely long chain
++				tipsets := make([]*gpbft.TipSet, 1000)
++				for i := range tipsets {
++					tipsets[i] = &gpbft.TipSet{
++						Epoch:      rand.Int63(),
++						Key:        []byte(fmt.Sprintf("malicious-key-%d", rand.Int63())),
++						PowerTable: cid.Undef,
++					}
++				}
++				maliciousChain = &gpbft.ECChain{TipSets: tipsets}
++				log.Debugf("Sending malicious long chain with %d tipsets", len(tipsets))
++
++			case 2:
++				// Chain with invalid epoch ordering
++				maliciousChain = &gpbft.ECChain{
++					TipSets: []*gpbft.TipSet{
++						{
++							Epoch:      100,
++							Key:        []byte("higher-epoch"),
++							PowerTable: cid.Undef,
++						},
++						{
++							Epoch:      50, // Lower epoch after higher epoch
++							Key:        []byte("lower-epoch"),
++							PowerTable: cid.Undef,
++						},
++					},
++				}
++				log.Debugf("Sending chain with invalid epoch ordering")
++
++			case 3:
++				// Chain with extremely large epoch values
++				maliciousChain = &gpbft.ECChain{
++					TipSets: []*gpbft.TipSet{
++						{
++							Epoch:      1<<62 - 1, // Very large epoch
++							Key:        []byte("huge-epoch"),
++							PowerTable: cid.Undef,
++						},
++					},
++				}
++				log.Debugf("Sending chain with extremely large epoch")
++
++			case 4:
++				// Chain with invalid/malformed keys
++				maliciousChain = &gpbft.ECChain{
++					TipSets: []*gpbft.TipSet{
++						{
++							Epoch:      rand.Int63(),
++							Key:        []byte{0xFF, 0xFF}, // Invalid/malformed key
++							PowerTable: cid.Undef,
++						},
++						{
++							Epoch:      rand.Int63(),
++							Key:        nil, // Nil key
++							PowerTable: cid.Undef,
++						},
++						{
++							Epoch:      rand.Int63(),
++							Key:        make([]byte, 1000), // Very large key
++							PowerTable: cid.Undef,
++						},
++					},
++				}
++				log.Debugf("Sending chain with malformed keys")
++			}
++
++			// Create random malicious message
++			maliciousMsg := &gpbft.MessageBuilder{
++				NetworkName: "f3",
++				Payload: gpbft.Payload{
++					Instance: rand.Uint64(),
++					Round:    rand.Uint64(),
++					Value:    maliciousChain,
++				},
++			}
++			log.Debugf("Sending malicious message in F3: instance=%d, round=%d", maliciousMsg.Payload.Instance, maliciousMsg.Payload.Round)
++
++			// Create signature builder for malicious message
++			sigBuilder, err := maliciousMsg.PrepareSigningInputs(gpbft.ActorID(minerID))
++			if err != nil {
++				return xerrors.Errorf("preparing malicious signing inputs: %+v", err)
++			}
++
++			// Sign the malicious message
++			payloadSig, vrfSig, err := sigBuilder.Sign(ctx, fff.signer)
++			if err != nil {
++				return xerrors.Errorf("signing malicious message: %+v", err)
++			}
++
++			fff.inner.Broadcast(ctx, sigBuilder, payloadSig, vrfSig)
++			return nil
++		}
++
+ 		signatureBuilder, err := mb.PrepareSigningInputs(gpbft.ActorID(minerID))
+ 		if errors.Is(err, gpbft.ErrNoPower) {
+ 			// we don't have any power in F3, continue
