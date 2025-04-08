@@ -51,10 +51,10 @@ jobs:
       uses: docker/metadata-action@v5
       with:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/forest
-      tags: |
-          type=sha
-          ${{ github.event.inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
-          latest
+        tags: |
+            type=sha
+            ${{ github.event.inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
+            latest
     - name: Build and push forest
       uses: docker/build-push-action@v5
       with:
