@@ -38,7 +38,7 @@ func TestBackfill(t *testing.T) {
 
 		// Test backfill
 		head, _ := api.ChainHead(ctx)
-		_, err = api.ChainValidateIndex(ctx, head.Height(), true)
+		_, err = api.ChainValidateIndex(ctx, head.Height()-1, true)
 		assert.Always(err == nil, "ChainValidateIndex call successful", map[string]interface{}{"node": node.Name, "error": err})
 
 	}
