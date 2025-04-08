@@ -75,7 +75,7 @@ jobs:
       - name: Scheduled Test Run
 
       - name: "Nightly @ 8 PM EST"
-        if: ${{ github.event.schedule == '0 0 * * *' }}
+        if: github.event.schedule == '0 0 * * *'
         uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
@@ -93,7 +93,7 @@ jobs:
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
       
       - name: "Nightly @ Midnight EST"
-        if: ${{ github.event.schedule == '0 4 * * *' }}
+        if: github.event.schedule == '0 4 * * *'
         uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
@@ -111,7 +111,7 @@ jobs:
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
       
       - name: "Noon EST Short Run"
-        if: ${{ github.event.schedule == '0 16 * * *' }}
+        if: github.event.schedule == '0 16 * * *'
         uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
