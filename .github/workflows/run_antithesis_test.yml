@@ -6,7 +6,7 @@ on:
     - cron: '0 0 * * *'
     - cron: '0 4 * * *'
     - cron: '0 16 * * *'
-    - cron: '57 16 * * *'
+    - cron: '5 17 * * *'
   workflow_dispatch:
     inputs:
       duration:
@@ -68,7 +68,7 @@ jobs:
 
   scheduled_run_a:
     name: "Nightly @ 8 PM EST"
-    if: github.event_name == 'schedule' && github.event.schedule == '57 16 * * *'
+    if: github.event_name == 'schedule' && github.event.schedule == '5 17 * * *'
     runs-on: ubuntu-latest
     permissions:
       contents: read
