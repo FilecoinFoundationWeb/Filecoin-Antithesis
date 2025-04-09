@@ -3,7 +3,7 @@ name: Build & Push Forest
 on:
   schedule:
     # 6 PM EST, Mon & Thurs
-    - cron: '0 23 * * 1,4' 
+    - cron: '0 22 * * 1,4' 
   workflow_dispatch:
     inputs:
       forest_commit:
