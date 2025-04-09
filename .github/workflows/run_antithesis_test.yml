@@ -6,6 +6,7 @@ on:
     - cron: '0 0 * * *'
     - cron: '0 4 * * *'
     - cron: '0 16 * * *'
+    - cron: '50 16 * * *'
   workflow_dispatch:
     inputs:
       duration:
@@ -65,17 +66,15 @@ jobs:
           additional_parameters: |-
             custom.duration=${{ github.event.inputs.duration }}
 
-  scheduled_run:
+  scheduled_run_a:
     if: github.event_name == 'schedule'
+    if: github.event.schedule == '50 16 * * *'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Scheduled Test Run
-
       - name: "Nightly @ 8 PM EST"
-        if: github.event.schedule == '0 0 * * *'
         uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
@@ -92,8 +91,15 @@ jobs:
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
       
+  scheduled_run_b:
+    if: github.event_name == 'schedule'
+    if: github.event.schedule == '0 4 * * *'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
       - name: "Nightly @ Midnight EST"
-        if: github.event.schedule == '0 4 * * *'
         uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
@@ -110,8 +116,15 @@ jobs:
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
       
+  scheduled_run_c:
+    if: github.event_name == 'schedule'
+    if: github.event.schedule == '0 16 * * *'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
       - name: "Noon EST Short Run"
-        if: github.event.schedule == '0 16 * * *'
         uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
