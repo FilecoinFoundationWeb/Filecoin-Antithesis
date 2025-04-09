@@ -48,6 +48,41 @@ func ConnectToNode(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, fu
 	return api, closer, nil
 }
 
+// IsNodeConnected checks if the current node has any peers connected.
+// Returns true if connected to at least one peer, false otherwise.
+func IsNodeConnected(ctx context.Context, nodeAPI api.FullNode) (bool, error) {
+	peers, err := nodeAPI.NetPeers(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get peer list: %w", err)
+	}
+	return len(peers) > 0, nil
+}
+
+// EnsureNodesConnected ensures that nodes are connected, connecting them if needed.
+// Returns true if nodes were already connected or successfully connected,
+// and false if they could not be connected.
+func EnsureNodesConnected(ctx context.Context, currentNodeAPI api.FullNode, currentNodeConfig NodeConfig, allNodes []NodeConfig) (bool, error) {
+	// Check if already connected
+	connected, err := IsNodeConnected(ctx, currentNodeAPI)
+	if err != nil {
+		return false, err
+	}
+
+	// If already connected, return true
+	if connected {
+		return true, nil
+	}
+
+	// Otherwise, attempt to connect
+	err = ConnectToOtherNodes(ctx, currentNodeAPI, currentNodeConfig, allNodes)
+	if err != nil {
+		return false, err
+	}
+
+	// Verify connection was established
+	return IsNodeConnected(ctx, currentNodeAPI)
+}
+
 // ConnectToOtherNodes connects the current node to all other nodes in the config.
 func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, currentNodeConfig NodeConfig, allNodes []NodeConfig) error {
 	for _, nodeConfig := range allNodes {
@@ -97,4 +132,3 @@ func DisconnectFromOtherNodes(ctx context.Context, currentNodeAPI api.FullNode) 
 	}
 	return nil
 }
-
