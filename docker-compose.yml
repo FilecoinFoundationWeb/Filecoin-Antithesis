@@ -206,68 +206,68 @@ services:
         condition: service_healthy
 
   # Forest service
-  forest:
-    image: forest:${FOREST_COMMIT:-latest}
-    container_name: forest
-    volumes:
-      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
-      - ./data/lotus-2:${LOTUS_2_DATA_DIR}
-      - ./data/forest:${FOREST_DATA_DIR}
-      - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
-      - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
-    environment:
-      - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${LOTUS_MINER_1_ACTOR_ADDRESS}
-      - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
-      - FOREST_SHARK_HEIGHT=${SHARK_HEIGHT}
-      - FOREST_HYGGE_HEIGHT=${HYGGE_HEIGHT}
-      - FOREST_LIGHTNING_HEIGHT=${LIGHTNING_HEIGHT}
-      - FOREST_THUNDER_HEIGHT=${THUNDER_HEIGHT}
-      - FOREST_WATERMELON_HEIGHT=${WATERMELON_HEIGHT}
-      - FOREST_DRAGON_HEIGHT=${DRAGON_HEIGHT}
-      - FOREST_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
-      - FOREST_TUKTUK_HEIGHT=${TUKTUK_HEIGHT}
-      - FOREST_IP = ${FOREST_IP}
-      - FOREST_HEALTHZ_RPC_PORT=${FOREST_HEALTHZ_RPC_PORT}
-      - FOREST_TEEP_HEIGHT=${TEEP_HEIGHT}
-    ports:
-      - ${FOREST_RPC_PORT}:${FOREST_RPC_PORT}
-    env_file:
-      - .env      
-    entrypoint: ["${FOREST_DATA_DIR}/forest-init.sh"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${FOREST_IP}
-    depends_on:
-      lotus-2: 
-        condition: service_healthy
-    healthcheck:
-      test: curl --fail http://10.20.20.28:2346/livez?verbose
-      interval: 5s
-      timeout: 2s
-      retries: 10
-      start_period: 30s
+  # forest:
+  #   image: forest:${FOREST_COMMIT:-latest}
+  #   container_name: forest
+  #   volumes:
+  #     - ./data/lotus-1:${LOTUS_1_DATA_DIR}
+  #     - ./data/lotus-2:${LOTUS_2_DATA_DIR}
+  #     - ./data/forest:${FOREST_DATA_DIR}
+  #     - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
+  #     - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
+  #   environment:
+  #     - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${LOTUS_MINER_1_ACTOR_ADDRESS}
+  #     - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
+  #     - FOREST_SHARK_HEIGHT=${SHARK_HEIGHT}
+  #     - FOREST_HYGGE_HEIGHT=${HYGGE_HEIGHT}
+  #     - FOREST_LIGHTNING_HEIGHT=${LIGHTNING_HEIGHT}
+  #     - FOREST_THUNDER_HEIGHT=${THUNDER_HEIGHT}
+  #     - FOREST_WATERMELON_HEIGHT=${WATERMELON_HEIGHT}
+  #     - FOREST_DRAGON_HEIGHT=${DRAGON_HEIGHT}
+  #     - FOREST_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
+  #     - FOREST_TUKTUK_HEIGHT=${TUKTUK_HEIGHT}
+  #     - FOREST_IP = ${FOREST_IP}
+  #     - FOREST_HEALTHZ_RPC_PORT=${FOREST_HEALTHZ_RPC_PORT}
+  #     - FOREST_TEEP_HEIGHT=${TEEP_HEIGHT}
+  #   ports:
+  #     - ${FOREST_RPC_PORT}:${FOREST_RPC_PORT}
+  #   env_file:
+  #     - .env      
+  #   entrypoint: ["${FOREST_DATA_DIR}/forest-init.sh"]
+  #   networks:
+  #     antithesis-net:
+  #       ipv4_address: ${FOREST_IP}
+  #   depends_on:
+  #     lotus-2: 
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: curl --fail http://10.20.20.28:2346/livez?verbose
+  #     interval: 5s
+  #     timeout: 2s
+  #     retries: 10
+  #     start_period: 30s
     
 
-  # Forest <-> Lotus connector service
-  forest-connecter:
-    image: forest:${FOREST_COMMIT:-latest}
-    container_name: forest-connector
-    volumes:
-      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
-      - ./data/lotus-2:${LOTUS_2_DATA_DIR}
-      - ./data/forest:${FOREST_DATA_DIR}
-      - ./forest/start_scripts/forest-connector.sh:${FOREST_DATA_DIR}/forest-connector.sh
-    environment:
-      - FOREST_CONNECTOR_IP=${FOREST_CONNECTOR_IP}
-    env_file:
-      - .env
-    entrypoint: ["${FOREST_DATA_DIR}/forest-connector.sh"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${FOREST_CONNECTOR_IP}
-    depends_on:
-      forest: 
-        condition: service_healthy
+  # # Forest <-> Lotus connector service
+  # forest-connecter:
+  #   image: forest:${FOREST_COMMIT:-latest}
+  #   container_name: forest-connector
+  #   volumes:
+  #     - ./data/lotus-1:${LOTUS_1_DATA_DIR}
+  #     - ./data/lotus-2:${LOTUS_2_DATA_DIR}
+  #     - ./data/forest:${FOREST_DATA_DIR}
+  #     - ./forest/start_scripts/forest-connector.sh:${FOREST_DATA_DIR}/forest-connector.sh
+  #   environment:
+  #     - FOREST_CONNECTOR_IP=${FOREST_CONNECTOR_IP}
+  #   env_file:
+  #     - .env
+  #   entrypoint: ["${FOREST_DATA_DIR}/forest-connector.sh"]
+  #   networks:
+  #     antithesis-net:
+  #       ipv4_address: ${FOREST_CONNECTOR_IP}
+  #   depends_on:
+  #     forest: 
+  #       condition: service_healthy
 
   # Workload service
   workload:
