@@ -41,7 +41,7 @@ func SpamTransactions(ctx context.Context, apis []api.FullNode, wallets [][]addr
 		}
 
 		// Random transaction amount
-		amount := abi.NewTokenAmount(int64(rand.Intn(50) + 1)) // Random amount up to 50 FIL
+		amount := abi.NewTokenAmount(int64(rand.Intn(1) + 1)) // Random amount up to 50 FIL
 
 		// Check the sender's wallet balance
 		balance, err := apis[fromNodeIndex].WalletBalance(ctx, from)

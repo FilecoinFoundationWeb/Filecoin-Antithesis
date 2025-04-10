@@ -136,11 +136,13 @@ func generateFuzzedMultiaddr() string {
 
 // NetworkChaos manages chaos operations targeting Lotus nodes
 type NetworkChaos struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	targetAddr string
-	targetInfo *peer.AddrInfo
-	running    bool
+	ctx          context.Context
+	cancel       context.CancelFunc
+	targetAddr   string
+	targetInfo   *peer.AddrInfo
+	running      bool
+	attackMode   string // "identify" or "ping"
+	pingAttacker *MaliciousPinger
 }
 
 // NewNetworkChaos creates a new chaos manager targeting the specified node
@@ -159,23 +161,58 @@ func NewNetworkChaos(ctx context.Context, targetAddr string) (*NetworkChaos, err
 		return nil, fmt.Errorf("failed to get addr info: %w", err)
 	}
 
+	// Create ping attacker
+	pinger, err := NewMaliciousPinger(ctx, targetAddr)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to create ping attacker: %w", err)
+	}
+
 	return &NetworkChaos{
-		ctx:        ctx,
-		cancel:     cancel,
-		targetAddr: targetAddr,
-		targetInfo: ai,
+		ctx:          ctx,
+		cancel:       cancel,
+		targetAddr:   targetAddr,
+		targetInfo:   ai,
+		pingAttacker: pinger,
+		attackMode:   "random", // Default to random attack mode
 	}, nil
 }
 
 // Start begins chaos operations
 func (nc *NetworkChaos) Start(minInterval, maxInterval time.Duration) {
 	nc.running = true
-	go nc.runFuzzer(minInterval, maxInterval)
+
+	// Initialize with 50/50 chance between identify and ping attacks
+	if rand.Float32() < 0.5 {
+		nc.attackMode = "identify"
+		go nc.runFuzzer(minInterval, maxInterval)
+	} else {
+		nc.attackMode = "ping"
+		// Select a random ping attack type
+		attackTypes := []PingAttackType{
+			RandomPayload,
+			OversizedPayload,
+			EmptyPayload,
+			MultipleStreams,
+			IncompleteWrite,
+		}
+		attackType := attackTypes[rand.Intn(len(attackTypes))]
+		concurrency := rand.Intn(5) + 2 // 2-6 concurrent attacks
+
+		log.Printf("Starting ping chaos with attack type: %d, concurrency: %d",
+			attackType, concurrency)
+		nc.pingAttacker.Start(attackType, concurrency, minInterval, maxInterval)
+	}
 }
 
 // Stop halts all chaos operations
 func (nc *NetworkChaos) Stop() {
 	nc.running = false
+
+	if nc.attackMode == "ping" {
+		nc.pingAttacker.Stop()
+	}
+
 	nc.cancel()
 }
 

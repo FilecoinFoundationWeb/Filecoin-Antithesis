@@ -55,8 +55,7 @@ func randomString(n int) string {
 func TestSpamInvalidIdentifyPush(t *testing.T) {
 	target, ok := os.LookupEnv("LOTUS_TARGET")
 	if !ok {
-		t.Log("LOTUS_TARGET environment variable not set")
-		os.Exit(0) // exit cleanly
+		t.Skip("LOTUS_TARGET environment variable not set")
 	}
 
 	seeds := []string{
@@ -72,20 +71,17 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 	ctx := context.Background()
 	sender, err := libp2p.New()
 	if err != nil {
-		t.Logf("failed to create sender host: %v", err)
-		os.Exit(0)
+		t.Fatalf("failed to create sender host: %v", err)
 	}
 	defer sender.Close()
 
 	targetMaddr, err := ma.NewMultiaddr(target)
 	if err != nil {
-		t.Logf("failed to parse LOTUS_TARGET multiaddr: %v", err)
-		os.Exit(0)
+		t.Fatalf("failed to parse LOTUS_TARGET multiaddr: %v", err)
 	}
 	ai, err := peer.AddrInfoFromP2pAddr(targetMaddr)
 	if err != nil {
-		t.Logf("failed to extract peer info from LOTUS_TARGET multiaddr: %v", err)
-		os.Exit(0)
+		t.Fatalf("failed to extract peer info from LOTUS_TARGET multiaddr: %v", err)
 	}
 
 	// Dial with timeout
@@ -93,8 +89,7 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 	defer cancel()
 
 	if err := sender.Connect(dialCtx, *ai); err != nil {
-		t.Logf("failed to connect to target: %v", err)
-		os.Exit(0) // exit quietly if connection is unreachable
+		t.Skipf("failed to connect to target: %v", err)
 	}
 
 	time.Sleep(100 * time.Millisecond)
