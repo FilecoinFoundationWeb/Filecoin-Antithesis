@@ -3,7 +3,7 @@ name: Run Antithesis Test
 on: 
   schedule:
     # 8 PM EST, midnight EST, noon EST
-    - cron: '0 0 * * *'
+    - cron: '0 2 * * *'
     - cron: '0 4 * * *'
     - cron: '0 16 * * *'
   workflow_dispatch:
@@ -65,18 +65,15 @@ jobs:
           additional_parameters: |-
             custom.duration=${{ github.event.inputs.duration }}
 
-  scheduled_run:
-    if: github.event_name == 'schedule'
+  scheduled_run_a:
+    name: "Nightly @ 10 PM EST"
+    if: github.event_name == 'schedule' && github.event.schedule == '0 2 * * *'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Scheduled Test Run
-
-      - name: "Nightly @ 8 PM EST"
-        if: github.event.schedule == '0 0 * * *'
-        uses: antithesishq/antithesis-trigger-action@main
+      - uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
           tenant: cobalt-bunny
@@ -85,16 +82,22 @@ jobs:
           github_token: ${{ secrets.GH_PAT }}
           images: drand:v2.0.4;forest:ead9ffc;lotus:746995e;workload:latest
           config_image: config:latest
-          description: "Nightly Filecoin continuous testing"
+          description: "Scheduled Filecoin Continuous Test: 12 hr nightly run"
           email_recipients: "filecoin-notifications.0607b605acbba4a098334f1cf7aad48b.show-sender.prefer-html@streams.zulipchat.com"
           additional_parameters: |-
             custom.duration=12
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
       
-      - name: "Nightly @ Midnight EST"
-        if: github.event.schedule == '0 4 * * *'
-        uses: antithesishq/antithesis-trigger-action@main
+  scheduled_run_b:
+    name: "Nightly @ Midnight EST"
+    if: github.event_name == 'schedule' && github.event.schedule == '0 4 * * *'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
           tenant: cobalt-bunny
@@ -103,16 +106,22 @@ jobs:
           github_token: ${{ secrets.GH_PAT }}
           images: drand:v2.0.4;forest:ead9ffc;lotus:746995e;workload:latest
           config_image: config:latest
-          description: "Nightly Filecoin continuous testing"
+          description: "Scheduled Filecoin Continuous Test: 12 hr nightly run"
           email_recipients: "filecoin-notifications.0607b605acbba4a098334f1cf7aad48b.show-sender.prefer-html@streams.zulipchat.com"
           additional_parameters: |-
             custom.duration=12
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
       
-      - name: "Noon EST Short Run"
-        if: github.event.schedule == '0 16 * * *'
-        uses: antithesishq/antithesis-trigger-action@main
+  scheduled_run_c:
+    name: "Noon EST Short Run"
+    if: github.event_name == 'schedule' && github.event.schedule == '0 16 * * *'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: forest
           tenant: cobalt-bunny
@@ -121,7 +130,7 @@ jobs:
           github_token: ${{ secrets.GH_PAT }}
           images: drand:v2.0.4;forest:ead9ffc;lotus:746995e;workload:latest
           config_image: config:latest
-          description: "Nightly Filecoin continuous testing"
+          description: "Scheduled Filecoin Continuous Test: 3 hr noon run"
           email_recipients: "filecoin-notifications.0607b605acbba4a098334f1cf7aad48b.show-sender.prefer-html@streams.zulipchat.com"
           additional_parameters: |-
             custom.duration=3
