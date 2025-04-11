@@ -19,9 +19,9 @@ import (
 	"github.com/filecoin-project/lotus/chain/types"
 )
 
-func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int) {
+func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *int, *string) {
 	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
-	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'spamInvalidMessages', 'chainedInvalidTx'")
+	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'spamInvalidMessages', 'chainedInvalidTx', 'pubsubAttack'")
 	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
 	numWallets := flag.Int("wallets", 1, "Number of wallets for the operation (required for 'create' and 'delete')")
 	contractPath := flag.String("contract", "", "Path to the smart contract bytecode file")
@@ -33,9 +33,11 @@ func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *ti
 	count := flag.Int("count", 100, "Number of transactions/operations to perform")
 	pingAttackType := flag.String("ping-attack-type", "random", "Type of ping attack: random, oversized, empty, multiple, incomplete")
 	concurrency := flag.Int("concurrency", 5, "Number of concurrent operations for attacks")
+	pubsubAttackType := flag.Int("pubsub-attack-type", 0, "Type of pubsub attack: 0=IHAVE, 1=IWANT, 2=Mixed, 3=LargeMessage, 4=BadControl")
+	topicName := flag.String("topic", "/fil/blocks", "Topic name for pubsub operations")
 
 	flag.Parse()
-	return configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency
+	return configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, pubsubAttackType, topicName
 }
 
 func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType *string) error {
@@ -50,12 +52,14 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		"spamInvalidMessages": true,
 		"chaos":               true,
 		"chainedInvalidTx":    true,
+		"pubsubAttack":        true,
 	}
 
 	// Operations that don't require a node name
 	noNodeNameRequired := map[string]bool{
-		"spam":  true,
-		"chaos": true,
+		"spam":         true,
+		"chaos":        true,
+		"pubsubAttack": true,
 	}
 
 	if !validOps[*operation] {
@@ -66,7 +70,7 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		return fmt.Errorf("node name is required for the '%s' operation", *operation)
 	}
 
-	if *operation == "chaos" && *targetAddr == "" {
+	if (*operation == "chaos" || *operation == "pubsubAttack") && *targetAddr == "" {
 		return fmt.Errorf("target multiaddr is required for '%s' operations", *operation)
 	}
 
@@ -90,13 +94,13 @@ func main() {
 	log.Println("[INFO] Starting workload...")
 
 	// Parse command line flags
-	configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, _, _ := parseFlags()
+	configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, pubsubAttackType, topicName := parseFlags()
 
 	// Create context
 	ctx := context.Background()
 
 	// Validate inputs based on operation
-	if err := validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, nil); err != nil {
+	if err := validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType); err != nil {
 		log.Printf("[ERROR] Input validation failed: %v", err)
 		os.Exit(1)
 	}
@@ -117,7 +121,7 @@ func main() {
 				break
 			}
 		}
-		if nodeConfig == nil && *operation != "spam" && *operation != "chaos" {
+		if nodeConfig == nil && *operation != "spam" && *operation != "chaos" && *operation != "pubsubAttack" {
 			log.Printf("[ERROR] Node '%s' not found in config", *nodeName)
 			os.Exit(1)
 		}
@@ -145,6 +149,8 @@ func main() {
 		err = performChainedInvalidTransactions(ctx, nodeConfig, *count)
 	case "chaos":
 		err = performChaosOperations(ctx, *targetAddr, *minInterval, *maxInterval, *duration)
+	case "pubsubAttack":
+		err = performPubsubAttack(ctx, *targetAddr, *pubsubAttackType, *count, *minInterval, *topicName, *duration, *concurrency)
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
@@ -619,5 +625,43 @@ func performPingAttack(ctx context.Context, targetAddr string, attackType resour
 	pinger.Stop()
 
 	log.Printf("[INFO] Ping attack completed")
+	return nil
+}
+
+func performPubsubAttack(ctx context.Context, targetAddr string, attackType int, numMessages int, interval time.Duration, topic string, duration time.Duration, concurrency int) error {
+	log.Printf("[INFO] Starting pubsub attack against %s with attack type: %d (concurrency: %d)", targetAddr, attackType, concurrency)
+
+	// Configure the pubsub attack
+	config := resources.PubsubAttackConfig{
+		TargetAddr:      targetAddr,
+		AttackType:      resources.AttackType(attackType),
+		NumMessages:     numMessages,
+		MessageInterval: interval,
+		MessageSize:     1000 * concurrency, // Increase message size based on concurrency
+		Topic:           topic,
+		RandomSeed:      time.Now().UnixNano(),
+	}
+
+	// Create a context with timeout
+	runCtx, cancel := context.WithTimeout(ctx, duration)
+	defer cancel()
+
+	// Create a goroutine to run the attack
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- resources.RunPubsubAttack(config)
+	}()
+
+	// Wait for completion or timeout
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return fmt.Errorf("pubsub attack failed: %w", err)
+		}
+	case <-runCtx.Done():
+		log.Printf("[INFO] Pubsub attack stopped due to timeout after %s", duration)
+	}
+
+	log.Printf("[INFO] Pubsub attack completed")
 	return nil
 }
