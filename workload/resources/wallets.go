@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/big"
 	"math/rand"
 	"time"
 
@@ -53,6 +54,42 @@ func CreateWallet(ctx context.Context, api api.FullNode, walletType types.KeyTyp
 }
 
 func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, amount abi.TokenAmount) error {
+	// Check sender's balance
+	balance, err := api.WalletBalance(ctx, from)
+	if err != nil {
+		return fmt.Errorf("failed to get wallet balance: %w", err)
+	}
+
+	// If balance is insufficient, try to get more funds from genesis
+	if balance.LessThan(amount) {
+		genesisWallet, err := GetGenesisWallet(ctx, api)
+		if err != nil {
+			return fmt.Errorf("failed to get genesis wallet: %w", err)
+		}
+
+		// Calculate how much more we need
+		needed := abi.TokenAmount{Int: big.NewInt(0).Sub(amount.Int, balance.Int)}
+
+		// Try to get funds from genesis
+		err = SendFunds(ctx, api, genesisWallet, from, needed)
+		if err != nil {
+			return fmt.Errorf("failed to get additional funds from genesis: %w", err)
+		}
+
+		// Wait for the funds to be available
+		time.Sleep(5 * time.Second)
+
+		// Check balance again
+		balance, err = api.WalletBalance(ctx, from)
+		if err != nil {
+			return fmt.Errorf("failed to get updated wallet balance: %w", err)
+		}
+
+		if balance.LessThan(amount) {
+			return fmt.Errorf("insufficient funds even after getting more from genesis: have %s, need %s", balance.String(), amount.String())
+		}
+	}
+
 	msg := &types.Message{
 		From:  from,
 		To:    to,
