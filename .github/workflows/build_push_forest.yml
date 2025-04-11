@@ -3,7 +3,7 @@ name: Build & Push Forest
 on:
   schedule:
     # 6 PM EST, Mon & Thurs
-    - cron: '0 22 * * 1,4' 
+    - cron: '0 22 * * 1' 
   workflow_dispatch:
     inputs:
       forest_commit:
@@ -35,7 +35,7 @@ jobs:
         username: _json_key
         password: ${{ secrets.ANTITHESIS_GAR_KEY }}
 
-    # scheduled nightly
+    # scheduled Monday nights 6pm est
     - name: Get latest forest commit hash
       if: github.event_name == 'schedule'
       id: latest-forest-commit
