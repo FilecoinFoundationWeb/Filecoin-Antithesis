@@ -29,41 +29,46 @@ ATTACK_TYPE=${ATTACK_TYPES[$((RANDOM % ${#ATTACK_TYPES[@]}))]}
 
 echo "Running $ATTACK_TYPE attack against $TARGET for $DURATION"
 
-# Run the selected attack type with trap for clean exit
+# Define main logic as a function so we can capture its return code
+main() {
+    case "$ATTACK_TYPE" in
+        "chaos")
+            # Chaos operation with random intervals
+            MIN_INTERVAL=$((RANDOM % 5 + 1))"s"
+            MAX_INTERVAL=$((RANDOM % 15 + 5))"s"
+            
+            timeout -k 5 -s SIGTERM "$DURATION" /opt/antithesis/app -operation chaos \
+              -target "$TARGET" \
+              -min-interval "$MIN_INTERVAL" \
+              -max-interval "$MAX_INTERVAL" \
+              -duration "$DURATION"
+            ;;
+            
+        "identify")
+            export LOTUS_TARGET="$TARGET"
+            timeout -k 5 -s SIGTERM "$DURATION" go run /opt/antithesis/go-test-scripts/identify.go
+            ;;
+    esac
+    return $?
+}
+
+# Define trap function to cleanly handle exit codes
 finish() {
-    exit_code=$?
-    if [ $exit_code -eq 124 ] || [ $exit_code -eq 143 ]; then
+    exit_code=$1
+    if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 143 ]; then
         echo "Attack completed successfully (timeout as expected)"
         exit 0
-    else 
+    elif [ "$exit_code" -eq 0 ]; then
+        echo "Attack completed successfully"
+        exit 0
+    else
         echo "Attack completed with exit code: $exit_code"
-        exit $exit_code
+        exit "$exit_code"
     fi
 }
 
-# Set trap to handle exit codes
-trap finish EXIT
+# Set trap to capture the exit code from main
+trap 'finish $?' EXIT
 
-case "$ATTACK_TYPE" in
-    "chaos")
-        # Chaos operation with random intervals
-        MIN_INTERVAL=$((RANDOM % 5 + 1))"s"
-        MAX_INTERVAL=$((RANDOM % 15 + 5))"s"
-        
-        # Use -k to ensure termination and -s for a cleaner signal
-        timeout -k 5 -s SIGTERM "$DURATION" /opt/antithesis/app -operation chaos \
-          -target "$TARGET" \
-          -min-interval "$MIN_INTERVAL" \
-          -max-interval "$MAX_INTERVAL" \
-          -duration "$DURATION"
-        ;;
-        
-    "identify")
-        # Run identify spam attack
-        export LOTUS_TARGET="$TARGET"
-        timeout -k 5 -s SIGTERM "$DURATION" go run /opt/antithesis/go-test-scripts/identify.go
-        ;;
-esac
-
-# The trap will handle the exit codes
-# (This point is reached only if timeout didn't terminate the process) 
+# Run the main logic
+main
