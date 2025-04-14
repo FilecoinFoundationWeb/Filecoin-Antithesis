@@ -25,12 +25,12 @@ on:
       forest:
         type: string
         required: true
-        default: 'ead9ffc'
+        default: 'latest'
         description: The forest image tag used for the test run
       lotus:
         type: string
         required: true
-        default: '746995e'
+        default: 'latest'
         description: The lotus image tag used for the test run
       workload:
         type: string
