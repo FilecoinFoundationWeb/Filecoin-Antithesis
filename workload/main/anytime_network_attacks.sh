@@ -2,6 +2,10 @@
 
 # This script runs network attack tests against Lotus nodes
 
+# Enable error handling
+set -o pipefail
+shopt -s expand_aliases
+
 # Read the multiaddr from the files
 LOTUS_1_TARGET=$(cat "/root/devgen/lotus-1/lotus-1-ipv4addr" 2>/dev/null || echo "")
 LOTUS_2_TARGET=$(cat "/root/devgen/lotus-2/lotus-2-ipv4addr" 2>/dev/null || echo "")
@@ -33,7 +37,7 @@ ATTACK_TYPE=${ATTACK_TYPES[$((RANDOM % ${#ATTACK_TYPES[@]}))]}
 
 echo "Running $ATTACK_TYPE attack against $TARGET for $DURATION"
 
-# Run the selected attack type with trap for clean exit
+# Function to handle exit codes
 finish() {
     exit_code=$?
     echo "Attack completed with exit code: $exit_code"
