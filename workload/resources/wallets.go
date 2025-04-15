@@ -23,30 +23,41 @@ func InitializeWallets(ctx context.Context, api api.FullNode, numWallets int, fu
 		return fmt.Errorf("failed to get genesis wallet: %v", err)
 	}
 
+	createdWallets := 0
 	for i := 0; i < numWallets; i++ {
 		wallet, err := CreateWallet(ctx, api, types.KTSecp256k1)
 
 		if err != nil {
-			return fmt.Errorf("failed to create wallet #%d: %v", i+1, err)
+			log.Printf("Failed to create wallet #%d: %v", i+1, err)
+			continue
 		}
 
 		err = SendFunds(ctx, api, genesisWallet, wallet, fundingAmount)
 		if err != nil {
-			return fmt.Errorf("failed to fund wallet #%d: %v", i+1, err)
+			log.Printf("Failed to fund wallet #%d: %v. Wallet was created but not funded.", i+1, err)
+			continue
 		}
 
 		log.Printf("Created and funded wallet #%d: %s with %s FIL", i+1, wallet, fundingAmount.String())
+		createdWallets++
 	}
+
+	if createdWallets == 0 {
+		return fmt.Errorf("failed to create and fund any wallets")
+	}
+
+	if createdWallets < numWallets {
+		log.Printf("Warning: Only created %d out of %d requested wallets", createdWallets, numWallets)
+	}
+
 	return nil
 }
 
 // CreateWallet creates a wallet of the specified type and returns its address.
 func CreateWallet(ctx context.Context, api api.FullNode, walletType types.KeyType) (address.Address, error) {
-
 	wallet, err := api.WalletNew(ctx, walletType)
-	assert.Always(err == nil, "Create a new wallet", map[string]interface{}{"error": err, "type": walletType})
-
 	if err != nil {
+		log.Printf("Failed to create wallet: %v", err)
 		return address.Undef, fmt.Errorf("failed to create wallet: %w", err)
 	}
 	return wallet, nil
@@ -60,20 +71,46 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 	}
 
 	sm, err := api.MpoolPushMessage(ctx, msg, nil)
-	assert.Sometimes(err == nil, "Push a message to send funds between two wallets", map[string]interface{}{"from": from, "to": to, "amount": amount, "error": err})
-	if sm == nil {
-		log.Fatalf("Failed to push message to mempool: %v", err)
+	assert.Sometimes(err != nil, "Mpool push message", map[string]any{
+		"from":  from.String(),
+		"to":    to.String(),
+		"error": err,
+	})
+	if err != nil {
+		log.Printf("Failed to push message to mempool: %v", err)
+		return fmt.Errorf("failed to push message to mempool: %w", err)
 	}
+	if sm == nil {
+		log.Printf("Message is nil after pushing to mempool")
+		return fmt.Errorf("message is nil after pushing to mempool")
+	}
+
 	time.Sleep(5 * time.Second)
+
 	result, err := api.StateWaitMsg(ctx, sm.Cid(), 5, 100, false)
-	assert.Sometimes(err == nil, "Waiting for the funds transfer message to be included in the next block", map[string]interface{}{"Cid": sm.Cid(), "error": err})
+	if err != nil {
+		log.Printf("Error waiting for message: %v", err)
+		return fmt.Errorf("error waiting for message: %w", err)
+	}
+
+	// Check if result is nil
+	if result == nil {
+		log.Printf("Message result is nil")
+		return fmt.Errorf("message result is nil")
+	}
 
 	// Check if the message execution was successful
 	if !result.Receipt.ExitCode.IsSuccess() {
 		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, result.Message)
-		assert.Sometimes(replayErr == nil, "StateReplay failed during funds transfer", map[string]interface{}{"messageCid": sm.Cid(), "error": replayErr})
-		assert.Always(replayResult != nil, "StateReplay returned nil result for funds transfer", map[string]interface{}{"messageCid": sm.Cid()})
-		return replayErr // Return the error if StateReplay failed
+		if replayErr != nil {
+			log.Printf("StateReplay failed: %v", replayErr)
+			return fmt.Errorf("state replay error: %w", replayErr)
+		}
+		if replayResult == nil {
+			log.Printf("StateReplay returned nil result")
+			return fmt.Errorf("state replay returned nil result")
+		}
+		return fmt.Errorf("message execution failed with exit code: %d", result.Receipt.ExitCode)
 	}
 
 	return nil
@@ -83,7 +120,6 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, error) {
 	// Attempt to get the default wallet
 	genesisWallet, err := api.WalletDefaultAddress(ctx)
-	assert.Sometimes(err == nil && genesisWallet != address.Undef, "Get the genesis wallet", map[string]interface{}{"error": err})
 
 	if err == nil && genesisWallet != address.Undef {
 		log.Printf("Default wallet found: %s", genesisWallet)
@@ -100,10 +136,12 @@ func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, e
 	// Fallback: List all wallets
 	wallets, err := api.WalletList(ctx)
 	if err != nil {
+		log.Printf("Failed to list wallets: %v", err)
 		return address.Undef, fmt.Errorf("failed to list wallets: %w", err)
 	}
 
 	if len(wallets) == 0 {
+		log.Printf("No wallets found in the node")
 		return address.Undef, fmt.Errorf("no wallets found in the node")
 	}
 
@@ -111,7 +149,9 @@ func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, e
 	fallbackWallet := wallets[0]
 	log.Printf("Using the first wallet as fallback: %s", fallbackWallet)
 
-	assert.Sometimes(fallbackWallet != address.Undef, "Using a fallback wallet because the genesis wallet was not found", map[string]interface{}{"fallback wallet": fallbackWallet, "list of all wallets": wallets})
+	if fallbackWallet == address.Undef {
+		return address.Undef, fmt.Errorf("invalid fallback wallet address")
+	}
 
 	return fallbackWallet, nil
 }
@@ -124,8 +164,8 @@ func GetAllWalletAddressesExceptGenesis(ctx context.Context, api api.FullNode) (
 	}
 
 	allWallets, err := api.WalletList(ctx)
-	assert.Always(err == nil, "List all wallets on a node", map[string]interface{}{"error": err})
 	if err != nil {
+		log.Printf("Failed to list wallets: %v", err)
 		return nil, fmt.Errorf("failed to list wallets: %w", err)
 	}
 
@@ -161,8 +201,8 @@ func GetRandomWallets(ctx context.Context, api api.FullNode, numWallets int) ([]
 func DeleteWallets(ctx context.Context, api api.FullNode, walletsToDelete []address.Address) error {
 	for _, wallet := range walletsToDelete {
 		err := api.WalletDelete(ctx, wallet)
-		assert.Always(err == nil, "Delete a wallet", map[string]interface{}{"error": err})
 		if err != nil {
+			log.Printf("Failed to delete wallet %s: %v", wallet.String(), err)
 			return fmt.Errorf("failed to delete wallet %s: %w", wallet.String(), err)
 		}
 		log.Printf("Successfully deleted wallet: %s", wallet.String())

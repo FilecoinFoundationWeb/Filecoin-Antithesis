@@ -18,7 +18,6 @@ import (
 	"github.com/multiformats/go-multiaddr"
 )
 
-// Base multiaddr components for mutation
 var baseComponents = []string{
 	"/ip4/127.0.0.1",
 	"/ip6/::1",
@@ -31,65 +30,41 @@ var baseComponents = []string{
 	"/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N",
 }
 
-// Valid multiaddr templates
 var validMultiaddrs = []string{
 	"/ip4/127.0.0.1/tcp/1234",
-	"/ip4/127.0.0.1/udp/1234/quic",
-	"/ip6/::1/tcp/1234",
-	"/dns4/bootstrap.libp2p.io/tcp/443/wss",
-	"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
 }
 
-// Special characters for mutations
 var specialChars = []string{
 	"/../", "//", "\\", "\x00", "\n", "\t", "\r",
 	"!", "@", "#", "$", "%", "^", "&", "*", "?",
 }
 
-// Generate a valid multiaddr
 func generateValidMultiaddr() string {
-	// 20% chance to use a template directly
 	if rand.Float32() < 0.2 {
 		return validMultiaddrs[rand.Intn(len(validMultiaddrs))]
 	}
 
-	// Otherwise construct a valid one
 	var parts []string
 
-	// Add IP address
 	if rand.Float32() < 0.5 {
-		// IPv4
 		ip := fmt.Sprintf("/ip4/%d.%d.%d.%d",
 			rand.Intn(256), rand.Intn(256),
 			rand.Intn(256), rand.Intn(256))
 		parts = append(parts, ip)
 	} else {
-		// IPv6
 		ip := fmt.Sprintf("/ip6/%x:%x:%x:%x:%x:%x:%x:%x",
-			rand.Intn(65536), rand.Intn(65536),
-			rand.Intn(65536), rand.Intn(65536),
-			rand.Intn(65536), rand.Intn(65536),
-			rand.Intn(65536), rand.Intn(65536))
+			rand.Intn(65536), rand.Intn(65536), rand.Intn(65536), rand.Intn(65536),
+			rand.Intn(65536), rand.Intn(65536), rand.Intn(65536), rand.Intn(65536))
 		parts = append(parts, ip)
 	}
 
-	// Add port
-	port := rand.Intn(65535) + 1
-	if rand.Float32() < 0.7 {
-		parts = append(parts, fmt.Sprintf("/tcp/%d", port))
-	} else {
-		parts = append(parts, fmt.Sprintf("/udp/%d", port))
-		if rand.Float32() < 0.5 {
-			parts = append(parts, "/quic")
-		}
-	}
+	port := fmt.Sprintf("/tcp/%d", rand.Intn(65535)+1)
+	parts = append(parts, port)
 
 	return strings.Join(parts, "")
 }
 
-// Generate a mutated multiaddr
 func generateFuzzedMultiaddr() string {
-	// 30% chance to send valid multiaddr
 	if rand.Float32() < 0.3 {
 		addr := generateValidMultiaddr()
 		log.Printf("Sending valid multiaddr: %s", addr)
@@ -100,7 +75,6 @@ func generateFuzzedMultiaddr() string {
 
 	switch mutationType {
 	case 0:
-		// Combine random components
 		numComponents := rand.Intn(4) + 1
 		components := make([]string, numComponents)
 		for i := 0; i < numComponents; i++ {
@@ -109,43 +83,37 @@ func generateFuzzedMultiaddr() string {
 		return strings.Join(components, "")
 
 	case 1:
-		// Insert special characters
 		component := baseComponents[rand.Intn(len(baseComponents))]
 		specialChar := specialChars[rand.Intn(len(specialChars))]
 		pos := rand.Intn(len(component))
 		return component[:pos] + specialChar + component[pos:]
 
 	case 2:
-		// Generate oversized values
 		protocols := []string{"ip4", "ip6", "tcp", "udp", "dns4", "dns6"}
 		proto := protocols[rand.Intn(len(protocols))]
 		value := strings.Repeat(string(rune(rand.Intn(26)+'a')), rand.Intn(1000)+100)
 		return fmt.Sprintf("/%s/%s", proto, value)
 
 	case 3:
-		// Create malformed IP addresses
 		octet := func() string { return fmt.Sprintf("%d", rand.Intn(512)) }
 		return fmt.Sprintf("/ip4/%s.%s.%s.%s", octet(), octet(), octet(), octet())
 
 	default:
-		// Random port numbers
-		port := rand.Intn(70000) + 65535 // Generate ports beyond valid range
+		port := rand.Intn(70000) + 65535
 		return fmt.Sprintf("/tcp/%d", port)
 	}
 }
 
-// NetworkChaos manages chaos operations targeting Lotus nodes
 type NetworkChaos struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	targetAddr   string
 	targetInfo   *peer.AddrInfo
 	running      bool
-	attackMode   string // "identify" or "ping"
+	attackMode   string
 	pingAttacker *MaliciousPinger
 }
 
-// NewNetworkChaos creates a new chaos manager targeting the specified node
 func NewNetworkChaos(ctx context.Context, targetAddr string) (*NetworkChaos, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -161,7 +129,6 @@ func NewNetworkChaos(ctx context.Context, targetAddr string) (*NetworkChaos, err
 		return nil, fmt.Errorf("failed to get addr info: %w", err)
 	}
 
-	// Create ping attacker
 	pinger, err := NewMaliciousPinger(ctx, targetAddr)
 	if err != nil {
 		cancel()
@@ -174,21 +141,18 @@ func NewNetworkChaos(ctx context.Context, targetAddr string) (*NetworkChaos, err
 		targetAddr:   targetAddr,
 		targetInfo:   ai,
 		pingAttacker: pinger,
-		attackMode:   "random", // Default to random attack mode
+		attackMode:   "random",
 	}, nil
 }
 
-// Start begins chaos operations
 func (nc *NetworkChaos) Start(minInterval, maxInterval time.Duration) {
 	nc.running = true
 
-	// Initialize with 50/50 chance between identify and ping attacks
 	if rand.Float32() < 0.5 {
 		nc.attackMode = "identify"
 		go nc.runFuzzer(minInterval, maxInterval)
 	} else {
 		nc.attackMode = "ping"
-		// Select a random ping attack type
 		attackTypes := []PingAttackType{
 			RandomPayload,
 			OversizedPayload,
@@ -197,7 +161,7 @@ func (nc *NetworkChaos) Start(minInterval, maxInterval time.Duration) {
 			IncompleteWrite,
 		}
 		attackType := attackTypes[rand.Intn(len(attackTypes))]
-		concurrency := rand.Intn(5) + 2 // 2-6 concurrent attacks
+		concurrency := rand.Intn(5) + 2
 
 		log.Printf("Starting ping chaos with attack type: %d, concurrency: %d",
 			attackType, concurrency)
@@ -205,7 +169,6 @@ func (nc *NetworkChaos) Start(minInterval, maxInterval time.Duration) {
 	}
 }
 
-// Stop halts all chaos operations
 func (nc *NetworkChaos) Stop() {
 	nc.running = false
 
@@ -217,7 +180,6 @@ func (nc *NetworkChaos) Stop() {
 }
 
 func (nc *NetworkChaos) runFuzzer(minInterval, maxInterval time.Duration) {
-	// Create a host for fuzzing
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
 	if err != nil {
 		log.Printf("Failed to generate key pair: %v", err)
@@ -235,7 +197,6 @@ func (nc *NetworkChaos) runFuzzer(minInterval, maxInterval time.Duration) {
 	}
 	defer h.Close()
 
-	// Connect to target
 	if err := h.Connect(nc.ctx, *nc.targetInfo); err != nil {
 		log.Printf("Failed to connect to target: %v", err)
 		return
@@ -243,9 +204,7 @@ func (nc *NetworkChaos) runFuzzer(minInterval, maxInterval time.Duration) {
 
 	log.Printf("Connected to target %s", nc.targetInfo.ID)
 
-	// Run fuzzing loop
 	for nc.running {
-		// Open identify push stream
 		stream, err := h.NewStream(nc.ctx, nc.targetInfo.ID, identify.IDPush)
 		if err != nil {
 			log.Printf("Failed to open stream: %v", err)
@@ -253,11 +212,9 @@ func (nc *NetworkChaos) runFuzzer(minInterval, maxInterval time.Duration) {
 			continue
 		}
 
-		// Generate and log fuzzed multiaddr
 		fuzzedAddr := generateFuzzedMultiaddr()
 		log.Printf("Sending fuzzed multiaddr: %s", fuzzedAddr)
 
-		// Send identify push message
 		writer := protoio.NewDelimitedWriter(stream)
 		msg := &pb.Identify{
 			ObservedAddr: []byte(fuzzedAddr),
@@ -269,7 +226,6 @@ func (nc *NetworkChaos) runFuzzer(minInterval, maxInterval time.Duration) {
 
 		stream.Close()
 
-		// Wait for random interval
 		interval := minInterval
 		if maxInterval > minInterval {
 			interval = minInterval + time.Duration(rand.Int63n(int64(maxInterval-minInterval)))

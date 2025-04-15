@@ -3,11 +3,9 @@ set -e
 
 # This script runs network attack tests against Lotus nodes
 
-# Read the multiaddr from the files
 LOTUS_1_TARGET=$(cat "/root/devgen/lotus-1/lotus-1-ipv4addr" 2>/dev/null || echo "")
 LOTUS_2_TARGET=$(cat "/root/devgen/lotus-2/lotus-2-ipv4addr" 2>/dev/null || echo "")
 
-# Create array of available targets
 random_targets=()
 [[ -n "$LOTUS_1_TARGET" ]] && random_targets+=("$LOTUS_1_TARGET")
 [[ -n "$LOTUS_2_TARGET" ]] && random_targets+=("$LOTUS_2_TARGET")
@@ -23,52 +21,27 @@ TARGET=${random_targets[$((RANDOM % ${#random_targets[@]}))]}
 # Random duration between 1-5 minutes
 DURATION=$((RANDOM % 4 + 1))"m"
 
-# Select a random attack type
 ATTACK_TYPES=("chaos" "identify")
 ATTACK_TYPE=${ATTACK_TYPES[$((RANDOM % ${#ATTACK_TYPES[@]}))]}
 
 echo "Running $ATTACK_TYPE attack against $TARGET for $DURATION"
 
-# Define main logic as a function so we can capture its return code
-main() {
-    case "$ATTACK_TYPE" in
-        "chaos")
-            # Chaos operation with random intervals
-            MIN_INTERVAL=$((RANDOM % 5 + 1))"s"
-            MAX_INTERVAL=$((RANDOM % 15 + 5))"s"
-            
-            timeout -k 5 -s SIGTERM "$DURATION" /opt/antithesis/app -operation chaos \
-              -target "$TARGET" \
-              -min-interval "$MIN_INTERVAL" \
-              -max-interval "$MAX_INTERVAL" \
-              -duration "$DURATION"
-            ;;
-            
-        "identify")
-            export LOTUS_TARGET="$TARGET"
-            timeout -k 5 -s SIGTERM "$DURATION" go run /opt/antithesis/go-test-scripts/identify.go
-            ;;
-    esac
-    return $?
-}
+# Run the appropriate attack
+if [[ "$ATTACK_TYPE" == "chaos" ]]; then
+    # Chaos operation with random intervals
+    MIN_INTERVAL=$((RANDOM % 5 + 1))"s"
+    MAX_INTERVAL=$((RANDOM % 15 + 5))"s"
+    
+    /opt/antithesis/app -operation chaos \
+      -target "$TARGET" \
+      -min-interval "$MIN_INTERVAL" \
+      -max-interval "$MAX_INTERVAL" \
+      -duration "$DURATION"
+    
+elif [[ "$ATTACK_TYPE" == "identify" ]]; then
+    export LOTUS_TARGET="$TARGET"
+    go run /opt/antithesis/go-test-scripts/identify.go
+fi
 
-# Define trap function to cleanly handle exit codes
-finish() {
-    exit_code=$1
-    if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 143 ]; then
-        echo "Attack completed successfully (timeout as expected)"
-        exit 0
-    elif [ "$exit_code" -eq 0 ]; then
-        echo "Attack completed successfully"
-        exit 0
-    else
-        echo "Attack completed with exit code: $exit_code"
-        exit "$exit_code"
-    fi
-}
-
-# Set trap to capture the exit code from main
-trap 'finish $?' EXIT
-
-# Run the main logic
-main
+echo "Attack completed successfully"
+exit 0

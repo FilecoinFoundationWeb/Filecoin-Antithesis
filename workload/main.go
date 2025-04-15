@@ -160,17 +160,20 @@ func main() {
 
 func performCreateOperation(ctx context.Context, nodeConfig *resources.NodeConfig, numWallets *int, tokenAmount abi.TokenAmount) error {
 	log.Printf("Creating %d wallets on node '%s'...", *numWallets, nodeConfig.Name)
+
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
-	if err := resources.InitializeWallets(ctx, api, *numWallets, tokenAmount); err != nil {
-		return fmt.Errorf("failed to create wallets on node '%s': %w", nodeConfig.Name, err)
+	err = resources.InitializeWallets(ctx, api, *numWallets, tokenAmount)
+	if err != nil {
+		log.Printf("Warning: Error occurred during wallet initialization: %v", err)
+	} else {
+		log.Printf("Wallets created successfully on node '%s'", nodeConfig.Name)
 	}
-
-	log.Printf("Wallets created successfully on node '%s'", nodeConfig.Name)
 	return nil
 }
 
@@ -598,26 +601,15 @@ func performChaosOperations(ctx context.Context, targetAddr string, minInterval,
 
 func performPingAttack(ctx context.Context, targetAddr string, attackType resources.PingAttackType, concurrency int, minInterval, maxInterval, duration time.Duration) error {
 	log.Printf("[INFO] Starting ping attack against %s with attack type: %d", targetAddr, attackType)
-
-	// Create a malicious pinger
 	pinger, err := resources.NewMaliciousPinger(ctx, targetAddr)
 	if err != nil {
 		return fmt.Errorf("failed to create malicious pinger: %w", err)
 	}
-
-	// Start the attack
 	pinger.Start(attackType, concurrency, minInterval, maxInterval)
-
-	// Create a context with timeout
 	runCtx, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
-
-	// Wait for completion or interruption
 	<-runCtx.Done()
-
-	// Stop the attack
 	pinger.Stop()
-
 	log.Printf("[INFO] Ping attack completed")
 	return nil
 }

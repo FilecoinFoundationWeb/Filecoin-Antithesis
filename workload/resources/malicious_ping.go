@@ -20,23 +20,16 @@ const (
 	pingProtocol = "/ipfs/ping/1.0.0"
 )
 
-// PingAttackType defines the type of ping attack to perform
 type PingAttackType int
 
 const (
-	// RandomPayload sends random data instead of a valid ping
 	RandomPayload PingAttackType = iota
-	// OversizedPayload sends a very large ping payload
 	OversizedPayload
-	// EmptyPayload sends an empty ping payload
 	EmptyPayload
-	// MultipleStreams opens multiple ping streams simultaneously
 	MultipleStreams
-	// IncompleteWrite starts writing and then stops
 	IncompleteWrite
 )
 
-// MaliciousPinger is used to send malformed ping messages to test libp2p nodes
 type MaliciousPinger struct {
 	ctx         context.Context
 	targetInfo  *peer.AddrInfo
@@ -48,7 +41,6 @@ type MaliciousPinger struct {
 	maxInterval time.Duration
 }
 
-// NewMaliciousPinger creates a new malicious ping client
 func NewMaliciousPinger(ctx context.Context, targetMultiaddr string) (*MaliciousPinger, error) {
 	targetAddr, err := multiaddr.NewMultiaddr(targetMultiaddr)
 	if err != nil {
@@ -68,7 +60,6 @@ func NewMaliciousPinger(ctx context.Context, targetMultiaddr string) (*Malicious
 	}, nil
 }
 
-// Start begins the malicious ping attack with the specified configuration
 func (mp *MaliciousPinger) Start(attackType PingAttackType, concurrency int, minInterval, maxInterval time.Duration) {
 	if mp.running {
 		log.Println("Malicious ping is already running")
@@ -84,7 +75,6 @@ func (mp *MaliciousPinger) Start(attackType PingAttackType, concurrency int, min
 	go mp.run()
 }
 
-// Stop stops the malicious ping attack
 func (mp *MaliciousPinger) Stop() {
 	if !mp.running {
 		return
@@ -93,7 +83,6 @@ func (mp *MaliciousPinger) Stop() {
 	mp.stopCh <- struct{}{}
 }
 
-// IsRunning returns whether the malicious ping attack is currently running
 func (mp *MaliciousPinger) IsRunning() bool {
 	return mp.running
 }
@@ -113,7 +102,6 @@ func (mp *MaliciousPinger) run() {
 		case <-mp.stopCh:
 			return
 		case <-ticker.C:
-			// Create hosts and attack in parallel
 			for i := 0; i < mp.concurrency; i++ {
 				wg.Add(1)
 				go func() {
@@ -124,7 +112,6 @@ func (mp *MaliciousPinger) run() {
 				}()
 			}
 
-			// Set next ticker interval randomly between min and max
 			if mp.maxInterval > mp.minInterval {
 				nextInterval := mp.minInterval + time.Duration(rand.Int63n(int64(mp.maxInterval-mp.minInterval)))
 				ticker.Reset(nextInterval)
@@ -137,7 +124,6 @@ func (mp *MaliciousPinger) run() {
 }
 
 func (mp *MaliciousPinger) executeAttack() error {
-	// Create a new libp2p host for each attack to avoid connection manager issues
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
 	if err != nil {
 		return fmt.Errorf("failed to generate key pair: %v", err)
@@ -153,7 +139,6 @@ func (mp *MaliciousPinger) executeAttack() error {
 	}
 	defer h.Close()
 
-	// Connect to target
 	if err := h.Connect(mp.ctx, *mp.targetInfo); err != nil {
 		return fmt.Errorf("failed to connect to target: %v", err)
 	}
@@ -183,7 +168,6 @@ func (mp *MaliciousPinger) sendRandomPingPayload(h host.Host) error {
 	}
 	defer stream.Close()
 
-	// Generate random payload
 	payloadSize := rand.Intn(1024) + 1
 	payload := make([]byte, payloadSize)
 	rand.Read(payload)
@@ -194,7 +178,6 @@ func (mp *MaliciousPinger) sendRandomPingPayload(h host.Host) error {
 		return fmt.Errorf("failed to write random ping payload: %v", err)
 	}
 
-	// Try to read response but don't wait too long
 	readCtx, cancel := context.WithTimeout(mp.ctx, 500*time.Millisecond)
 	defer cancel()
 
@@ -222,7 +205,6 @@ func (mp *MaliciousPinger) sendOversizedPingPayload(h host.Host) error {
 	}
 	defer stream.Close()
 
-	// Generate very large payload (5MB)
 	payloadSize := 5 * 1024 * 1024
 	payload := make([]byte, payloadSize)
 	rand.Read(payload)
@@ -253,7 +235,6 @@ func (mp *MaliciousPinger) sendEmptyPingPayload(h host.Host) error {
 }
 
 func (mp *MaliciousPinger) openMultiplePingStreams(h host.Host) error {
-	// Open multiple streams but don't send any data
 	numStreams := 20 + rand.Intn(20)
 	log.Printf("Opening %d ping streams simultaneously", numStreams)
 
@@ -267,10 +248,8 @@ func (mp *MaliciousPinger) openMultiplePingStreams(h host.Host) error {
 		streams = append(streams, stream)
 	}
 
-	// Keep streams open for a short period
 	time.Sleep(2 * time.Second)
 
-	// Close all streams
 	for i, stream := range streams {
 		if err := stream.Close(); err != nil {
 			log.Printf("Error closing stream %d: %v", i, err)
@@ -287,12 +266,10 @@ func (mp *MaliciousPinger) sendIncompletePingPayload(h host.Host) error {
 	}
 	defer stream.Close()
 
-	// Generate payload
 	payloadSize := 1024
 	payload := make([]byte, payloadSize)
 	rand.Read(payload)
 
-	// Write only first half of payload
 	halfSize := payloadSize / 2
 	log.Printf("Writing incomplete ping payload (first %d of %d bytes)", halfSize, payloadSize)
 	_, err = stream.Write(payload[:halfSize])
@@ -300,13 +277,11 @@ func (mp *MaliciousPinger) sendIncompletePingPayload(h host.Host) error {
 		return fmt.Errorf("failed to write first half of ping payload: %v", err)
 	}
 
-	// Wait a bit before closing the stream without sending the rest
 	time.Sleep(1 * time.Second)
 
 	return nil
 }
 
-// AttackTypeFromString converts a string to a PingAttackType
 func AttackTypeFromString(attackType string) PingAttackType {
 	switch attackType {
 	case "random":
@@ -324,7 +299,6 @@ func AttackTypeFromString(attackType string) PingAttackType {
 	}
 }
 
-// GetAttackTypes returns all available attack types as strings
 func GetAttackTypes() []string {
 	return []string{
 		"random",
