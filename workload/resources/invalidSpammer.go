@@ -22,15 +22,9 @@ var (
 	storedMutex          sync.Mutex
 )
 
-// SendInvalidTransactions is the main entry point for sending invalid transactions.
-// It randomly chooses between different attack vectors to provide comprehensive testing.
 func SendInvalidTransactions(ctx context.Context, api api.FullNode, from address.Address, to address.Address, count int) error {
 	log.Printf("Starting invalid transaction fuzzing with %d transactions", count)
-
-	// Initialize random seed
 	mathRand.Seed(time.Now().UnixNano())
-
-	// Select a random attack strategy
 	attackStrategy := mathRand.Intn(5)
 
 	switch attackStrategy {
@@ -55,9 +49,7 @@ func SendInvalidTransactions(ctx context.Context, api api.FullNode, from address
 	}
 }
 
-// sendStandardMutations implements the original 8 mutation approach with some enhancements
 func sendStandardMutations(ctx context.Context, api api.FullNode, from address.Address, to address.Address, count int) error {
-	// Get current nonce
 	startingNonce, err := api.MpoolGetNonce(ctx, from)
 	if err != nil {
 		log.Printf("[WARN] Could not get nonce for %s: %v, using 0", from, err)
@@ -77,56 +69,56 @@ func sendStandardMutations(ctx context.Context, api api.FullNode, from address.A
 			Params:     randomBytes(mathRand.Intn(64)),
 		}
 
-		// Apply mutations
 		switch i % 8 {
 		case 0:
 			msg.GasPremium = abi.NewTokenAmount(100)
-			msg.GasFeeCap = abi.NewTokenAmount(1) // GasPremium > GasFeeCap
+			msg.GasFeeCap = abi.NewTokenAmount(1)
 			log.Printf("[Test %d] GasPremium > GasFeeCap", i)
 		case 1:
-			msg.GasLimit = -1000 // Invalid gas limit
+			msg.GasLimit = -1000
 			log.Printf("[Test %d] Negative gas limit", i)
 		case 2:
 			raw := new(big.Int).SetUint64(^uint64(0))
-			msg.Value = abi.TokenAmount{Int: raw} // Very large value
+			msg.Value = abi.TokenAmount{Int: raw}
 			log.Printf("[Test %d] Maximum uint64 value", i)
 		case 3:
 			msg.Method = 99
-			msg.Params = randomBytes(128) // Garbage params
+			msg.Params = randomBytes(128)
 			log.Printf("[Test %d] Garbage params for method 99", i)
 		case 4:
-			msg.To, _ = address.NewIDAddress(0) // Reserved ID
+			msg.To, _ = address.NewIDAddress(0)
 			log.Printf("[Test %d] Reserved ID address 0", i)
 		case 5:
-			msg.Params = randomBytes(2048) // Oversized
+			msg.Params = randomBytes(2048)
 			log.Printf("[Test %d] Oversized params (2KB)", i)
 		case 6:
-			msg.Params = []byte{0xff, 0x01, 0x02, 0x03} // Malformed CBOR
+			msg.Params = []byte{0xff, 0x01, 0x02, 0x03}
 			log.Printf("[Test %d] Malformed CBOR", i)
 		case 7:
-			msg.Params = []byte{0xa1, 0x63, 0x6a, 0x75, 0x6e, 0x6b, 0x58, 0x20} // CBOR junk
+			msg.Params = []byte{0xa1, 0x63, 0x6a, 0x75, 0x6e, 0x6b, 0x58, 0x20}
 			log.Printf("[Test %d] CBOR junk", i)
 		}
 
 		smsg, err := api.MpoolPushMessage(ctx, msg, nil)
-		assert.Sometimes(err != nil, "expected to push message to mpool", nil)
+		assert.Sometimes(err != nil, "Invalid message handling", map[string]any{
+			"iteration": i,
+			"from":      from.String(),
+			"to":        to.String(),
+			"error":     err,
+		})
 		if err != nil {
 			log.Printf("[rejected] tx %d: %v", i, err)
 		} else {
 			log.Printf("[ACCEPTED] tx %d was accepted: %s", i, smsg.Cid())
-
-			// Store for later replay
 			storedMutex.Lock()
 			storedSignedMessages = append(storedSignedMessages, smsg)
 			storedMutex.Unlock()
 		}
 
-		// Variable delay
 		delay := time.Millisecond * time.Duration(50+mathRand.Intn(200))
 		time.Sleep(delay)
 	}
 
-	// Try to replay some of the accepted messages
 	if len(storedSignedMessages) > 0 {
 		ReplayStoredSignedMessages(ctx, api)
 	}
@@ -134,7 +126,6 @@ func sendStandardMutations(ctx context.Context, api api.FullNode, from address.A
 	return nil
 }
 
-// sendChainedTransactions creates a sequence of transactions where each depends on the previous one
 func sendChainedTransactions(ctx context.Context, api api.FullNode, from address.Address, count int) error {
 	nonce, err := api.MpoolGetNonce(ctx, from)
 	if err != nil {
@@ -142,9 +133,8 @@ func sendChainedTransactions(ctx context.Context, api api.FullNode, from address
 		nonce = 0
 	}
 
-	// First send a valid message
 	validMsg := &types.Message{
-		To:         from, // send to self
+		To:         from,
 		From:       from,
 		Nonce:      nonce,
 		Value:      abi.NewTokenAmount(0),
@@ -156,9 +146,14 @@ func sendChainedTransactions(ctx context.Context, api api.FullNode, from address
 	}
 
 	validSigned, err := api.MpoolPushMessage(ctx, validMsg, nil)
+	assert.Sometimes(err != nil, "Invalid message handling", map[string]any{
+		"iteration": 0,
+		"from":      from.String(),
+		"to":        from.String(),
+		"error":     err,
+	})
 	if err != nil {
 		log.Printf("[ERROR] Failed to send initial valid message: %v", err)
-		// Fall back to regular mutations if initial message fails
 		return sendStandardMutations(ctx, api, from, from, count)
 	}
 
@@ -169,7 +164,6 @@ func sendChainedTransactions(ctx context.Context, api api.FullNode, from address
 
 	time.Sleep(time.Millisecond * 500)
 
-	// Send a series of messages with increasing nonces
 	for i := 1; i < count; i++ {
 		msg := &types.Message{
 			To:         from,
@@ -183,42 +177,41 @@ func sendChainedTransactions(ctx context.Context, api api.FullNode, from address
 			Params:     []byte{},
 		}
 
-		// Add different types of issues
 		switch i % 5 {
 		case 0:
-			// Deceptively normal looking but with subtle params issue
 			msg.Params = []byte{0x01}
 			log.Printf("[Chain %d] Normal looking with subtle params issue", i)
 		case 1:
-			// Extremely high gas
 			msg.GasLimit = 10000000000
 			log.Printf("[Chain %d] Extremely high gas limit", i)
 		case 2:
-			// Invalid method
 			msg.Method = 99
 			log.Printf("[Chain %d] Invalid method number", i)
 		case 3:
-			// Malformed params
-			msg.Method = 2 // Some valid method
+			msg.Method = 2
 			msg.Params = createMalformedCBOR(32)
 			log.Printf("[Chain %d] Malformed CBOR params", i)
 		case 4:
-			// Potentially valid but to a random address
 			randomAddr, err := address.NewIDAddress(uint64(mathRand.Intn(100) + 100))
 			if err != nil {
 				randomAddr = from
 			}
 			msg.To = randomAddr
-			msg.Value = abi.NewTokenAmount(1) // Tiny value
+			msg.Value = abi.NewTokenAmount(1)
 			log.Printf("[Chain %d] Transfer to random address %s", i, randomAddr)
 		}
 
 		smsg, err := api.MpoolPushMessage(ctx, msg, nil)
+		assert.Sometimes(err != nil, "Invalid message handling", map[string]any{
+			"iteration": i,
+			"from":      from.String(),
+			"to":        from.String(),
+			"error":     err,
+		})
 		if err != nil {
 			log.Printf("[rejected] Chain tx %d: %v", i, err)
 		} else {
 			log.Printf("[ACCEPTED] Chain tx %d was accepted: %s", i, smsg.Cid())
-
 			storedMutex.Lock()
 			storedSignedMessages = append(storedSignedMessages, smsg)
 			storedMutex.Unlock()
@@ -231,7 +224,6 @@ func sendChainedTransactions(ctx context.Context, api api.FullNode, from address
 	return nil
 }
 
-// sendConcurrentBurst tries to overwhelm the node with concurrent requests
 func sendConcurrentBurst(ctx context.Context, api api.FullNode, from address.Address, to address.Address, count int) error {
 	nonce, err := api.MpoolGetNonce(ctx, from)
 	if err != nil {
@@ -239,14 +231,14 @@ func sendConcurrentBurst(ctx context.Context, api api.FullNode, from address.Add
 		nonce = 0
 	}
 
-	// Prepare a channel for collecting results
+	nonce = 0
+
 	results := make(chan struct {
 		index int
 		err   error
 		msg   *types.SignedMessage
 	}, count)
 
-	// Generate and prepare all messages
 	messages := make([]*types.Message, count)
 	for i := 0; i < count; i++ {
 		msg := &types.Message{
@@ -261,7 +253,6 @@ func sendConcurrentBurst(ctx context.Context, api api.FullNode, from address.Add
 			Params:     randomBytes(mathRand.Intn(32)),
 		}
 
-		// Add small mutations to some messages
 		if i%3 == 0 {
 			msg.GasLimit = -1
 		} else if i%7 == 0 {
@@ -273,7 +264,6 @@ func sendConcurrentBurst(ctx context.Context, api api.FullNode, from address.Add
 
 	log.Printf("[BURST] Sending %d concurrent messages", count)
 
-	// Start a goroutine to collect results
 	go func() {
 		accepted := 0
 		rejected := 0
@@ -285,7 +275,6 @@ func sendConcurrentBurst(ctx context.Context, api api.FullNode, from address.Add
 			} else {
 				accepted++
 				log.Printf("[BURST %d/%d] Accepted: %s", accepted, count, res.msg.Cid())
-
 				storedMutex.Lock()
 				storedSignedMessages = append(storedSignedMessages, res.msg)
 				storedMutex.Unlock()
@@ -295,17 +284,13 @@ func sendConcurrentBurst(ctx context.Context, api api.FullNode, from address.Add
 		log.Printf("[BURST COMPLETE] %d accepted, %d rejected", accepted, rejected)
 	}()
 
-	// Send all messages concurrently
 	var wg sync.WaitGroup
 	for i := 0; i < count; i++ {
 		wg.Add(1)
 
 		go func(idx int) {
 			defer wg.Done()
-
-			// Add a small staggered delay to make it more realistic
 			time.Sleep(time.Millisecond * time.Duration(mathRand.Intn(50)))
-
 			smsg, err := api.MpoolPushMessage(ctx, messages[idx], nil)
 			results <- struct {
 				index int
@@ -321,7 +306,6 @@ func sendConcurrentBurst(ctx context.Context, api api.FullNode, from address.Add
 	return nil
 }
 
-// sendSubtleAttacks focuses on transactions that might pass validation but fail later
 func sendSubtleAttacks(ctx context.Context, api api.FullNode, from address.Address, to address.Address, count int) error {
 	nonce, err := api.MpoolGetNonce(ctx, from)
 	if err != nil {
@@ -335,74 +319,60 @@ func sendSubtleAttacks(ctx context.Context, api api.FullNode, from address.Addre
 	}
 
 	for i := 0; i < count; i++ {
-		// Base message that looks normal
 		msg := &types.Message{
 			To:         to,
 			From:       from,
-			Nonce:      nonce + uint64(i),
+			Nonce:      nonce,
 			Value:      abi.NewTokenAmount(1),
 			GasLimit:   1000000,
 			GasFeeCap:  abi.NewTokenAmount(1e9),
 			GasPremium: abi.NewTokenAmount(1e8),
-			Method:     0, // Transfer
+			Method:     0,
 			Params:     []byte{},
 		}
 
-		// Add subtle issues
 		subtleIssue := i % 10
 		switch subtleIssue {
 		case 0:
-			// Valid transfer but with non-empty params
 			msg.Params = []byte{0x00}
 			log.Printf("[Subtle %d] Transfer with non-empty params", i)
 		case 1:
-			// Almost out of gas but not quite
-			msg.GasLimit = 21000 // Just enough to not be rejected outright
+			msg.GasLimit = 21000
 			log.Printf("[Subtle %d] Minimal gas limit", i)
 		case 2:
-			// Future nonce but not too far
-			msg.Nonce = nonce + uint64(count) + 10
-			log.Printf("[Subtle %d] Future nonce +%d", i, count+10)
+			msg.Value = abi.NewTokenAmount(1000000000000001)
+			log.Printf("[Subtle %d] Value greater than balance", i)
 		case 3:
-			// Specific actor target with invalid method
 			if head != nil {
 				actors, err := api.StateListActors(ctx, head.Key())
 				if err == nil && len(actors) > 0 {
 					randomIndex := mathRand.Intn(len(actors))
 					msg.To = actors[randomIndex]
-					msg.Method = 1 // Possibly invalid method number
+					msg.Method = 1
 					log.Printf("[Subtle %d] Actual actor %s with method 1", i, msg.To)
 				}
 			}
 		case 4:
-			// Looks correct but has tiny value transfer
 			msg.Value = abi.NewTokenAmount(1)
 			log.Printf("[Subtle %d] Minimal value transfer", i)
 		case 5:
-			// Invalid but plausible-looking CBOR
 			msg.Method = 2
-			msg.Params = []byte{0xa1, 0x61, 0x01, 0x01} // Map with 1 entry, key "1", value 1
+			msg.Params = []byte{0xa1, 0x61, 0x01, 0x01}
 			log.Printf("[Subtle %d] Plausible-looking but invalid CBOR", i)
 		case 6:
-			// Excessive but not outrageous gas values
 			msg.GasFeeCap = abi.NewTokenAmount(1e12)
 			msg.GasPremium = abi.NewTokenAmount(1e11)
 			log.Printf("[Subtle %d] Excessive gas price", i)
 		case 7:
-			// Send to own address
 			msg.To = from
 			log.Printf("[Subtle %d] Self-transfer", i)
 		case 8:
-			// Valid params but for wrong method
 			msg.Method = 3
-			msg.Params = []byte{0x80} // Empty array, might be valid for some methods
+			msg.Params = []byte{0x80}
 			log.Printf("[Subtle %d] Valid params for wrong method", i)
 		case 9:
-			// Correct nonce but already used
-			if i > 0 {
-				msg.Nonce = nonce // Reuse first nonce
-				log.Printf("[Subtle %d] Reused nonce", i)
-			}
+			msg.Value = abi.NewTokenAmount(1000000000000001)
+			log.Printf("[Subtle %d] Value exceeds balance", i)
 		}
 
 		smsg, err := api.MpoolPushMessage(ctx, msg, nil)
@@ -410,10 +380,10 @@ func sendSubtleAttacks(ctx context.Context, api api.FullNode, from address.Addre
 			log.Printf("[rejected] Subtle tx %d: %v", i, err)
 		} else {
 			log.Printf("[ACCEPTED] Subtle tx %d was accepted: %s", i, smsg.Cid())
-
 			storedMutex.Lock()
 			storedSignedMessages = append(storedSignedMessages, smsg)
 			storedMutex.Unlock()
+			nonce++
 		}
 
 		time.Sleep(time.Millisecond * time.Duration(100+mathRand.Intn(200)))
@@ -422,7 +392,6 @@ func sendSubtleAttacks(ctx context.Context, api api.FullNode, from address.Addre
 	return nil
 }
 
-// sendProtocolEdgeCases tests protocol-specific edge cases
 func sendProtocolEdgeCases(ctx context.Context, api api.FullNode, from address.Address, to address.Address, count int) error {
 	nonce, err := api.MpoolGetNonce(ctx, from)
 	if err != nil {
@@ -430,7 +399,6 @@ func sendProtocolEdgeCases(ctx context.Context, api api.FullNode, from address.A
 		nonce = 0
 	}
 
-	// We'll only do a few edge cases, and repeat them if count is high
 	edgeCases := []struct {
 		name        string
 		mutateMsg   func(*types.Message)
@@ -454,14 +422,14 @@ func sendProtocolEdgeCases(ctx context.Context, api api.FullNode, from address.A
 		{
 			name: "Method overflow",
 			mutateMsg: func(msg *types.Message) {
-				msg.Method = 1<<32 - 1 // Max uint32
+				msg.Method = 1<<32 - 1
 			},
 			description: "Message with maximum method number",
 		},
 		{
 			name: "Enormous params",
 			mutateMsg: func(msg *types.Message) {
-				msg.Params = make([]byte, 1024*1024) // 1MB of params
+				msg.Params = make([]byte, 1024*1024)
 				_, _ = cryptoRand.Read(msg.Params)
 			},
 			description: "Message with 1MB of params",
@@ -493,17 +461,20 @@ func sendProtocolEdgeCases(ctx context.Context, api api.FullNode, from address.A
 			Params:     []byte{},
 		}
 
-		// Apply the edge case mutation
 		edgeCase.mutateMsg(msg)
-
 		log.Printf("[Edge %d] Testing: %s", i, edgeCase.description)
 
 		smsg, err := api.MpoolPushMessage(ctx, msg, nil)
+		assert.Sometimes(err != nil, "Invalid message handling", map[string]any{
+			"iteration": i,
+			"from":      from.String(),
+			"to":        to.String(),
+			"error":     err,
+		})
 		if err != nil {
 			log.Printf("[rejected] Edge tx %d (%s): %v", i, edgeCase.name, err)
 		} else {
 			log.Printf("[ACCEPTED] Edge tx %d (%s) was accepted: %s", i, edgeCase.name, smsg.Cid())
-
 			storedMutex.Lock()
 			storedSignedMessages = append(storedSignedMessages, smsg)
 			storedMutex.Unlock()
@@ -550,22 +521,16 @@ func randomBytes(n int) []byte {
 	return buf
 }
 
-// Helper function to create semi-valid CBOR for testing
 func createMalformedCBOR(size int) []byte {
-	// Start with valid CBOR map header
-	buf := []byte{0xa1} // Map with 1 pair
-
-	// Add some valid-looking but malformed entries
+	buf := []byte{0xa1}
 	key := randomBytes(4)
 	value := randomBytes(size - 6)
 
-	// Add length prefix (might be invalid)
-	buf = append(buf, 0x58) // Bytes with 1-byte length
+	buf = append(buf, 0x58)
 	buf = append(buf, byte(len(key)))
 	buf = append(buf, key...)
 
-	// Add value with possibly incorrect length
-	buf = append(buf, 0x59) // Bytes with 2-byte length
+	buf = append(buf, 0x59)
 	length := make([]byte, 2)
 	binary.BigEndian.PutUint16(length, uint16(len(value)))
 	buf = append(buf, length...)

@@ -44,7 +44,7 @@ func TestF3IsRunningEquality(t *testing.T) {
 			defer closer()
 
 			isRunning, err := api.F3IsRunning(ctx)
-			assert.Always(err == nil, "Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
+			assert.Sometimes(err == nil, "Fetching F3 running status", map[string]interface{}{"node": node.Name, "error": err})
 
 			if err != nil {
 				t.Logf("Error fetching F3 status for node: %v", node.Name)

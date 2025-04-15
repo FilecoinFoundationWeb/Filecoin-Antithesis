@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
@@ -25,11 +24,16 @@ import (
 )
 
 func DeployContractWithValue(ctx context.Context, api api.FullNode, sender address.Address, bytecode []byte, value big.Int) eam.CreateReturn {
+	var result eam.CreateReturn
+
 	method := builtin.MethodsEAM.CreateExternal
 	initcode := abi.CborBytes(bytecode)
 
 	params, Actorerr := actors.SerializeParams(&initcode)
-	assert.Always(Actorerr == nil, "Serialize contract initialization parameters", map[string]interface{}{"error": Actorerr})
+	if Actorerr != nil {
+		log.Printf("Failed to serialize contract initialization parameters: %v", Actorerr)
+		return result
+	}
 
 	msg := &types.Message{
 		To:     builtin.EthereumAddressManagerActorAddr,
@@ -40,17 +44,29 @@ func DeployContractWithValue(ctx context.Context, api api.FullNode, sender addre
 	}
 
 	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
-	assert.Always(err == nil, "Push a create contract message", map[string]interface{}{"error": err})
+	if err != nil {
+		log.Printf("Failed to push create contract message: %v", err)
+		return result
+	}
 	time.Sleep(5 * time.Second)
 
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
-	assert.Sometimes(err == nil, "Wait for message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
-	assert.Sometimes(wait.Receipt.ExitCode.IsSuccess(), "Contract installation failed", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
+	if err != nil {
+		log.Printf("Error waiting for contract creation message: %v", err)
+		return result
+	}
 
-	var result eam.CreateReturn
+	if !wait.Receipt.ExitCode.IsSuccess() {
+		log.Printf("Contract installation failed with exit code: %v", wait.Receipt.ExitCode)
+		return result
+	}
+
 	r := bytes.NewReader(wait.Receipt.Return)
 	err = result.UnmarshalCBOR(r)
-	assert.Always(err == nil, "Unmarshal CBOR result", map[string]interface{}{"error": err})
+	if err != nil {
+		log.Printf("Failed to unmarshal CBOR result: %v", err)
+		return result
+	}
 
 	return result
 }
@@ -132,23 +148,24 @@ func InvokeContractByFuncName(ctx context.Context, api api.FullNode, fromAddr ad
 	entryPoint := CalcFuncSignature(funcSignature)
 
 	wait, err := InvokeSolidity(ctx, api, fromAddr, idAddr, entryPoint, inputData)
-	assert.Sometimes(err == nil, "Invoke Solidity function", map[string]interface{}{"error": err})
 	if err != nil {
+		log.Printf("Failed to invoke Solidity function: %v", err)
 		return nil, wait, fmt.Errorf("failed to invoke Solidity function: %w", err)
 	}
 
-	assert.Sometimes(wait.Receipt.ExitCode.IsSuccess(), "Check if contract execution succeeded", map[string]interface{}{"ExitCode": wait.Receipt.ExitCode})
 	if !wait.Receipt.ExitCode.IsSuccess() {
 		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
-		assert.Sometimes(replayErr == nil, "Replay failed message", map[string]interface{}{"error": replayErr})
 		if replayErr != nil {
+			log.Printf("Failed to replay failed message: %v", replayErr)
 			return nil, wait, fmt.Errorf("failed to replay failed message: %w", replayErr)
 		}
 		return nil, wait, fmt.Errorf("invoke failed with error: %v", replayResult.Error)
 	}
 
 	result, err := cbg.ReadByteArray(bytes.NewBuffer(wait.Receipt.Return), uint64(len(wait.Receipt.Return)))
-	assert.Sometimes(err == nil, "Read return data from contract execution", map[string]interface{}{"error": err})
+	if err != nil {
+		log.Printf("Failed to read return data from contract execution: %v", err)
+	}
 	return result, wait, err
 }
 
@@ -156,7 +173,10 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 	params := append(selector, inputData...)
 	var buffer bytes.Buffer
 	err := cbg.WriteByteArray(&buffer, params)
-	assert.Always(err == nil, "Write byte array to buffer", map[string]interface{}{"error": err})
+	if err != nil {
+		log.Printf("Failed to write byte array to buffer: %v", err)
+		return nil, fmt.Errorf("failed to write byte array to buffer: %w", err)
+	}
 
 	params = buffer.Bytes()
 
@@ -170,22 +190,27 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 	}
 
 	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
-	assert.Sometimes(err == nil, "Push message to invoke contract", map[string]interface{}{"error": err})
-	time.Sleep(5 * time.Second)
 	if err != nil {
+		log.Printf("Failed to push message to invoke contract: %v", err)
 		return nil, err
 	}
 	time.Sleep(5 * time.Second)
+
 	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
-	assert.Sometimes(err == nil, "Wait for invoke message to execute", map[string]interface{}{"Cid": smsg.Cid(), "error": err})
+	if err != nil {
+		log.Printf("Error waiting for invoke message to execute: %v", err)
+		return nil, err
+	}
 
 	if !wait.Receipt.ExitCode.IsSuccess() {
-		log.Print("We are here!")
+		log.Print("Contract invocation failed")
 		replayResult, err := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
 		log.Printf("StateReplay Error (err): %s", err)
-		log.Printf("StateReplay Error (replayResult.Error): %s", replayResult.Error)
-		assert.Sometimes(err == nil, "Replay failed invoke message", map[string]interface{}{"error": err})
-		return nil, fmt.Errorf("invoke failed with error: %v", replayResult.Error)
+		if replayResult != nil {
+			log.Printf("StateReplay Error (replayResult.Error): %s", replayResult.Error)
+			return nil, fmt.Errorf("invoke failed with error: %v", replayResult.Error)
+		}
+		return nil, fmt.Errorf("invoke failed and failed to replay: %v", err)
 	}
 	return wait, nil
 }

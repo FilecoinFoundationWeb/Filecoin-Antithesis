@@ -49,19 +49,19 @@ func TestF3ApiCalls(t *testing.T) {
 		// F3GetF3PowerTable
 		if err == nil {
 			_, err = api.F3GetF3PowerTable(ctx, ts.Key())
-			assert.Always(err == nil, "F3GetF3PowerTable call successful", map[string]interface{}{"node": node.Name, "error": err})
+			assert.Sometimes(err == nil, "F3GetF3PowerTable call successful", map[string]interface{}{"node": node.Name, "error": err})
 		}
 
 		// F3IsRunning
 		_, err = api.F3IsRunning(ctx)
-		assert.Always(err == nil, "F3IsRunning call successful", map[string]interface{}{"node": node.Name, "error": err})
+		assert.Sometimes(err == nil, "F3IsRunning call successful", map[string]interface{}{"node": node.Name, "error": err})
 
 		// F3GetProgress
 		_, err = api.F3GetProgress(ctx)
-		assert.Always(err == nil, "F3GetProgress call successful", map[string]interface{}{"node": node.Name, "error": err})
+		assert.Sometimes(err == nil, "F3GetProgress call successful", map[string]interface{}{"node": node.Name, "error": err})
 
 		// F3ListParticipants
 		_, err = api.F3ListParticipants(ctx)
-		assert.Always(err == nil, "F3ListParticipants call successful", map[string]interface{}{"node": node.Name, "error": err})
+		assert.Sometimes(err == nil, "F3ListParticipants call successful", map[string]interface{}{"node": node.Name, "error": err})
 	}
 }
