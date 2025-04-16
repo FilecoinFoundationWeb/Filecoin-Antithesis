@@ -1,8 +1,4 @@
 #!/bin/bash
-# Remove the set -e to prevent script from exiting on any error
-
-# This script runs network attack tests against Lotus nodes
-
 LOTUS_1_TARGET=$(cat "/root/devgen/lotus-1/lotus-1-ipv4addr" 2>/dev/null || echo "")
 LOTUS_2_TARGET=$(cat "/root/devgen/lotus-2/lotus-2-ipv4addr" 2>/dev/null || echo "")
 
