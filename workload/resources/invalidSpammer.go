@@ -5,6 +5,7 @@ import (
 	cryptoRand "crypto/rand"
 	"encoding/binary"
 	"log"
+	"math"
 	"math/big"
 	mathRand "math/rand"
 	"sync"
@@ -69,7 +70,7 @@ func sendStandardMutations(ctx context.Context, api api.FullNode, from address.A
 			Params:     randomBytes(mathRand.Intn(64)),
 		}
 
-		switch i % 8 {
+		switch i % 16 {
 		case 0:
 			msg.GasPremium = abi.NewTokenAmount(100)
 			msg.GasFeeCap = abi.NewTokenAmount(1)
@@ -97,8 +98,40 @@ func sendStandardMutations(ctx context.Context, api api.FullNode, from address.A
 		case 7:
 			msg.Params = []byte{0xa1, 0x63, 0x6a, 0x75, 0x6e, 0x6b, 0x58, 0x20}
 			log.Printf("[Test %d] CBOR junk", i)
+		case 8:
+			msg.Version = 2
+			log.Printf("[Test %d] Unsupported message version", i)
+		case 9:
+			msg.GasLimit = 1 << 60
+			log.Printf("[Test %d] Unrealistically high gas limit", i)
+		case 10:
+			msg.Method = 5
+			msg.Params = []byte{}
+			log.Printf("[Test %d] Empty params with non-zero method", i)
+		case 11:
+			msg.Params = []byte("☢️💥🔥")
+			log.Printf("[Test %d] Unicode params", i)
+		case 12:
+			msg.To = from
+			msg.Method = 12
+			log.Printf("[Test %d] Self-referential actor call", i)
+		case 13:
+			msg.GasFeeCap = abi.NewTokenAmount(math.MaxInt64)
+			msg.GasPremium = abi.NewTokenAmount(math.MaxInt64)
+			log.Printf("[Test %d] Integer overflow gas parameters", i)
+		case 14:
+			msg.Params = []byte{0x80}
+			msg.Method = 6
+			log.Printf("[Test %d] Minimal valid CBOR with unexpected method", i)
+		case 15:
+			// Try with nearly zero values for gas
+			msg.GasFeeCap = abi.NewTokenAmount(1)
+			msg.GasPremium = abi.NewTokenAmount(1)
+			msg.GasLimit = 1
+			log.Printf("[Test %d] Minimal gas values", i)
 		}
 
+		// Regular push for all cases
 		smsg, err := api.MpoolPushMessage(ctx, msg, nil)
 		assert.Sometimes(err != nil, "Invalid message handling", map[string]any{
 			"iteration": i,
@@ -117,6 +150,21 @@ func sendStandardMutations(ctx context.Context, api api.FullNode, from address.A
 
 		delay := time.Millisecond * time.Duration(50+mathRand.Intn(200))
 		time.Sleep(delay)
+	}
+
+	if len(storedSignedMessages) > 2 {
+		log.Printf("[INFO] Testing MpoolPush with manually modified signed messages")
+
+		originalMsg := storedSignedMessages[0]
+		modifiedMsg := *originalMsg
+
+		modifiedMsg.Message.GasLimit = 1000000
+
+		_, err := api.MpoolPush(ctx, &modifiedMsg)
+		log.Printf("[INFO] Pushing tampered message result: %v", err)
+		assert.Sometimes(err != nil, "Tampered message handling", map[string]any{
+			"error": err,
+		})
 	}
 
 	if len(storedSignedMessages) > 0 {
