@@ -24,8 +24,23 @@ COPY ./forest_config.toml.tpl .
 # COPY ./forest.patch ./forest.patch
 # RUN git apply ./forest.patch
 
-# Step 5: Build and install the project
+# Step 5: make install + Rust instrumentation for code coverage 
 RUN make install
+COPY libvoidstar.so /usr/local/lib/libvoidstar.so
+ENV LD_LIBRARY_PATH=/usr/local/lib
+ENV RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 \ 
+-Cllvm-args=-sanitizer-coverage-trace-pc-guard -Clink-arg=-Wl,-z,undefs \ 
+-Clink-args=-Wl,--build-id -L/usr/local/lib -lvoidstar"
+# Set Antithesis runtime library and rustflags
+WORKDIR /forest
+RUN sed -i 's/strip = true/strip = false/' Cargo.toml
+RUN cargo build --release --bin forest
+WORKDIR /
+RUN mkdir /symbols && ln -s /forest/target/release/forest /symbols/forest
+RUN ldd /symbols/forest | grep "libvoidstar" 
+RUN nm /symbols/forest | grep "sanitizer_cov_trace_pc_guard"
+# confirm that the binary has correctly linked to the Antithesis runtime library
+WORKDIR /forest
 
 # Step 6: Set up environment variables and fetch necessary parameters
 ENV FIL_PROOFS_PARAMETER_CACHE="/var/tmp/filecoin-proof-parameters"
