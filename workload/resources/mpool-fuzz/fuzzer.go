@@ -15,14 +15,12 @@ import (
 func RunFuzzer(ctx context.Context, api api.FullNode, from, to address.Address, config *Config) error {
 	log.Printf("Starting mempool fuzzing with %d transactions", config.Count)
 
-	// Setup random generator
 	seed := config.Seed
 	if seed == 0 {
 		seed = time.Now().UnixNano()
 	}
 	r := rand.New(rand.NewSource(seed))
 
-	// Select a random attack strategy if not specified
 	attackStrategy := r.Intn(5)
 
 	var err error
@@ -56,7 +54,6 @@ func RunFuzzer(ctx context.Context, api api.FullNode, from, to address.Address, 
 	return err
 }
 
-// SendSubtleAttacks implements subtle attack strategies
 func SendSubtleAttacks(ctx context.Context, api api.FullNode, from, to address.Address, count int, r *rand.Rand) error {
 	nonce, err := api.MpoolGetNonce(ctx, from)
 	if err != nil {
@@ -67,7 +64,6 @@ func SendSubtleAttacks(ctx context.Context, api api.FullNode, from, to address.A
 	for i := 0; i < count; i++ {
 		msg := CreateBaseMessage(from, to, nonce)
 
-		// Apply subtle mutation
 		mutationType := GetRandomMutation("subtle", r)
 		description := Apply(msg, mutationType, r)
 
@@ -99,7 +95,6 @@ func SendEdgeCases(ctx context.Context, api api.FullNode, from, to address.Addre
 	for i := 0; i < count; i++ {
 		msg := CreateBaseMessage(from, to, nonce+uint64(i))
 
-		// Apply edge case mutation
 		mutationType := GetRandomMutation("edge", r)
 		description := Apply(msg, mutationType, r)
 
