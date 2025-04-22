@@ -49,8 +49,19 @@ export TOKEN=$(cat ${FOREST_DATA_DIR}/jwt)
 export FULLNODE_API_INFO=$TOKEN:/ip4/${FOREST_IP}/tcp/${FOREST_RPC_PORT}/http
 echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 
-forest-wallet --remote-wallet import ${LOTUS_1_DATA_DIR}/key
-forest-wallet new bls
+WALLET_INIT_MARKER="${FOREST_DATA_DIR}/.wallet_initialized"
+
+if [ ! -f "$WALLET_INIT_MARKER" ]; then
+    echo "Initializing wallets for the first time..."
+    # Import the wallet key
+    forest-wallet --remote-wallet import ${LOTUS_1_DATA_DIR}/key
+    # Create a new BLS wallet
+    forest-wallet new bls
+    touch "$WALLET_INIT_MARKER"
+    echo "Wallet initialization completed"
+else
+    echo "Wallets already initialized, skipping import and creation"
+fi
 
 forest-cli net listen > ${FOREST_DATA_DIR}/forest-listen-addr
 forest-cli net connect $(cat ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr)
