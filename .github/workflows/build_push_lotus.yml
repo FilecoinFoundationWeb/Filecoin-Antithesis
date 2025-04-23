@@ -1,6 +1,9 @@
 name: Build & Push Lotus
 
 on: 
+  schedule:
+    # 6 PM EST, Mon & Thurs
+    - cron: '0 22 * * 1' 
   workflow_dispatch:
     inputs:
       lotus_tag:
@@ -32,6 +35,12 @@ jobs:
         username: _json_key
         password: ${{ secrets.ANTITHESIS_GAR_KEY }}
 
+    # scheduled Monday nights 6pm est
+    - name: Get latest lotus commit hash
+      if: github.event_name == 'schedule'
+      id: latest-lotus-commit
+      run: echo "commit-hash=$(git ls-remote https://github.com/filecoin-project/lotus.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
+
     # There is a lot of copy-and-paste in these sections.
     # This could be streamlined by using a matrix configuration, which would
     # parameterize the extract and build stages. However, it would run both the
@@ -44,13 +53,13 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/lotus
         tags: |
           type=sha
-          ${{ github.event.inputs.lotus_tag }}
+          ${{ github.event.inputs.lotus_tag || steps.latest-lotus-commit.outputs.commit-hash }}
           latest
     - name: Build and push lotus
       uses: docker/build-push-action@v5
       with:
         build-args: |
-          GIT_BRANCH=${{ github.event.inputs.lotus_tag }}
+          GIT_BRANCH=${{ github.event.inputs.lotus_tag || steps.latest-lotus-commit.outputs.commit-hash }}
         context: ./lotus
         file: ./lotus/Dockerfile
         push: true

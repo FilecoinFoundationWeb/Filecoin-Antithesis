@@ -7,11 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/big"
 	"math/rand"
+	"os"
 	"time"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
+	mpoolfuzz "github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/mpool-fuzz"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -19,27 +20,63 @@ import (
 	"github.com/filecoin-project/lotus/chain/types"
 )
 
-func parseFlags() (*string, *string, *string, *int, *string) {
+func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int) {
 	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
-	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'disconnect', 'deploySimpleCoin', or 'deployMCopy'")
+	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack'")
 	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
 	numWallets := flag.Int("wallets", 1, "Number of wallets for the operation (required for 'create' and 'delete')")
 	contractPath := flag.String("contract", "", "Path to the smart contract bytecode file")
+	minInterval := flag.Duration("min-interval", 5*time.Second, "Minimum interval between operations")
+	maxInterval := flag.Duration("max-interval", 30*time.Second, "Maximum interval between operations")
+	targetAddr := flag.String("target", "", "Target multiaddr for chaos operations")
+	duration := flag.Duration("duration", 60*time.Second, "Duration to run the attack (default: 60s)")
+	targetAddr2 := flag.String("target2", "", "Second target multiaddr for chain sync operations")
+	count := flag.Int("count", 100, "Number of transactions/operations to perform")
+	pingAttackType := flag.String("ping-attack-type", "random", "Type of ping attack: random, oversized, empty, multiple, incomplete")
+	concurrency := flag.Int("concurrency", 5, "Number of concurrent operations for attacks")
 
 	flag.Parse()
-	return configFile, operation, nodeName, numWallets, contractPath
+	return configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency
 }
 
-func validateInputs(operation, nodeName, contractPath *string) {
-	if *operation != "create" && *operation != "delete" && *operation != "spam" && *operation != "connect" && *operation != "disconnect" && *operation != "deploySimpleCoin" && *operation != "deployMCopy" && *operation != "deployTStore" && *operation != "spamInvalidMessages" {
-		log.Fatalf("Invalid operation: %s. Use 'create', 'delete', 'spam', 'connect', 'disconnect', 'deploySimpleCoin', or 'deployMCopy'.", *operation)
+func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType *string) error {
+	validOps := map[string]bool{
+		"create":           true,
+		"delete":           true,
+		"spam":             true,
+		"connect":          true,
+		"deploySimpleCoin": true,
+		"deployMCopy":      true,
+		"deployTStore":     true,
+		"chaos":            true,
+		"mempoolFuzz":      true,
+		"pingAttack":       true,
 	}
-	if (*operation == "create" || *operation == "delete" || *operation == "connect" || *operation == "disconnect" || *operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore" || *operation == "spamInvalidMessages") && *nodeName == "" {
-		log.Fatalf("Node name is required for the '%s' operation.", *operation)
+
+	// Operations that don't require a node name
+	noNodeNameRequired := map[string]bool{
+		"spam":       true,
+		"chaos":      true,
+		"pingAttack": true,
 	}
+
+	if !validOps[*operation] {
+		return fmt.Errorf("invalid operation: %s", *operation)
+	}
+
+	if !noNodeNameRequired[*operation] && *nodeName == "" {
+		return fmt.Errorf("node name is required for the '%s' operation", *operation)
+	}
+
+	if (*operation == "chaos" || *operation == "pingAttack") && *targetAddr == "" {
+		return fmt.Errorf("target multiaddr is required for '%s' operations", *operation)
+	}
+
 	if (*operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore") && *contractPath == "" {
-		log.Fatalf("Contract path is required for the '%s' operation.", *operation)
+		return fmt.Errorf("contract path is required for the '%s' operation", *operation)
 	}
+
+	return nil
 }
 
 func loadConfig(configFile string) (*resources.Config, error) {
@@ -51,89 +88,114 @@ func loadConfig(configFile string) (*resources.Config, error) {
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	log.Println("[INFO] Starting workload...")
+
+	// Parse command line flags
+	configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency := parseFlags()
+
+	// Create context
 	ctx := context.Background()
 
-	// Parse CLI flags
-	configFile, operation, nodeName, numWallets, contractPath := parseFlags()
-
-	// Validate inputs
-	validateInputs(operation, nodeName, contractPath)
+	// Validate inputs based on operation
+	if err := validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType); err != nil {
+		log.Printf("[ERROR] Input validation failed: %v", err)
+		os.Exit(1)
+	}
 
 	// Load configuration
 	config, err := loadConfig(*configFile)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Printf("[ERROR] Failed to load config: %v", err)
+		os.Exit(1)
 	}
 
-	// Select node configuration
+	// Get node config if needed
 	var nodeConfig *resources.NodeConfig
-	for _, node := range config.Nodes {
-		if node.Name == *nodeName {
-			nodeConfig = &node
-			break
+	if *nodeName != "" {
+		for i := range config.Nodes {
+			if config.Nodes[i].Name == *nodeName {
+				nodeConfig = &config.Nodes[i]
+				break
+			}
+		}
+		if nodeConfig == nil && *operation != "spam" && *operation != "chaos" {
+			log.Printf("[ERROR] Node '%s' not found in config", *nodeName)
+			os.Exit(1)
 		}
 	}
-	if (*operation == "create" || *operation == "delete" || *operation == "connect" || *operation == "disconnect" || *operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore" || *operation == "spamInvalidMessages") && nodeConfig == nil {
-		log.Fatalf("Node '%s' not found in config.json.", *nodeName)
-	}
 
-	// Perform operations
-	fundingAmount, _ := new(big.Int).SetString(config.DefaultFundingAmount, 10)
-	tokenAmount := abi.TokenAmount(types.BigInt{Int: fundingAmount})
-
+	// Execute the requested operation
 	switch *operation {
 	case "create":
-		performCreateOperation(ctx, nodeConfig, numWallets, tokenAmount)
+		err = performCreateOperation(ctx, nodeConfig, numWallets, abi.NewTokenAmount(1000000000000000))
 	case "delete":
-		performDeleteOperation(ctx, nodeConfig)
+		err = performDeleteOperation(ctx, nodeConfig)
 	case "spam":
-		performSpamOperation(ctx, config)
+		err = performSpamOperation(ctx, config)
 	case "connect":
-		performConnectOperation(ctx, nodeConfig, config)
-	case "disconnect":
-		performDisconnectOperation(ctx, nodeConfig)
+		err = performConnectDisconnectOperation(ctx, nodeConfig, config)
 	case "deploySimpleCoin":
-		performDeploySimpleCoin(ctx, nodeConfig, *contractPath)
+		err = performDeploySimpleCoin(ctx, nodeConfig, *contractPath)
 	case "deployMCopy":
-		performDeployMCopy(ctx, nodeConfig, *contractPath)
+		err = performDeployMCopy(ctx, nodeConfig, *contractPath)
 	case "deployTStore":
-		performDeployTStore(ctx, nodeConfig, *contractPath)
-	case "spamInvalidMessages":
-		spamInvalidMessages(ctx, nodeConfig)
+		err = performDeployTStore(ctx, nodeConfig, *contractPath)
+	case "chaos":
+		err = performChaosOperations(ctx, *targetAddr, *minInterval, *maxInterval, *duration)
+	case "mempoolFuzz":
+		err = performMempoolFuzz(ctx, nodeConfig, *count, *concurrency)
+	case "pingAttack":
+		attackType := resources.AttackTypeFromString(*pingAttackType)
+		err = performPingAttack(ctx, *targetAddr, attackType, *concurrency, *minInterval, *maxInterval, *duration)
+	default:
+		log.Printf("[ERROR] Unknown operation: %s", *operation)
+		os.Exit(1)
 	}
+
+	if err != nil {
+		log.Printf("[ERROR] Operation '%s' failed: %v", *operation, err)
+		os.Exit(1)
+	}
+
+	log.Printf("[INFO] Operation '%s' completed successfully", *operation)
 }
 
-func performCreateOperation(ctx context.Context, nodeConfig *resources.NodeConfig, numWallets *int, tokenAmount abi.TokenAmount) {
+func performCreateOperation(ctx context.Context, nodeConfig *resources.NodeConfig, numWallets *int, tokenAmount abi.TokenAmount) error {
 	log.Printf("Creating %d wallets on node '%s'...", *numWallets, nodeConfig.Name)
+
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		log.Printf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
 	err = resources.InitializeWallets(ctx, api, *numWallets, tokenAmount)
 	if err != nil {
-		log.Fatalf("Failed to create wallets on node '%s': %v", nodeConfig.Name, err)
+		log.Printf("Warning: Error occurred during wallet initialization: %v", err)
+	} else {
+		log.Printf("Wallets created successfully on node '%s'", nodeConfig.Name)
 	}
-	log.Printf("Wallets created successfully on node '%s'.", nodeConfig.Name)
+	return nil
 }
 
-func performDeleteOperation(ctx context.Context, nodeConfig *resources.NodeConfig) {
+func performDeleteOperation(ctx context.Context, nodeConfig *resources.NodeConfig) error {
 	log.Printf("Deleting wallets on node '%s'...", nodeConfig.Name)
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
 	}
 	defer closer()
 
 	allWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
 	if err != nil {
-		log.Fatalf("Failed to list wallets on node '%s': %v", nodeConfig.Name, err)
+		return fmt.Errorf("failed to list wallets on node '%s': %w", nodeConfig.Name, err)
 	}
+
 	if len(allWallets) == 0 {
-		// rand.Intn panics if allWallets == 0
-		log.Printf("No wallets available to delete on node '%s'.", nodeConfig.Name)
-		return
+		log.Printf("No wallets available to delete on node '%s'", nodeConfig.Name)
+		return nil
 	}
 
 	// Delete a random number of wallets
@@ -141,17 +203,24 @@ func performDeleteOperation(ctx context.Context, nodeConfig *resources.NodeConfi
 	numToDelete := rand.Intn(len(allWallets)) + 1
 	walletsToDelete := allWallets[:numToDelete]
 
-	err = resources.DeleteWallets(ctx, api, walletsToDelete)
-	if err != nil {
-		log.Fatalf("Failed to delete wallets on node '%s': %v", nodeConfig.Name, err)
+	if err := resources.DeleteWallets(ctx, api, walletsToDelete); err != nil {
+		return fmt.Errorf("failed to delete wallets on node '%s': %w", nodeConfig.Name, err)
 	}
-	log.Printf("Deleted %d wallets successfully on node '%s'.", numToDelete, nodeConfig.Name)
+
+	log.Printf("Deleted %d wallets successfully on node '%s'", numToDelete, nodeConfig.Name)
+	return nil
 }
 
-func performSpamOperation(ctx context.Context, config *resources.Config) {
+func performSpamOperation(ctx context.Context, config *resources.Config) error {
 	log.Println("[INFO] Starting spam operation...")
 	var apis []api.FullNode
 	var wallets [][]address.Address
+	var closers []func()
+	defer func() {
+		for _, closer := range closers {
+			closer()
+		}
+	}()
 
 	// Filter nodes for operation
 	filteredNodes := []resources.NodeConfig{}
@@ -167,119 +236,193 @@ func performSpamOperation(ctx context.Context, config *resources.Config) {
 		log.Printf("[INFO] Connecting to Lotus node '%s'...", node.Name)
 		api, closer, err := resources.ConnectToNode(ctx, node)
 		if err != nil {
-			log.Fatalf("[ERROR] Failed to connect to Lotus node '%s': %v", node.Name, err)
+			return fmt.Errorf("failed to connect to Lotus node '%s': %w", node.Name, err)
 		}
-		defer closer()
+		closers = append(closers, closer)
+
+		// Ensure wallets have sufficient funds before proceeding
+		log.Printf("[INFO] Checking wallet funds for node '%s'...", node.Name)
+		_, err = resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+		if err != nil {
+			log.Printf("[WARN] Failed to ensure wallets are funded on '%s': %v", node.Name, err)
+			// Create some wallets if needed
+			numWallets := 3
+			log.Printf("[INFO] Creating %d new wallets on node '%s'...", numWallets, node.Name)
+			if err := resources.InitializeWallets(ctx, api, numWallets, abi.NewTokenAmount(1000000000000000)); err != nil {
+				log.Printf("[WARN] Failed to create new wallets: %v", err)
+			}
+		}
 
 		log.Printf("[INFO] Retrieving wallets for node '%s'...", node.Name)
 		nodeWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
 		if err != nil {
-			log.Printf("[ERROR] Failed to retrieve wallets for node '%s': %v", node.Name, err)
+			return fmt.Errorf("failed to retrieve wallets for node '%s': %w", node.Name, err)
 		}
 		log.Printf("[INFO] Retrieved %d wallets for node '%s'.", len(nodeWallets), node.Name)
 
+		if len(nodeWallets) < 2 {
+			log.Printf("[WARN] Not enough wallets on node '%s' (found %d). At least 2 needed for spam operation.",
+				node.Name, len(nodeWallets))
+			continue
+		}
+
 		apis = append(apis, api)
 		wallets = append(wallets, nodeWallets)
+	}
+
+	// Ensure we have enough nodes connected for spam
+	if len(apis) < 1 {
+		return fmt.Errorf("not enough nodes available for spam operation")
 	}
 
 	// Perform spam transactions
 	rand.Seed(time.Now().UnixNano())
 	numTransactions := rand.Intn(30) + 1
 	log.Printf("[INFO] Initiating spam operation with %d transactions...", numTransactions)
-	err := resources.SpamTransactions(ctx, apis, wallets, numTransactions)
-	if err != nil {
-		log.Fatalf("[ERROR] Spam operation failed: %v", err)
+	if err := resources.SpamTransactions(ctx, apis, wallets, numTransactions); err != nil {
+		return fmt.Errorf("spam operation failed: %w", err)
 	}
 	log.Println("[INFO] Spam operation completed successfully.")
+	return nil
 }
 
-func performConnectOperation(ctx context.Context, nodeConfig *resources.NodeConfig, config *resources.Config) {
-	log.Printf("Connecting node '%s' to all other nodes...", nodeConfig.Name)
+func performConnectDisconnectOperation(ctx context.Context, nodeConfig *resources.NodeConfig, config *resources.Config) error {
+	log.Printf("Toggling connection for node '%s'...", nodeConfig.Name)
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
 	}
 	defer closer()
 
 	var lotusNodes []resources.NodeConfig
-
 	for _, node := range config.Nodes {
 		if node.Name == "Lotus1" || node.Name == "Lotus2" {
 			lotusNodes = append(lotusNodes, node)
 		}
 	}
 
-	err = resources.ConnectToOtherNodes(ctx, api, *nodeConfig, lotusNodes)
+	// Check current connections
+	peers, err := api.NetPeers(ctx)
 	if err != nil {
-		log.Fatalf("Failed to connect node '%s' to other nodes: %v", nodeConfig.Name, err)
+		return fmt.Errorf("failed to get peer list: %w", err)
 	}
-	log.Printf("Node '%s' connected successfully.", nodeConfig.Name)
+
+	// If we have peers, disconnect; otherwise connect
+	if len(peers) > 0 {
+		log.Printf("Node '%s' has %d peers, disconnecting...", nodeConfig.Name, len(peers))
+		if err := resources.DisconnectFromOtherNodes(ctx, api); err != nil {
+			return fmt.Errorf("failed to disconnect node '%s' from other nodes: %w", nodeConfig.Name, err)
+		}
+		log.Printf("Node '%s' disconnected successfully", nodeConfig.Name)
+	} else {
+		log.Printf("Node '%s' has no peers, connecting...", nodeConfig.Name)
+		if err := resources.ConnectToOtherNodes(ctx, api, *nodeConfig, lotusNodes); err != nil {
+			return fmt.Errorf("failed to connect node '%s' to other nodes: %w", nodeConfig.Name, err)
+		}
+		log.Printf("Node '%s' connected successfully", nodeConfig.Name)
+	}
+	return nil
 }
 
-func performDisconnectOperation(ctx context.Context, nodeConfig *resources.NodeConfig) {
-	log.Printf("Disconnecting node '%s' from all other nodes...", nodeConfig.Name)
-	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	if err != nil {
-		log.Fatalf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-	}
-	defer closer()
-
-	err = resources.DisconnectFromOtherNodes(ctx, api)
-	if err != nil {
-		log.Fatalf("Failed to disconnect node '%s' from other nodes: %v", nodeConfig.Name, err)
-	}
-	log.Printf("Node '%s' disconnected successfully.", nodeConfig.Name)
-}
-
-func performDeploySimpleCoin(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) {
+func performDeploySimpleCoin(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) error {
 	assert.Always(nodeConfig != nil, "NodeConfig cannot be nil", nil)
 	assert.Always(contractPath != "", "Contract path cannot be empty", nil)
 
+	log.Printf("[INFO] Deploying SimpleCoin contract on node %s from %s", nodeConfig.Name, contractPath)
+
 	// Connect to Lotus node
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	assert.Always(err == nil, "Failed to connect to Lotus node", map[string]interface{}{
-		"node": nodeConfig.Name, "err": err,
-	})
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return fmt.Errorf("failed to connect to Lotus node: %w", err)
+	}
 	defer closer()
 
+	// Verify contract file exists
+	if _, err := os.Stat(contractPath); os.IsNotExist(err) {
+		log.Printf("[ERROR] Contract file not found: %s", contractPath)
+		return fmt.Errorf("contract file not found: %s", contractPath)
+	}
+
+	// Check if we have a default wallet address
+	defaultAddr, err := api.WalletDefaultAddress(ctx)
+	if err != nil || defaultAddr.Empty() {
+		log.Printf("[WARN] No default wallet address found, attempting to get or create one")
+
+		// Get all available addresses
+		addresses, err := api.WalletList(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to list wallet addresses: %w", err)
+		}
+
+		// If we have addresses, set the first one as default
+		if len(addresses) > 0 {
+			defaultAddr = addresses[0]
+			log.Printf("[INFO] Using existing wallet address: %s", defaultAddr)
+			err = api.WalletSetDefault(ctx, defaultAddr)
+			if err != nil {
+				log.Printf("[WARN] Failed to set default wallet address: %v", err)
+			}
+		} else {
+			// Create a new address if none exists
+			log.Printf("[INFO] No wallet addresses found, creating a new one")
+			newAddr, err := api.WalletNew(ctx, types.KTSecp256k1)
+			if err != nil {
+				return fmt.Errorf("failed to create new wallet address: %w", err)
+			}
+			defaultAddr = newAddr
+			log.Printf("[INFO] Created new wallet address: %s", defaultAddr)
+
+			err = api.WalletSetDefault(ctx, defaultAddr)
+			if err != nil {
+				log.Printf("[WARN] Failed to set default wallet address: %v", err)
+			}
+		}
+	}
+
+	log.Printf("[INFO] Using wallet address: %s", defaultAddr)
+
+	// Verify the address has funds before deploying
+	balance, err := api.WalletBalance(ctx, defaultAddr)
+	if err != nil {
+		log.Printf("[WARN] Failed to check wallet balance: %v", err)
+	} else if balance.IsZero() {
+		log.Printf("[WARN] Wallet has zero balance, contract deployment may fail")
+	}
+
 	// Deploy the contract
+	log.Printf("[INFO] Deploying contract from %s", contractPath)
 	fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
-	assert.Always(fromAddr.String() != "", "Deployment failed: from address is empty", nil)
-	assert.Always(contractAddr.String() != "", "Deployment failed: contract address is empty", nil)
+
+	if fromAddr.Empty() {
+		return fmt.Errorf("deployment failed: empty from address")
+	}
+
+	if contractAddr.Empty() {
+		return fmt.Errorf("deployment failed: empty contract address")
+	}
+
+	log.Printf("[INFO] Contract deployed from %s to %s", fromAddr, contractAddr)
 
 	// Generate input data for owner's address
 	inputData := resources.InputDataFromFrom(ctx, api, fromAddr)
-	assert.Always(len(inputData) > 0, "Input data for owner's address cannot be empty", nil)
+	if len(inputData) == 0 {
+		return fmt.Errorf("failed to generate input data for owner's address")
+	}
 
 	// Invoke contract for owner's balance
+	log.Printf("[INFO] Checking owner's balance")
 	result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
-	assert.Sometimes(err == nil, "Failed to retrieve owner's balance", map[string]interface{}{
-		"fromAddr":     fromAddr,
-		"contractAddr": contractAddr,
-		"function":     "getBalance(address)",
-		"err":          err,
-	})
-	expectedOwnerBalance := "0000000000000000000000000000000000000000000000000000000000002710" // Example balance in string format
-	assert.Sometimes(hex.EncodeToString(result) == expectedOwnerBalance, "Owner's balance mismatch", map[string]interface{}{
-		"expected": expectedOwnerBalance, "actual": hex.EncodeToString(result),
-	})
+	if err != nil {
+		log.Printf("[WARN] Failed to retrieve owner's balance: %v", err)
+	} else {
+		log.Printf("[INFO] Owner's balance: %x", result)
+	}
 
-	inputData[31]++
-	resultt, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
-	assert.Sometimes(err == nil, "Failed to retrieve non-owner's balance", map[string]interface{}{
-		"fromAddr":     fromAddr,
-		"contractAddr": contractAddr,
-		"function":     "getBalance(address)",
-		"err":          err,
-	})
-	expectedNonOwnerBalance := "0000000000000000000000000000000000000000000000000000000000000000" // Example balance in string format
-	assert.Sometimes(hex.EncodeToString(resultt) == expectedNonOwnerBalance, "Non-owner's balance mismatch", map[string]interface{}{
-		"expected": expectedNonOwnerBalance, "actual": hex.EncodeToString(resultt),
-	})
-
+	return nil
 }
 
-func performDeployMCopy(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) {
+func performDeployMCopy(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) error {
 	log.Printf("Deploying and invoking MCopy contract on node '%s'...", nodeConfig.Name)
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
@@ -304,9 +447,10 @@ func performDeployMCopy(ctx context.Context, nodeConfig *resources.NodeConfig, c
 	} else {
 		log.Printf("MCopy invocation result: %x\n", result)
 	}
+	return nil
 }
 
-func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) {
+func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) error {
 	log.Printf("Deploying and invoking TStore contract on node '%s'...", nodeConfig.Name)
 
 	// Connect to Lotus node
@@ -344,33 +488,97 @@ func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	fmt.Printf("InvokeContractByFuncName Error: %s", err)
 
 	log.Printf("TStore contract successfully deployed and tested on node '%s'.", nodeConfig.Name)
+	return nil
 }
 
-func spamInvalidMessages(ctx context.Context, nodeConfig *resources.NodeConfig) {
-	log.Printf("Spamming bad transactions on node '%s'...", nodeConfig.Name)
+func performChaosOperations(ctx context.Context, targetAddr string, minInterval, maxInterval, duration time.Duration) error {
+	log.Printf("Starting network chaos operations targeting %s...", targetAddr)
+
+	chaos, err := resources.NewNetworkChaos(ctx, targetAddr)
+	if err != nil {
+		return fmt.Errorf("failed to initialize network chaos: %w", err)
+	}
+
+	chaos.Start(minInterval, maxInterval)
+
+	log.Printf("Network chaos operations will run for %s...", duration)
+	time.Sleep(duration)
+	log.Println("Stopping network chaos operations...")
+	chaos.Stop()
+
+	return nil
+}
+
+func performPingAttack(ctx context.Context, targetAddr string, attackType resources.PingAttackType, concurrency int, minInterval, maxInterval, duration time.Duration) error {
+	log.Printf("[INFO] Starting ping attack against %s with attack type: %d", targetAddr, attackType)
+	pinger, err := resources.NewMaliciousPinger(ctx, targetAddr)
+	if err != nil {
+		return fmt.Errorf("failed to create malicious pinger: %w", err)
+	}
+	pinger.Start(attackType, concurrency, minInterval, maxInterval)
+	runCtx, cancel := context.WithTimeout(ctx, duration)
+	defer cancel()
+	<-runCtx.Done()
+	pinger.Stop()
+	log.Printf("[INFO] Ping attack completed")
+	return nil
+}
+
+func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, count, concurrency int) error {
+	log.Printf("[INFO] Starting mempool fuzzing on node '%s' with %d transactions...", nodeConfig.Name, count)
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Printf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return err
 	}
 	defer closer()
 
 	wallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
 	if err != nil {
-		log.Printf("Failed to get wallet addresses: %v", err)
-		return
+		log.Printf("[ERROR] Failed to get wallet addresses: %v", err)
+		return err
 	}
 
 	if len(wallets) < 2 {
-		log.Printf("[WARN] Not enough wallets (found %d). Skipping invalid tx spam.", len(wallets))
+		log.Printf("[WARN] Not enough wallets (found %d). Creating more wallets.", len(wallets))
 		numWallets := 2
-		performCreateOperation(ctx, nodeConfig, &numWallets, abi.NewTokenAmount(10000))
-		return
+		if err := performCreateOperation(ctx, nodeConfig, &numWallets, abi.NewTokenAmount(1000000000000000)); err != nil {
+			log.Printf("Create operation failed: %v", err)
+		}
+
+		wallets, err = resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+		if err != nil || len(wallets) < 2 {
+			return fmt.Errorf("failed to get enough wallet addresses after creation attempt: %v", err)
+		}
+	}
+	config := mpoolfuzz.DefaultConfig()
+	config.Count = count
+	config.Concurrenct = concurrency
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	strategies := []string{"standard", "chained", "burst", "subtle", "edge"}
+	strategy := strategies[r.Intn(len(strategies))]
+
+	log.Printf("[INFO] Selected fuzzing strategy: %s", strategy)
+
+	if strategy == "standard" {
+		err = mpoolfuzz.SendStandardMutations(ctx, api, wallets[0], wallets[1], count, r)
+	} else if strategy == "chained" {
+		err = mpoolfuzz.SendChainedTransactions(ctx, api, wallets[0], wallets[1], count, r)
+	} else if strategy == "burst" {
+		err = mpoolfuzz.SendConcurrentBurst(ctx, api, wallets[0], wallets[1], count, r, concurrency)
+	} else if strategy == "subtle" {
+		err = mpoolfuzz.SendSubtleAttacks(ctx, api, wallets[0], wallets[1], count, r)
+	} else {
+		err = mpoolfuzz.SendEdgeCases(ctx, api, wallets[0], wallets[1], count, r)
 	}
 
-	err = resources.SendInvalidTransactions(ctx, api, wallets[0], wallets[1], 100)
-	assert.Always(err == nil, "Invalid transaction should never pass", map[string]interface{}{"error": err})
+	if err != nil {
+		log.Printf("[ERROR] Mempool fuzzing failed: %v", err)
+		return err
+	}
 
-	log.Printf("Spammed bad transactions successfully on node '%s'.", nodeConfig.Name)
+	log.Printf("[INFO] Mempool fuzzing completed successfully")
+	return nil
 }

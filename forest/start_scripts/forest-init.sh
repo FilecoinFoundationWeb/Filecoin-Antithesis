@@ -28,12 +28,11 @@ export FOREST_F3_FINALITY=20
 # Extract network name from localnet.json and set it as an environment variable
 export NETWORK_NAME=$(grep -o "localnet.*" "${LOTUS_1_DATA_DIR}/localnet.json" | tr -d '",' )
 forest --version
+
 # Copy the forest configuration template and update it with the network name
 cp /forest/forest_config.toml.tpl "${FOREST_DATA_DIR}/forest_config.toml"
 echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
 
-# Load the token and set the full node API information
-cat ${FOREST_DATA_DIR}/forest_config.toml
 # Start the forest service with the specified configuration
 forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
@@ -42,4 +41,22 @@ forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --p2p-listen-address /ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT} \
        --healthcheck-address ${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT} \
        --skip-load-actors &
+
+# Wait for forest to start up
+sleep 10
+
+export TOKEN=$(cat ${FOREST_DATA_DIR}/jwt)
+export FULLNODE_API_INFO=$TOKEN:/ip4/${FOREST_IP}/tcp/${FOREST_RPC_PORT}/http
+echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
+
+forest-wallet --remote-wallet import ${LOTUS_1_DATA_DIR}/key || true
+forest-wallet new bls
+
+forest-cli net listen > ${FOREST_DATA_DIR}/forest-listen-addr
+forest-cli net connect $(cat ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr)
+forest-cli net connect $(cat ${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr)
+
+forest-cli sync wait
+
+# Keep container running
 sleep infinity

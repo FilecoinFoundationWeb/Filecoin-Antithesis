@@ -83,7 +83,7 @@ func FuzzHello(f *testing.F) {
 		defer func() {
 			if r := recover(); r != nil {
 				t.Logf("💥 Panic caught: %v", r)
-				os.Exit(0) // exit fuzzing early without failing
+				t.Skip("Skipping due to panic") // Skip instead of exiting
 			}
 		}()
 
@@ -115,11 +115,10 @@ func FuzzHello(f *testing.F) {
 		if err != nil {
 			t.Logf("stream write error: %v", err)
 
-			// Kill fuzzing early if it's likely to cause panic/corruption
+			// Skip test if it's likely to cause panic/corruption
 			if strings.Contains(err.Error(), "connection reset by peer") ||
 				strings.Contains(err.Error(), "broken pipe") {
-				t.Logf("Node likely crashed or dropped connection. Exiting early.")
-				os.Exit(0)
+				t.Skipf("Node likely crashed or dropped connection")
 			}
 			return
 		}
