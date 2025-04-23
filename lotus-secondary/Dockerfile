@@ -7,7 +7,7 @@ RUN apt-get update && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-ARG GIT_BRANCH="42d68a5"
+ARG GIT_BRANCH="a8999cb164f996785f1b01e6cb020610abaa7caf"
 
 RUN git clone https://github.com/filecoin-project/lotus.git /lotus
 WORKDIR /lotus
