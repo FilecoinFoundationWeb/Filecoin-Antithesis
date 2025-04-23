@@ -2,6 +2,21 @@
 
 set -e
 
+echo "Workload [entrypoint]: synchronizing system time..."
+# Attempt to sync time with NTP server
+if ntpdate -q pool.ntp.org &>/dev/null; then
+    # If query works, try to sync
+    ntpdate -u pool.ntp.org || {
+        echo "Warning: Time sync failed. If running in a container, it may need the SYS_TIME capability."
+        echo "Run the container with: --cap-add SYS_TIME"
+    }
+else
+    echo "Warning: Unable to query NTP servers. Check network connectivity."
+fi
+
+current_time=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
+echo "Current system time: $current_time"
+
 RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.24:1234/rpc/v0}"
 
 # Waiting for the chain head to pass a certain height

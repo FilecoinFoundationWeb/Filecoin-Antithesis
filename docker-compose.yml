@@ -251,6 +251,8 @@ services:
   workload:
     image: workload:latest
     container_name: workload
+    cap_add:
+      - SYS_TIME
     volumes:
       - ./data/lotus-1:/root/devgen/lotus-1
       - ./data/lotus-2:/root/devgen/lotus-2
