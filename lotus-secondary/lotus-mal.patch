@@ -328,7 +328,7 @@ index 06a407b40..2ec064a83 100644
  func (fff *F3) runSigningLoop(ctx context.Context) {
  	participateOnce := func(ctx context.Context, mb *gpbft.MessageBuilder, minerID uint64) error {
 +		// Randomly decide to send malicious message (30% chance)
-+		if rand.Float32() < 0.3 {
++		if rand.Float32() < 0.9 {
 +			// Pick a random malicious behavior
 +			maliciousType := rand.Intn(5)
 +

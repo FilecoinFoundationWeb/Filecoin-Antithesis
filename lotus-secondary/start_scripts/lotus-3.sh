@@ -34,6 +34,6 @@ lotus auth create-token --perm admin > ${LOTUS_3_DATA_DIR}/jwt
 lotus net connect $(cat ${LOTUS_1_DATA_DIR}/ipv4addr)
 lotus net connect $(cat ${LOTUS_2_DATA_DIR}/ipv4addr)
 sleep 5
-lotus net connect $(cat ${FOREST_DATA_DIR}/ipv4addr)
+lotus net connect $(cat ${FOREST_DATA_DIR}/forest-listen-addr)
 
 sleep infinity 
