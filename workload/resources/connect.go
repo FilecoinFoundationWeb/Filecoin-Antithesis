@@ -12,6 +12,7 @@ import (
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
+	"github.com/filecoin-project/lotus/chain/types"
 )
 
 type NodeConfig struct {
@@ -240,6 +241,31 @@ func DisconnectFromOtherNodes(ctx context.Context, nodeAPI api.FullNode) error {
 	for _, peer := range peers {
 		if err := nodeAPI.NetDisconnect(ctx, peer.ID); err != nil {
 			log.Printf("[WARN] Failed to disconnect from peer %s: %v", peer.ID.String(), err)
+		}
+	}
+	return nil
+}
+
+// ChainPredicate encapsulates a chain condition.
+type ChainPredicate func(set *types.TipSet) bool
+
+func WaitTillChain(ctx context.Context, api api.FullNode, pred ChainPredicate) *types.TipSet {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	heads, err := api.ChainNotify(ctx)
+	if err != nil {
+		log.Printf("Cannot get head!!")
+	}
+
+	for chg := range heads {
+		for _, c := range chg {
+			if c.Type != "apply" {
+				continue
+			}
+			if ts := c.Val; pred(ts) {
+				return ts
+			}
 		}
 	}
 	return nil
