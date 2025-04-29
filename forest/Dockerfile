@@ -34,9 +34,12 @@ ENV RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-c
 # Set Antithesis runtime library and rustflags
 WORKDIR /forest
 RUN sed -i 's/strip = true/strip = false/' Cargo.toml
+# change cargo.toml profile for instrumentation
 RUN cargo build --release --bin forest
+RUN cp /forest/target/release/forest /usr/local/cargo/bin/forest
+# Overwrite the forest binary from the make install
 WORKDIR /
-RUN mkdir /symbols && ln -s /forest/target/release/forest /symbols/forest
+RUN mkdir /symbols && ln -s /usr/local/cargo/bin/forest /symbols/forest
 RUN ldd /symbols/forest | grep "libvoidstar" 
 RUN nm /symbols/forest | grep "sanitizer_cov_trace_pc_guard"
 # confirm that the binary has correctly linked to the Antithesis runtime library
