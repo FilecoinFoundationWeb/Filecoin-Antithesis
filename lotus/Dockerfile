@@ -45,7 +45,7 @@ RUN rm -rf /lotus
 
 # Build 2k binary for lotus
 RUN make 2k
-
+RUN go build -o lotus-health ./cmd/lotus-health
 # Check lotus version
 CMD ["./lotus","--version"]
 

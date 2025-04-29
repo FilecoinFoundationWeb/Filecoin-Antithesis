@@ -68,7 +68,7 @@ elif [[ "$ATTACK_TYPE" =~ ^ping- ]]; then
     fi
     
     echo "Using ping attack type: $PING_ATTACK with concurrency: $CONCURRENCY"
-    /opt/antithesis/app -operation ping \
+    /opt/antithesis/app -operation pingAttack \
       -target "$TARGET" \
       -ping-attack-type "$PING_ATTACK" \
       -concurrency "$CONCURRENCY" \
