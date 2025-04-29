@@ -1,9 +1,13 @@
 # Start with the latest Ubuntu image
 FROM ubuntu:latest
 
+# Note: This container requires CAP_SYS_TIME capability to sync time
+# Run with: docker run --cap-add SYS_TIME ...
+
 # Install necessary packages including Python and Go
 RUN apt-get update -y && \
-    apt-get install -y python3 python3-pip python3-requests python3-filelock curl jq && \
+    apt-get install -y python3 python3-pip python3-requests python3-filelock curl jq \
+    ntpdate && \
     curl -OL https://golang.org/dl/go1.23.2.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
     rm go1.23.2.linux-amd64.tar.gz

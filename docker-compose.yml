@@ -205,6 +205,47 @@ services:
       lotus-2: 
         condition: service_healthy
 
+  # Lotus node 3 service
+  lotus-3:
+    image: lotus-mal:${LOTUS_TAG:-latest}
+    hostname: lotus-3
+    container_name: lotus-3
+    volumes:
+      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
+      - ./data/lotus-2:${LOTUS_2_DATA_DIR}
+      - ./data/lotus-3:${LOTUS_3_DATA_DIR}
+      - ./lotus-secondary/start_scripts/lotus-3.sh:${LOTUS_3_DATA_DIR}/lotus-3.sh
+    environment:
+      - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
+      - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
+      - LOTUS_LIGHTNING_HEIGHT=${LIGHTNING_HEIGHT}
+      - LOTUS_THUNDER_HEIGHT=${THUNDER_HEIGHT}
+      - LOTUS_WATERMELON_HEIGHT=${WATERMELON_HEIGHT}
+      - LOTUS_DRAGON_HEIGHT=${DRAGON_HEIGHT}
+      - LOTUS_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
+      - LOTUS_WAFFLE_HEIGHT=${WAFFLE_HEIGHT}
+      - LOTUS_3_IP=${LOTUS_3_IP}
+      - LOTUS_3_RPC_PORT=${LOTUS_3_RPC_PORT}
+      - LOTUS_TUKTUK_HEIGHT=${TUKTUK_HEIGHT}
+      - LOTUS_TEEP_HEIGHT=${TEEP_HEIGHT}
+    env_file:
+      - .env
+    entrypoint: ["${LOTUS_3_DATA_DIR}/lotus-3.sh"]
+    networks:
+      antithesis-net:
+        ipv4_address: ${LOTUS_3_IP}
+    depends_on:
+      lotus-2: 
+        condition: service_healthy
+      forest:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail http://10.20.20.31:1236/health/livez
+      start_period: 30s
+      interval: 5s
+      timeout: 2s
+      retries: 10
+
   #Forest service
   forest:
     image: forest:${FOREST_COMMIT:-latest}
@@ -251,9 +292,12 @@ services:
   workload:
     image: workload:latest
     container_name: workload
+    cap_add:
+      - SYS_TIME
     volumes:
       - ./data/lotus-1:/root/devgen/lotus-1
       - ./data/lotus-2:/root/devgen/lotus-2
+      - ./data/lotus-3:/root/devgen/lotus-3
       - ./data/forest:/root/devgen/forest
     env_file:
       - .env
