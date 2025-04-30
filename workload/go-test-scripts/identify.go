@@ -126,7 +126,7 @@ func main() {
 
 	for i := 0; i < iterations; i++ {
 		var payload string
-		if rand.Float32() < 0.5 {
+		if rand.Float32() < 0.8 {
 			seed := seeds[rand.Intn(len(seeds))]
 			payload = randomMutation(seed)
 		} else {

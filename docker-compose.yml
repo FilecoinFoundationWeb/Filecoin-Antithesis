@@ -246,28 +246,6 @@ services:
       timeout: 2s
       retries: 10
       start_period: 30s
-    
-
-  # Forest <-> Lotus connector service
-  forest-connecter:
-    image: forest:${FOREST_COMMIT:-latest}
-    container_name: forest-connector
-    volumes:
-      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
-      - ./data/lotus-2:${LOTUS_2_DATA_DIR}
-      - ./data/forest:${FOREST_DATA_DIR}
-      - ./forest/start_scripts/forest-connector.sh:${FOREST_DATA_DIR}/forest-connector.sh
-    environment:
-      - FOREST_CONNECTOR_IP=${FOREST_CONNECTOR_IP}
-    env_file:
-      - .env
-    entrypoint: ["${FOREST_DATA_DIR}/forest-connector.sh"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${FOREST_CONNECTOR_IP}
-    depends_on:
-      forest: 
-        condition: service_healthy
 
   #Workload service
   workload:
