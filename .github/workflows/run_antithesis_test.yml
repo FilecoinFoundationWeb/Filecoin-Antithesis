@@ -111,7 +111,7 @@ jobs:
           additional_parameters: |-
             custom.duration=12
             custom.is_lotus_malicious=true
-            custom.docker_compose_filename="docker-compose-mal.yml"
+            custom.docker_compose_filename=docker-compose-mal.yml
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
       
