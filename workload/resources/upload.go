@@ -9,16 +9,21 @@ import (
 	"os"
 	"time"
 
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
 	"github.com/filecoin-project/go-state-types/builtin"
 	"github.com/filecoin-project/go-state-types/builtin/v10/eam"
+	"github.com/filecoin-project/go-state-types/crypto"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/build/buildconstants"
 	"github.com/filecoin-project/lotus/chain/actors"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/chain/types/ethtypes"
+	"github.com/filecoin-project/lotus/chain/wallet/key"
+	"github.com/filecoin-project/lotus/lib/sigs"
+	"github.com/multiformats/go-varint"
 	cbg "github.com/whyrusleeping/cbor-gen"
 	"golang.org/x/crypto/sha3"
 )
@@ -242,4 +247,94 @@ func InputDataFromFrom(ctx context.Context, api api.FullNode, from address.Addre
 	inputData := make([]byte, 32)
 	copy(inputData[32-len(senderEthAddr):], senderEthAddr[:])
 	return inputData
+}
+
+func SignTransaction(tx *ethtypes.Eth1559TxArgs, privKey []byte) {
+	preimage, err := tx.ToRlpSignedMsg()
+	if err != nil {
+		log.Printf("Failed to convert transaction to RLP: %v", err)
+		return
+	}
+	signature, err := sigs.Sign(crypto.SigTypeDelegated, privKey, preimage)
+	if err != nil {
+		log.Printf("Failed to sign transaction: %v", err)
+		return
+	}
+	err = tx.InitialiseSignature(*signature)
+	if err != nil {
+		log.Printf("Failed to initialise signature: %v", err)
+		return
+	}
+}
+
+func SubmitTransaction(ctx context.Context, api api.FullNode, tx *ethtypes.Eth1559TxArgs) ethtypes.EthHash {
+	signed, err := tx.ToRlpSignedMsg()
+	if err != nil {
+		log.Printf("Failed to convert transaction to RLP: %v", err)
+		return ethtypes.EthHash{}
+	}
+	txHash, err := api.EthSendRawTransaction(ctx, signed)
+	if err != nil {
+		log.Printf("Failed to send transaction: %v", err)
+		return ethtypes.EthHash{}
+	}
+	return txHash
+}
+
+func AssertAddressBalanceConsistent(ctx context.Context, api api.FullNode, addr address.Address) {
+	payload := addr.Payload()
+	_, _, err := varint.FromUvarint(payload)
+	if err != nil {
+		log.Printf("Failed to get namespace from address: %v", err)
+		return
+	}
+	fbal, err := api.WalletBalance(ctx, addr)
+	if err != nil {
+		log.Printf("Failed to get balance for address: %v", err)
+		return
+	}
+
+	ethAddr, err := ethtypes.EthAddressFromFilecoinAddress(addr)
+	if err != nil {
+		log.Printf("Failed to get Ethereum address for address: %v", err)
+		return
+	}
+
+	ebal, err := api.EthGetBalance(ctx, ethAddr, ethtypes.NewEthBlockNumberOrHashFromPredefined("latest"))
+	if err != nil {
+		log.Printf("Failed to get Ethereum balance for address: %v", err)
+		return
+	}
+	assert.Always(fbal.Equals(types.BigInt(ebal)), "Address balance inconsistent", map[string]any{
+		"filecoin_balance": fbal,
+		"ethereum_balance": ebal,
+	})
+}
+
+func NewAccount() (*key.Key, ethtypes.EthAddress, address.Address) {
+	// Generate a secp256k1 key; this will back the Ethereum identity.
+	key, err := key.GenerateKey(types.KTSecp256k1)
+	if err != nil {
+		log.Printf("Failed to generate key: %v", err)
+		return nil, ethtypes.EthAddress{}, address.Address{}
+	}
+
+	ethAddr, err := ethtypes.EthAddressFromPubKey(key.PublicKey)
+	if err != nil {
+		log.Printf("Failed to generate Ethereum address: %v", err)
+		return nil, ethtypes.EthAddress{}, address.Address{}
+	}
+
+	ea, err := ethtypes.CastEthAddress(ethAddr)
+	if err != nil {
+		log.Printf("Failed to cast Ethereum address: %v", err)
+		return nil, ethtypes.EthAddress{}, address.Address{}
+	}
+
+	addr, err := ea.ToFilecoinAddress()
+	if err != nil {
+		log.Printf("Failed to convert Ethereum address to Filecoin address: %v", err)
+		return nil, ethtypes.EthAddress{}, address.Address{}
+	}
+	return key, *(*ethtypes.EthAddress)(ethAddr), addr
 }
