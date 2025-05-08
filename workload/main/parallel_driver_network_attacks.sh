@@ -8,7 +8,7 @@ random_targets=()
 
 TARGET=${random_targets[$((RANDOM % ${#random_targets[@]}))]}
 
-DURATION=$((RANDOM % 4 + 1))"m"
+DURATION="3m"
 
 ATTACK_CATEGORIES=("chaos" "identify" "ping" "ping" "ping")
 ATTACK_CATEGORY=${ATTACK_CATEGORIES[$((RANDOM % ${#ATTACK_CATEGORIES[@]}))]}
@@ -78,5 +78,4 @@ elif [[ "$ATTACK_TYPE" =~ ^ping- ]]; then
 fi
 
 echo "Attack completed"
-# Always exit with success code
 exit 0

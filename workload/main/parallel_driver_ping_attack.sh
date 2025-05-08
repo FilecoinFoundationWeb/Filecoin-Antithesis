@@ -7,7 +7,7 @@ OPERATION="pingAttack"
 PING_ATTACK_TYPES=("random" "oversized" "empty" "multiple" "incomplete")
 RANDOM_TYPE=${PING_ATTACK_TYPES[$((RANDOM % ${#PING_ATTACK_TYPES[@]}))]}
 CONCURRENCY=$((RANDOM % 10 + 5))  
-DURATION=$((RANDOM % 30 + 30))"s"  
+DURATION="180s"  
 MIN_INTERVAL="100ms"
 MAX_INTERVAL="500ms"
 

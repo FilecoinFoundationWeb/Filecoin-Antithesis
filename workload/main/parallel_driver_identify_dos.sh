@@ -15,7 +15,7 @@ export TARGET=$selected_target
 echo "TARGET set to: $TARGET"
 
 # Run the DOS attack, relying on the -duration parameter
-/opt/antithesis/app -operation chaos -target "$TARGET" -min-interval "50ms" -max-interval "100ms" -duration "30s"
+/opt/antithesis/app -operation chaos -target "$TARGET" -min-interval "50ms" -max-interval "100ms" -duration "180s"
 
 # Capture the exit code but don't use it for the script's exit code
 app_exit_code=$?

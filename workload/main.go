@@ -21,7 +21,34 @@ import (
 	"github.com/filecoin-project/lotus/chain/types"
 )
 
+// HOW TO ADD A NEW CLI COMMAND TO THIS TOOL
+// Follow these steps to add a new command-line operation:
+//
+// STEP 1: Add a new flag in the parseFlags() function
+//   - Define your flag using flag.* (e.g., flag.Bool, flag.String, etc.)
+//   - Update the operation list in the -operation flag description
+//   - Update the function signature and return statement if your flag needs to be returned
+//
+// STEP 2: Update the validateInputs() function
+//   - Add your operation to the validOps map (e.g., "myNewOperation": true)
+//   - If your operation doesn't require a node name, add it to noNodeNameRequired
+//   - Add any custom validation logic specific to your operation
+//
+// STEP 3: Add a case in the switch statement in main()
+//   - Add a case for your operation (e.g., case "myNewOperation":)
+//   - Call your operation's implementation function (e.g., err = performMyNewOperation(...))
+//
+// STEP 4: Implement your operation's function
+//   - Create a new function (e.g., func performMyNewOperation(ctx context.Context, ...) error {})
+//   - Add your operation's logic inside the function
+//   - Make sure to return nil for success or an error if something fails
+//   - Follow the pattern of other operation functions for consistency
+
 func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int) {
+	// STEP 1: Define a new flag for your operation here.
+	// For example, if your new operation is "myNewOperation":
+	// myNewOperationFlag := flag.Bool("myNewOperation", false, "Description of myNewOperation")
+	// Remember to update the function signature and return statement if you add new flags that need to be returned.
 	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
 	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack'")
 	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
@@ -35,12 +62,17 @@ func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *ti
 	count := flag.Int("count", 100, "Number of transactions/operations to perform")
 	pingAttackType := flag.String("ping-attack-type", "random", "Type of ping attack: random, oversized, empty, multiple, incomplete")
 	concurrency := flag.Int("concurrency", 5, "Number of concurrent operations for attacks")
-
 	flag.Parse()
+	// STEP 1 (continued): If you added a new flag that needs to be returned, add it to the return statement.
+	// For example, if you added myNewOperationFlag:
+	// return configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, myNewOperationFlag
 	return configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency
 }
 
 func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType *string) error {
+	// STEP 2: Add your new operation to the validOps map.
+	// For example:
+	// "myNewOperation": true,
 	validOps := map[string]bool{
 		"create":           true,
 		"delete":           true,
@@ -55,6 +87,9 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 	}
 
 	// Operations that don't require a node name
+	// STEP 2 (continued): If your new operation does not require a node name, add it here.
+	// For example:
+	// "myNewOperation": true,
 	noNodeNameRequired := map[string]bool{
 		"spam":       true,
 		"chaos":      true,
@@ -128,6 +163,11 @@ func main() {
 
 	// Execute the requested operation
 	switch *operation {
+	// STEP 3: Add a case for your new operation.
+	// This will call the function that implements your operation's logic.
+	// For example:
+	// case "myNewOperation":
+	//    err = performMyNewOperation(ctx, nodeConfig /*, other_flags... */)
 	case "create":
 		err = performCreateOperation(ctx, nodeConfig, numWallets, abi.NewTokenAmount(1000000000000000))
 	case "delete":
@@ -161,6 +201,18 @@ func main() {
 
 	log.Printf("[INFO] Operation '%s' completed successfully", *operation)
 }
+
+// STEP 4: Define a new function for your operation.
+// This function will contain the logic for your new CLI command.
+// For example:
+/*
+func performMyNewOperation(ctx context.Context, nodeConfig *resources.NodeConfig) error {
+	log.Println("[INFO] Starting myNewOperation...")
+	// Add your operation's logic here
+	log.Println("[INFO] myNewOperation completed.")
+	return nil
+}
+*/
 
 func performCreateOperation(ctx context.Context, nodeConfig *resources.NodeConfig, numWallets *int, tokenAmount abi.TokenAmount) error {
 	log.Printf("Creating %d wallets on node '%s'...", *numWallets, nodeConfig.Name)
