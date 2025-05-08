@@ -30,7 +30,7 @@ if [ ! -f "$FIRST_RUN_FLAG" ]; then
 else
   echo "forest: skipping one-time setup."
   export FOREST_DRAND_QUICKNET_CONFIG
-  export FOREST_F3_FINALITY=20
+  export FOREST_F3_FINALITY=21
   export NETWORK_NAME
   echo "forest: starting forest..."
   forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
