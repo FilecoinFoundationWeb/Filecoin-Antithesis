@@ -21,11 +21,11 @@ var lotusNodes = []struct {
 }{
 	{
 		Name:   "Lotus1",
-		RPCURL: "http://10.20.20.24:1234/rpc/v1",
+		RPCURL: "http://10.20.20.24:1234/rpc/v2",
 	},
 	{
 		Name:   "Lotus2",
-		RPCURL: "http://10.20.20.26:1235/rpc/v1",
+		RPCURL: "http://10.20.20.26:1235/rpc/v2",
 	},
 }
 
@@ -92,4 +92,115 @@ func CreateJSONRPCRequest(method string, params interface{}) (string, error) {
 	}
 
 	return string(data), nil
+}
+
+// GetTipSetBySelector fetches tipset using specified selector from all nodes
+func GetTipSetBySelector(selector string) (map[string]RPCResponse, error) {
+	params := []interface{}{map[string]string{"tag": selector}}
+	requestBody, err := CreateJSONRPCRequest("Filecoin.ChainGetTipSet", params)
+	if err != nil {
+		return nil, err
+	}
+
+	return DoRawRequest(2, requestBody), nil
+}
+
+// GetLatestTipSet fetches the latest tipset from all nodes
+func GetLatestTipSet() (map[string]RPCResponse, error) {
+	return GetTipSetBySelector("latest")
+}
+
+// GetSafeTipSet fetches the safe tipset from all nodes
+func GetSafeTipSet() (map[string]RPCResponse, error) {
+	return GetTipSetBySelector("safe")
+}
+
+// GetFinalizedTipSet fetches the finalized tipset from all nodes
+func GetFinalizedTipSet() (map[string]RPCResponse, error) {
+	return GetTipSetBySelector("finalized")
+}
+
+// CompareTipSetResponses compares CIDs from multiple nodes' responses
+func CompareTipSetResponses(responses map[string]RPCResponse) (bool, map[string][]string, map[string]int, error) {
+	type TipSetResponse struct {
+		Result struct {
+			Cids []struct {
+				Slash string `json:"/"`
+			}
+			Height int
+		}
+	}
+
+	cidsByNode := make(map[string][]string)
+	heightsByNode := make(map[string]int)
+
+	for nodeName, resp := range responses {
+		var tipSetResp TipSetResponse
+		if err := json.Unmarshal(resp.Body, &tipSetResp); err != nil {
+			return false, nil, nil, err
+		}
+
+		var cids []string
+		for _, cid := range tipSetResp.Result.Cids {
+			cids = append(cids, cid.Slash)
+		}
+
+		cidsByNode[nodeName] = cids
+		heightsByNode[nodeName] = tipSetResp.Result.Height
+	}
+
+	// Check if all nodes have the same CIDs
+	if len(cidsByNode) <= 1 {
+		return true, cidsByNode, heightsByNode, nil
+	}
+
+	var referenceNode string
+	var referenceCids []string
+
+	for node, cids := range cidsByNode {
+		if referenceNode == "" {
+			referenceNode = node
+			referenceCids = cids
+			continue
+		}
+
+		if len(cids) != len(referenceCids) {
+			return false, cidsByNode, heightsByNode, nil
+		}
+
+		for i, cid := range cids {
+			if cid != referenceCids[i] {
+				return false, cidsByNode, heightsByNode, nil
+			}
+		}
+	}
+
+	return true, cidsByNode, heightsByNode, nil
+}
+
+// GetTipSetByHeight fetches tipset at the specified height from all nodes
+func GetTipSetByHeight(height int64) (map[string]RPCResponse, error) {
+	params := []interface{}{height}
+	requestBody, err := CreateJSONRPCRequest("Filecoin.ChainGetTipSetByHeight", params)
+	if err != nil {
+		return nil, err
+	}
+
+	return DoRawRequest(2, requestBody), nil
+}
+
+// GetTipSetBySelectorAndHeight fetches tipset using both selector and height parameters
+func GetTipSetBySelectorAndHeight(selector string, height int64) (map[string]RPCResponse, error) {
+	params := []interface{}{
+		map[string]interface{}{
+			"tag":    selector,
+			"height": height,
+		},
+	}
+	requestBody, err := CreateJSONRPCRequest("Filecoin.ChainGetTipSet", params)
+	if err != nil {
+		return nil, err
+	}
+
+	return DoRawRequest(2, requestBody), nil
 }
