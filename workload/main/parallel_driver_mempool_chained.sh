@@ -10,7 +10,7 @@ NODE=${NODE:-${NODE_NAMES[$random_index]}}
 
 COUNT=${COUNT:-$((RANDOM % 150 + 100))}
 CONCURRENCY=${CONCURRENCY:-$((RANDOM % 5 + 3))}
-DURATION="180s"  
+DURATION="120s"  
 
 $APP_BINARY -operation "$OPERATION" \
     -node "$NODE" \

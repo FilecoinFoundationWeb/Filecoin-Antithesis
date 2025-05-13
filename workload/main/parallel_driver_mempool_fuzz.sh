@@ -10,6 +10,7 @@ NODE=${NODE_NAMES[$random_index]}
 
 COUNT=50
 CONCURRENCY=$((RANDOM % 5 + 3))
+DURATION="120s"
 
 if [ ! -f "$APP_BINARY" ]; then
     echo "Error: $APP_BINARY not found."
@@ -25,7 +26,8 @@ $APP_BINARY -operation "$OPERATION" \
     -node "$NODE" \
     -count "$COUNT" \
     -concurrency "$CONCURRENCY" \
-    -config "$CONFIG_FILE"
+    -config "$CONFIG_FILE" \
+    -duration "$DURATION"
 
 exit_code=$?
 if [ $exit_code -ne 0 ]; then
