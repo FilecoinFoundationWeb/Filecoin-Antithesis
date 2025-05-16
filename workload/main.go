@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -18,10 +17,8 @@ import (
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
-	"github.com/filecoin-project/go-state-types/big"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
-	"github.com/filecoin-project/lotus/chain/types/ethtypes"
 )
 
 // HOW TO ADD A NEW CLI COMMAND TO THIS TOOL
@@ -186,17 +183,8 @@ func main() {
 	case "pingAttack":
 		attackType := p2pfuzz.AttackTypeFromString(*pingAttackType)
 		err = performPingAttack(ctx, *targetAddr, attackType, *concurrency, *minInterval, *maxInterval, *duration)
-	case "createEthAccount":
-		err = createEthAccount(ctx, nodeConfig)
-	case "deployValueSender":
-		err = performDeployValueSender(ctx, nodeConfig, *contractPath)
 	case "rpc-benchmark":
-		if *rpcURL == "" {
-			log.Printf("[ERROR] RPC URL is required for eth_chainId operation")
-			os.Exit(1)
-		}
 		callV2API(*rpcURL)
-		err = nil
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
@@ -641,216 +629,6 @@ func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, c
 	}
 
 	log.Printf("[INFO] Mempool fuzzing completed successfully")
-	return nil
-}
-
-func createEthAccount(ctx context.Context, nodeConfig *resources.NodeConfig) error {
-	log.Printf("[DEBUG] Starting createEthAccount with nodeConfig: %+v", nodeConfig)
-
-	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	if err != nil {
-		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return err
-	}
-	defer closer()
-	log.Printf("[DEBUG] Successfully connected to node")
-
-	// Get the default address to use as the funding source
-	fromAddr, err := api.WalletDefaultAddress(ctx)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get default address: %v", err)
-		return fmt.Errorf("failed to get default address: %w", err)
-	}
-	log.Printf("[DEBUG] Using default address as funding source: %s", fromAddr)
-
-	// Create new Ethereum account
-	key, ethAddr, deployer := resources.NewAccount()
-	log.Printf("[DEBUG] Generated new account:\n\tKey: %+v\n\tEthAddr: %s\n\tDeployer: %s", key, ethAddr.String(), deployer.String())
-
-	// First, initialize the deployer account with a zero-value transfer
-	initMsg := &types.Message{
-		From:  fromAddr,
-		To:    deployer,
-		Value: types.NewInt(0), // Zero value transfer to initialize account
-	}
-
-	initSmsg, err := api.MpoolPushMessage(ctx, initMsg, nil)
-	if err != nil {
-		log.Printf("[ERROR] Failed to initialize deployer account: %v", err)
-		return fmt.Errorf("failed to initialize deployer account: %w", err)
-	}
-	log.Printf("[DEBUG] Sent initialization message: %s", initSmsg.Cid())
-
-	// Wait for the initialization message to be confirmed
-	initWait, err := api.StateWaitMsg(ctx, initSmsg.Cid(), 3, -1, true)
-	if err != nil {
-		log.Printf("[ERROR] Failed waiting for initialization message: %v", err)
-		return fmt.Errorf("failed waiting for initialization message: %w", err)
-	}
-	if initWait.Receipt.ExitCode != 0 {
-		log.Printf("[ERROR] Initialization message failed with exit code: %d", initWait.Receipt.ExitCode)
-		return fmt.Errorf("initialization message failed with exit code: %d", initWait.Receipt.ExitCode)
-	}
-	log.Printf("[DEBUG] Deployer account initialized successfully")
-
-	// Add a delay to ensure the actor is visible in state
-	time.Sleep(120 * time.Second)
-
-	// Verify the actor exists before proceeding
-	actor, err := api.StateGetActor(ctx, deployer, types.EmptyTSK)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get actor: %v", err)
-		return fmt.Errorf("failed to get actor: %w", err)
-	}
-	log.Printf("[DEBUG] Deployer actor verified: %+v", actor)
-
-	// Now proceed with sending funds
-	err = resources.SendFunds(ctx, api, fromAddr, deployer, types.FromFil(10))
-	if err != nil {
-		log.Printf("[ERROR] Failed to send funds: %v", err)
-		return fmt.Errorf("failed to send funds: %w", err)
-	}
-	log.Printf("[DEBUG] Successfully sent 10 FIL to deployer account")
-
-	// Wait for funds to be confirmed
-	time.Sleep(120 * time.Second)
-
-	// Get contract hex and decode it
-	contractHex, err := os.ReadFile("./resources/smart-contracts/SimpleCoin.hex")
-	if err != nil {
-		log.Printf("[ERROR] Failed to read contract hex: %v", err)
-		return fmt.Errorf("failed to read contract hex: %w", err)
-	}
-	log.Printf("[DEBUG] Read contract hex, length: %d", len(contractHex))
-
-	contract, err := hex.DecodeString(string(contractHex))
-	if err != nil {
-		log.Printf("[ERROR] Failed to decode contract hex: %v", err)
-		return fmt.Errorf("failed to decode contract hex: %w", err)
-	}
-	log.Printf("[DEBUG] Decoded contract, length: %d", len(contract))
-
-	// Verify actor state again before transaction
-	actor, err = api.StateGetActor(ctx, deployer, types.EmptyTSK)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get actor: %v", err)
-		return fmt.Errorf("failed to get actor: %w", err)
-	}
-	log.Printf("[DEBUG] Deployer actor state before transaction: %+v", actor)
-
-	// Get node status
-	nodeStatus, err := api.NodeStatus(ctx, true)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get node status: %v", err)
-	} else {
-		log.Printf("[DEBUG] Node status: %+v", nodeStatus)
-	}
-
-	// Calculate gas parameters
-	gasParams, err := json.Marshal(ethtypes.EthEstimateGasParams{Tx: ethtypes.EthCall{
-		From: &ethAddr,
-		Data: contract,
-	}})
-	if err != nil {
-		log.Printf("[ERROR] Failed to marshal gas params: %v", err)
-		return fmt.Errorf("failed to marshal gas params: %w", err)
-	}
-	log.Printf("[DEBUG] Gas params: %s", string(gasParams))
-
-	gasLimit, err := api.EthEstimateGas(ctx, gasParams)
-	if err != nil {
-		log.Printf("[ERROR] Failed to estimate gas: %v", err)
-		return fmt.Errorf("failed to estimate gas: %w", err)
-	}
-	log.Printf("[DEBUG] Estimated gas limit: %d", gasLimit)
-
-	maxPriorityFeePerGas, err := api.EthMaxPriorityFeePerGas(ctx)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get max priority fee per gas: %v", err)
-		return fmt.Errorf("failed to get max priority fee per gas: %w", err)
-	}
-	log.Printf("[DEBUG] Max priority fee per gas: %s", maxPriorityFeePerGas)
-
-	// Get nonce
-	nonce, err := api.MpoolGetNonce(ctx, deployer)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get nonce: %v", err)
-		return fmt.Errorf("failed to get nonce: %w", err)
-	}
-	log.Printf("[DEBUG] Nonce: %d", nonce)
-
-	// Create and sign transaction
-	tx := ethtypes.Eth1559TxArgs{
-		ChainID:              31415926,
-		Value:                big.Zero(),
-		Nonce:                int(nonce),
-		MaxFeePerGas:         types.NanoFil,
-		MaxPriorityFeePerGas: big.Int(maxPriorityFeePerGas),
-		GasLimit:             int(gasLimit),
-		Input:                contract,
-		V:                    big.Zero(),
-		R:                    big.Zero(),
-		S:                    big.Zero(),
-	}
-	log.Printf("[DEBUG] Created transaction: %+v", tx)
-
-	resources.SignTransaction(&tx, key.PrivateKey)
-	log.Printf("[DEBUG] Signed transaction: %+v", tx)
-
-	// Submit transaction
-	hash := resources.SubmitTransaction(ctx, api, &tx)
-	log.Printf("[DEBUG] Transaction submitted with hash: %s", hash)
-
-	return nil
-}
-
-func performDeployValueSender(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) error {
-	log.Printf("Deploying and invoking MCopy contract on node '%s'...", nodeConfig.Name)
-	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	if err != nil {
-		log.Fatalf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-	}
-	defer closer()
-
-	fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
-
-	acctKey, accntEth, acctFil := resources.NewAccount()
-	resources.SendFunds(ctx, api, fromAddr, acctFil, types.FromFil(10))
-	time.Sleep(10 * time.Second)
-	contractEth, err := ethtypes.EthAddressFromFilecoinAddress(contractAddr)
-	if err != nil {
-		log.Fatalf("Failed to convert contract address to Ethereum address: %v", err)
-	}
-	gasParams, err := json.Marshal(ethtypes.EthEstimateGasParams{Tx: ethtypes.EthCall{
-		From:  &accntEth,
-		To:    &contractEth,
-		Value: ethtypes.EthBigInt(big.NewInt(100)),
-	}})
-	if err != nil {
-		log.Fatalf("Failed to marshal gas params: %v", err)
-	}
-	gasLimit, err := api.EthEstimateGas(ctx, gasParams)
-	if err != nil {
-		log.Fatalf("Failed to estimate gas: %v", err)
-	}
-	maxPriorityFeePerGas, err := api.EthMaxPriorityFeePerGas(ctx)
-	if err != nil {
-		log.Fatalf("Failed to get max priority fee per gas: %v", err)
-	}
-	tx := ethtypes.Eth1559TxArgs{
-		ChainID:              31415926,
-		Value:                big.NewInt(100),
-		Nonce:                0,
-		MaxFeePerGas:         types.NanoFil,
-		MaxPriorityFeePerGas: big.Int(maxPriorityFeePerGas),
-		GasLimit:             int(gasLimit),
-		V:                    big.Zero(),
-		R:                    big.Zero(),
-		S:                    big.Zero(),
-	}
-	resources.SignTransaction(&tx, acctKey.PrivateKey)
-	hash := resources.SubmitTransaction(ctx, api, &tx)
-	log.Printf("Transaction submitted with hash: %s", hash)
 	return nil
 }
 
