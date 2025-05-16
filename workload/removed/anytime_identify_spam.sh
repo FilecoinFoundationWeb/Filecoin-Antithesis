@@ -9,7 +9,7 @@ LOTUS_1_TARGET=$(cat "/root/devgen/lotus-1/lotus-1-ipv4addr")
 LOTUS_2_TARGET=$(cat "/root/devgen/lotus-2/lotus-2-ipv4addr")
 
 # Randomly select a Lotus target from the available options.
-random_targets=("LOTUS_1_TARGET" "LOTUS_2_TARGET")
+random_targets=("LOTUS_1_TARGET")
 selected_target=${random_targets[$((RANDOM % ${#random_targets[@]}))]}
 export LOTUS_TARGET=${!selected_target}
 
