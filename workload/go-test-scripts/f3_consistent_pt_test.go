@@ -3,13 +3,15 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 func TestF3ApiCalls(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
 
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")

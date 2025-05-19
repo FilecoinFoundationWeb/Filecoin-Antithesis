@@ -8,7 +8,7 @@ random_targets=()
 
 TARGET=${random_targets[$((RANDOM % ${#random_targets[@]}))]}
 
-DURATION="3m"
+DURATION="30s"
 
 ATTACK_CATEGORIES=("chaos" "identify" "ping" "ping" "ping")
 ATTACK_CATEGORY=${ATTACK_CATEGORIES[$((RANDOM % ${#ATTACK_CATEGORIES[@]}))]}

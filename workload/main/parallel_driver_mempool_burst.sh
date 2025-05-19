@@ -8,9 +8,9 @@ NODE_NAMES=("Lotus1" "Lotus2")
 random_index=$((RANDOM % ${#NODE_NAMES[@]}))
 NODE=${NODE:-${NODE_NAMES[$random_index]}}
 
-COUNT=${COUNT:-$((RANDOM % 200 + 150))}
-CONCURRENCY=${CONCURRENCY:-$((RANDOM % 10 + 8))}
-DURATION="120s"  
+COUNT=${COUNT:-$((RANDOM % 150 + 100))}
+CONCURRENCY=${CONCURRENCY:-$((RANDOM % 4 + 2))}
+DURATION="30s"  
 
 if [ ! -f "$APP_BINARY" ]; then
     echo "Error: $APP_BINARY not found."

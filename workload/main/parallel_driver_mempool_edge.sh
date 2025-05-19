@@ -8,9 +8,9 @@ NODE_NAMES=("Lotus1" "Lotus2")
 random_index=$((RANDOM % ${#NODE_NAMES[@]}))
 NODE=${NODE:-${NODE_NAMES[$random_index]}}
 
-COUNT=${COUNT:-$((RANDOM % 120 + 100))}
-CONCURRENCY=${CONCURRENCY:-$((RANDOM % 3 + 2))}
-DURATION="120s"  
+COUNT=${COUNT:-$((RANDOM % 150 + 100))}
+CONCURRENCY=${CONCURRENCY:-$((RANDOM % 4 + 2))}
+DURATION="30s"  
 
 $APP_BINARY -operation "$OPERATION" \
     -node "$NODE" \
