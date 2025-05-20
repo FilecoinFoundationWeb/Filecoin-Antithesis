@@ -17,8 +17,12 @@ def get_url_and_token(node_type:str):
         base_path = "/root/devgen/forest"
         token_txt = "jwt"
     elif node_type == "lotus-1":
-        rpc_url = "http://10.20.20.24:1234/rpc/v0"
+        rpc_url = "http://10.20.20.24:1234/rpc/v1"
         base_path = "/root/devgen/lotus-1"
+        token_txt = "jwt"
+    elif node_type == "lotus-2":
+        rpc_url = "http://10.20.20.26:1235/rpc/v1"
+        base_path = "/root/devgen/lotus-2"
         token_txt = "jwt"
     else:
         unreachable("Invalid node for getting authentication credentials", {"invalid_node":node_type})
