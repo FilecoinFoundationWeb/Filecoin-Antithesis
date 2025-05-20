@@ -33,5 +33,5 @@ def select_random_node():
     return random.choice(nodes)
 
 def get_all_nodes():
-    nodes = ["forest"]
+    nodes = ["forest", "lotus-1", "lotus-2"]
     return nodes
