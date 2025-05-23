@@ -54,12 +54,7 @@ func ConnectToNode(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, fu
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		api, closer, err = tryConnect(ctx, nodeConfig)
 		if err == nil {
-			if err := verifyConnection(ctx, api, nodeConfig); err == nil {
-				log.Printf("[INFO] Successfully connected to node %s on attempt %d", nodeConfig.Name, attempt)
-				return api, closer, nil
-			}
-			closer()
-			err = fmt.Errorf("connection verification failed")
+			return api, closer, nil
 		}
 
 		if attempt < maxRetries {
@@ -101,36 +96,6 @@ func tryConnect(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(
 		"error": err,
 	})
 	return api, closer, err
-}
-
-// verifyConnection performs health checks on the connection
-func verifyConnection(ctx context.Context, nodeAPI api.FullNode, nodeConfig NodeConfig) error {
-	// Check if we can get version info
-	_, err := nodeAPI.Version(ctx)
-	if err != nil {
-		log.Printf("[ERROR] Node %s version check failed: %v", nodeConfig.Name, err)
-		return err
-	}
-
-	// Check if we can get chain head
-	head, err := nodeAPI.ChainHead(ctx)
-	if err != nil {
-		log.Printf("[ERROR] Node %s chain head check failed: %v", nodeConfig.Name, err)
-		return err
-	}
-	if head == nil {
-		log.Printf("[ERROR] Node %s chain head is nil", nodeConfig.Name)
-		return fmt.Errorf("chain head is nil")
-	}
-
-	// Check if node has peers
-	_, err = nodeAPI.NetPeers(ctx)
-	if err != nil {
-		log.Printf("[ERROR] Node %s peer list check failed: %v", nodeConfig.Name, err)
-		return err
-	}
-
-	return nil
 }
 
 func IsNodeConnected(ctx context.Context, nodeAPI api.FullNode) (bool, error) {

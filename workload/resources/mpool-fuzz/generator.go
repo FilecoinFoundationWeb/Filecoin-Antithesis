@@ -3,23 +3,22 @@ package mpoolfuzz
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"math/big"
 
 	"github.com/filecoin-project/go-address"
-	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/chain/types"
 )
 
-func CreateBaseMessage(from, to address.Address, nonce uint64) *types.Message {
+func CreateBaseMessage(from, to address.Address, _ uint64) *types.Message {
 	return &types.Message{
 		From:       from,
 		To:         to,
-		Nonce:      nonce,
-		Value:      types.NewInt(0),
+		Value:      types.NewInt(100000000000000), // 0.0001 FIL in attoFIL
 		GasLimit:   1000000,
-		GasFeeCap:  abi.NewTokenAmount(1e9),
-		GasPremium: abi.NewTokenAmount(1e9),
+		GasFeeCap:  types.NewInt(1000000000), // 1 nanoFIL in attoFIL
+		GasPremium: types.NewInt(1000000000), // 1 nanoFIL in attoFIL
 		Method:     0,
-		Params:     []byte{},
+		Params:     nil,
 	}
 }
 
@@ -45,4 +44,12 @@ func CreateMalformedCBOR(size int) []byte {
 	buf = append(buf, length...)
 	buf = append(buf, value...)
 	return buf
+}
+
+func GenerateRandomAddress() (address.Address, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
+	if err != nil {
+		return address.Undef, err
+	}
+	return address.NewIDAddress(n.Uint64())
 }

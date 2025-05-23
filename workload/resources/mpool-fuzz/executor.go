@@ -14,15 +14,15 @@ import (
 )
 
 func SendStandardMutations(ctx context.Context, api api.FullNode, from, to address.Address, count int, r *rand.Rand) error {
-	startingNonce, err := api.MpoolGetNonce(ctx, from)
-	if err != nil {
-		log.Printf("[WARN] Could not get nonce for %s: %v, using 0", from, err)
-		startingNonce = 0
-	}
 
 	for i := 0; i < count; i++ {
 		// Create base message
-		msg := CreateBaseMessage(from, to, startingNonce+uint64(i))
+		startingNonce, err := api.MpoolGetNonce(ctx, from)
+		if err != nil {
+			log.Printf("[WARN] Could not get nonce for %s: %v, using 0", from, err)
+			startingNonce = 0
+		}
+		msg := CreateBaseMessage(from, to, startingNonce)
 
 		// Apply mutation
 		mutationType := GetRandomMutation("standard", r)
@@ -70,7 +70,13 @@ func SendChainedTransactions(ctx context.Context, api api.FullNode, from, to add
 
 	// Send chain of related messages
 	for i := 1; i < count; i++ {
-		msg := CreateBaseMessage(from, from, nonce+uint64(i))
+		nonce, err = api.MpoolGetNonce(ctx, from)
+		if err != nil {
+			log.Printf("[WARN] Could not get nonce for %s: %v, using 0", from, err)
+			nonce = 0
+		}
+
+		msg := CreateBaseMessage(from, from, nonce)
 
 		// Apply chain-specific mutation
 		var description string
@@ -117,16 +123,16 @@ func SendChainedTransactions(ctx context.Context, api api.FullNode, from, to add
 
 // SendConcurrentBurst implements concurrent burst attacks
 func SendConcurrentBurst(ctx context.Context, api api.FullNode, from, to address.Address, count int, r *rand.Rand, concurrency int) error {
-	nonce, err := api.MpoolGetNonce(ctx, from)
-	if err != nil {
-		log.Printf("[WARN] Could not get nonce for %s: %v, using 0", from, err)
-		nonce = 0
-	}
 
 	// Generate messages
 	messages := make([]*types.Message, count)
 	for i := 0; i < count; i++ {
-		msg := CreateBaseMessage(from, to, nonce+uint64(i))
+		nonce, err := api.MpoolGetNonce(ctx, from)
+		if err != nil {
+			log.Printf("[WARN] Could not get nonce for %s: %v, using 0", from, err)
+			nonce = 0
+		}
+		msg := CreateBaseMessage(from, to, nonce)
 
 		// Apply some mutations
 		if i%3 == 0 {
