@@ -39,7 +39,7 @@ RUN chmod +x ./test/v1/main/*
 RUN go mod download
 
 # Build the Go application
-RUN go build -tags=2k -o ./app ./main.go
+RUN go build -o ./app ./main.go
 
 RUN rm ./main.go
 

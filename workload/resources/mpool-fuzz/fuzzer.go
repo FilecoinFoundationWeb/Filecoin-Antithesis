@@ -55,13 +55,14 @@ func RunFuzzer(ctx context.Context, api api.FullNode, from, to address.Address, 
 }
 
 func SendSubtleAttacks(ctx context.Context, api api.FullNode, from, to address.Address, count int, r *rand.Rand) error {
-	nonce, err := api.MpoolGetNonce(ctx, from)
-	if err != nil {
-		log.Printf("[WARN] Could not get nonce for %s: %v, using 0", from, err)
-		nonce = 0
-	}
 
 	for i := 0; i < count; i++ {
+		nonce, err := api.MpoolGetNonce(ctx, from)
+		if err != nil {
+			log.Printf("[WARN] Could not get nonce for %s: %v, using 0", from, err)
+			nonce = 0
+		}
+
 		msg := CreateBaseMessage(from, to, nonce)
 
 		mutationType := GetRandomMutation("subtle", r)
@@ -86,14 +87,14 @@ func SendSubtleAttacks(ctx context.Context, api api.FullNode, from, to address.A
 
 // SendEdgeCases implements protocol edge case attacks
 func SendEdgeCases(ctx context.Context, api api.FullNode, from, to address.Address, count int, r *rand.Rand) error {
-	nonce, err := api.MpoolGetNonce(ctx, from)
-	if err != nil {
-		log.Printf("[WARN] Could not get nonce for %s: %v, using 0", from, err)
-		nonce = 0
-	}
 
 	for i := 0; i < count; i++ {
-		msg := CreateBaseMessage(from, to, nonce+uint64(i))
+		nonce, err := api.MpoolGetNonce(ctx, from)
+		if err != nil {
+			log.Printf("[WARN] Could not get nonce for %s: %v, using 0", from, err)
+			nonce = 0
+		}
+		msg := CreateBaseMessage(from, to, nonce)
 
 		mutationType := GetRandomMutation("edge", r)
 		description := Apply(msg, mutationType, r)

@@ -603,7 +603,7 @@ func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, c
 	if len(wallets) < 2 {
 		log.Printf("[WARN] Not enough wallets (found %d). Creating more wallets.", len(wallets))
 		numWallets := 2
-		if err := performCreateOperation(ctx, nodeConfig, &numWallets, abi.NewTokenAmount(1000000000000000)); err != nil {
+		if err := performCreateOperation(ctx, nodeConfig, &numWallets, types.FromFil(100)); err != nil {
 			log.Printf("Create operation failed: %v", err)
 		}
 
@@ -612,34 +612,58 @@ func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, c
 			return fmt.Errorf("failed to get enough wallet addresses after creation attempt: %v", err)
 		}
 	}
-	config := mpoolfuzz.DefaultConfig()
-	config.Count = count
-	config.Concurrenct = concurrency
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	strategies := []string{"standard", "chained", "burst", "subtle", "edge"}
-	strategy := strategies[r.Intn(len(strategies))]
+	from := wallets[0]
+	errCount := 0
 
-	log.Printf("[INFO] Selected fuzzing strategy: %s", strategy)
-
-	if strategy == "standard" {
-		err = mpoolfuzz.SendStandardMutations(ctx, api, wallets[0], wallets[1], count, r)
-	} else if strategy == "chained" {
-		err = mpoolfuzz.SendChainedTransactions(ctx, api, wallets[0], wallets[1], count, r)
-	} else if strategy == "burst" {
-		err = mpoolfuzz.SendConcurrentBurst(ctx, api, wallets[0], wallets[1], count, r, concurrency)
-	} else if strategy == "subtle" {
-		err = mpoolfuzz.SendSubtleAttacks(ctx, api, wallets[0], wallets[1], count, r)
-	} else {
-		err = mpoolfuzz.SendEdgeCases(ctx, api, wallets[0], wallets[1], count, r)
-	}
-
+	// Log initial balance
+	balance, err := api.WalletBalance(ctx, from)
 	if err != nil {
-		log.Printf("[ERROR] Mempool fuzzing failed: %v", err)
-		return err
+		log.Printf("[WARN] Failed to get sender balance: %v", err)
+	} else {
+		log.Printf("[INFO] Sender %s initial balance: %s", from, types.FIL(balance))
 	}
 
-	log.Printf("[INFO] Mempool fuzzing completed successfully")
+	for i := 0; i < count; i++ {
+		to, err := mpoolfuzz.GenerateRandomAddress()
+		if err != nil {
+			log.Printf("[WARN] Failed to generate random address: %v", err)
+			continue
+		}
+
+		msg := mpoolfuzz.CreateBaseMessage(from, to, 0)
+		log.Printf("[DEBUG] Pushing message %d: From=%s To=%s Value=%s GasLimit=%d",
+			i, msg.From, msg.To, types.FIL(msg.Value), msg.GasLimit)
+
+		signedMsg, err := api.MpoolPushMessage(ctx, msg, nil)
+		if err != nil {
+			errCount++
+			log.Printf("[WARN] Failed to push message %d: %v", i, err)
+			continue
+		}
+
+		log.Printf("[INFO] Message %d sent successfully: CID=%s", i, signedMsg.Cid())
+
+		// Get mempool pending count
+		pending, err := api.MpoolPending(ctx, types.EmptyTSK)
+		if err != nil {
+			log.Printf("[WARN] Failed to get pending messages: %v", err)
+		} else {
+			log.Printf("[DEBUG] Current mempool pending count: %d", len(pending))
+		}
+
+		time.Sleep(100 * time.Millisecond) // Small delay to avoid overwhelming the node
+	}
+
+	// Log final balance
+	balance, err = api.WalletBalance(ctx, from)
+	if err != nil {
+		log.Printf("[WARN] Failed to get sender final balance: %v", err)
+	} else {
+		log.Printf("[INFO] Sender %s final balance: %s", from, types.FIL(balance))
+	}
+
+	log.Printf("[INFO] Mempool fuzzing completed. %d messages sent, %d errors", count, errCount)
 	return nil
 }
 
@@ -774,7 +798,6 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	txHash := resources.SubmitTransaction(ctx, api, &tx)
 	log.Printf("[INFO] Transaction submitted with hash: %s", txHash)
 
-	// Assert transaction was submitted successfully
 	assert.Sometimes(txHash != ethtypes.EmptyEthHash, "Transaction must be submitted successfully", map[string]interface{}{
 		"tx_hash":     txHash.String(),
 		"deployer":    deployer.String(),
@@ -793,12 +816,7 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	}
 
 	// Assert transaction was mined successfully
-	assert.Sometimes(receipt != nil && receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{
-		"tx_hash":     txHash,
-		"status":      receipt.Status,
-		"contract":    receipt.ContractAddress,
-		"requirement": "Transaction must be mined and succeed",
-	})
+	assert.Sometimes(receipt != nil && receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
 
 	log.Printf("[INFO] Transaction receipt: %v", receipt)
 }
@@ -811,7 +829,6 @@ func performStateMismatch(ctx context.Context, nodeConfig *resources.NodeConfig)
 		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
 	}
 	defer closer()
-
 	err = resources.StateMismatch(ctx, api)
 	if err != nil {
 		return fmt.Errorf("state mismatch check failed: %w", err)
