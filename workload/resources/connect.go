@@ -19,6 +19,7 @@ type NodeConfig struct {
 	Name          string `json:"name"`
 	RPCURL        string `json:"rpcURL"`
 	AuthTokenPath string `json:"authTokenPath"`
+	Type          string `json:"type,omitempty"` // "lotus" or "forest"
 }
 
 type Config struct {
