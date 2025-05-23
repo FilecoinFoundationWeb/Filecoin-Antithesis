@@ -23,6 +23,8 @@ import (
 	"github.com/filecoin-project/lotus/chain/types/ethtypes"
 	"github.com/filecoin-project/lotus/chain/wallet/key"
 	"github.com/filecoin-project/lotus/lib/sigs"
+	_ "github.com/filecoin-project/lotus/lib/sigs/delegated"
+	_ "github.com/filecoin-project/lotus/lib/sigs/secp"
 	"github.com/multiformats/go-varint"
 	cbg "github.com/whyrusleeping/cbor-gen"
 	"golang.org/x/crypto/sha3"
@@ -142,7 +144,9 @@ func DeployContractFromFilenameWithValue(ctx context.Context, api api.FullNode, 
 }
 
 func DeployContractFromFilename(ctx context.Context, api api.FullNode, binFilename string) (address.Address, address.Address) {
-	return DeployContractFromFilenameWithValue(ctx, api, binFilename, big.Zero())
+	fromAddr, contractAddr := DeployContractFromFilenameWithValue(ctx, api, binFilename, big.Zero())
+
+	return fromAddr, contractAddr
 }
 
 func InvokeSolidity(ctx context.Context, api api.FullNode, sender address.Address, target address.Address, selector []byte, inputData []byte) (*api.MsgLookup, error) {
@@ -250,7 +254,7 @@ func InputDataFromFrom(ctx context.Context, api api.FullNode, from address.Addre
 }
 
 func SignTransaction(tx *ethtypes.Eth1559TxArgs, privKey []byte) {
-	preimage, err := tx.ToRlpSignedMsg()
+	preimage, err := tx.ToRlpUnsignedMsg()
 	if err != nil {
 		log.Printf("Failed to convert transaction to RLP: %v", err)
 		return

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -17,8 +18,10 @@ import (
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
+	"github.com/filecoin-project/go-state-types/big"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
+	"github.com/filecoin-project/lotus/chain/types/ethtypes"
 )
 
 // HOW TO ADD A NEW CLI COMMAND TO THIS TOOL
@@ -44,9 +47,9 @@ import (
 //   - Make sure to return nil for success or an error if something fails
 //   - Follow the pattern of other operation functions for consistency
 
-func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *string) {
+func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *string, *int64) {
 	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
-	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId'")
+	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch'")
 	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
 	numWallets := flag.Int("wallets", 1, "Number of wallets for the operation")
 	contractPath := flag.String("contract", "", "Path to the smart contract bytecode file")
@@ -59,9 +62,10 @@ func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *ti
 	pingAttackType := flag.String("ping-attack-type", "random", "Type of ping attack")
 	concurrency := flag.Int("concurrency", 5, "Number of concurrent operations")
 	rpcURL := flag.String("rpc-url", "", "RPC URL for eth_chainId operation")
+	height := flag.Int64("height", 0, "Chain height to check consensus at (0 for current height)")
 
 	flag.Parse()
-	return configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, rpcURL
+	return configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, rpcURL, height
 }
 
 func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType *string) error {
@@ -79,14 +83,18 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		"createEthAccount":  true,
 		"rpc-benchmark":     true,
 		"deployValueSender": true,
+		"checkConsensus":    true,
+		"deployContract":    true,
+		"stateMismatch":     true,
 	}
 
 	// Operations that don't require a node name
 	noNodeNameRequired := map[string]bool{
-		"spam":          true,
-		"chaos":         true,
-		"pingAttack":    true,
-		"rpc-benchmark": true,
+		"spam":           true,
+		"chaos":          true,
+		"pingAttack":     true,
+		"rpc-benchmark":  true,
+		"checkConsensus": true,
 	}
 
 	if !validOps[*operation] {
@@ -121,7 +129,7 @@ func main() {
 	log.Println("[INFO] Starting workload...")
 
 	// Parse command line flags
-	configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, rpcURL := parseFlags()
+	configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, rpcURL, height := parseFlags()
 
 	// Create context
 	ctx := context.Background()
@@ -156,12 +164,6 @@ func main() {
 
 	// Execute the requested operation
 	switch *operation {
-	// STEP 3: Add a case for your new operation.
-	// This will call the function that implements your operation's logic.
-	// For example:
-	/*
-		case "myNewOperation":
-			err = performMyNewOperation(ctx, nodeConfig /*, other_flags... */
 	case "create":
 		err = performCreateOperation(ctx, nodeConfig, numWallets, abi.NewTokenAmount(1000000000000000))
 	case "delete":
@@ -185,6 +187,15 @@ func main() {
 		err = performPingAttack(ctx, *targetAddr, attackType, *concurrency, *minInterval, *maxInterval, *duration)
 	case "rpc-benchmark":
 		callV2API(*rpcURL)
+	case "checkConsensus":
+		err = performConsensusCheck(ctx, config, *height)
+	case "deployContract":
+		if *contractPath == "" {
+			*contractPath = "workload/resources/smart-contracts/SimpleCoin.hex"
+		}
+		deploySmartContract(ctx, nodeConfig, *contractPath)
+	case "stateMismatch":
+		err = performStateMismatch(ctx, nodeConfig)
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
@@ -644,4 +655,168 @@ func callV2API(endpoint string) {
 	resources.RunV2APILoadTest(endpoint, 10*time.Second, 5, 10)
 
 	log.Printf("[INFO] V2 API testing completed")
+}
+
+func performConsensusCheck(ctx context.Context, config *resources.Config, height int64) error {
+	log.Printf("[INFO] Starting consensus check...")
+
+	checker, err := resources.NewConsensusChecker(ctx, config.Nodes)
+	if err != nil {
+		return fmt.Errorf("failed to create consensus checker: %w", err)
+	}
+
+	// If height is 0, we'll let the checker pick a random height
+	if height == 0 {
+		log.Printf("[INFO] No specific height provided, will check consensus at a random height")
+	} else {
+		log.Printf("[INFO] Will check consensus starting at height %d", height)
+	}
+
+	// Run the consensus check
+	err = checker.CheckConsensus(ctx, abi.ChainEpoch(height))
+	if err != nil {
+		return fmt.Errorf("consensus check failed: %w", err)
+	}
+
+	log.Printf("[INFO] Consensus check completed successfully")
+	return nil
+}
+
+func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) {
+	log.Printf("[INFO] Deploying smart contract from %s...", contractPath)
+
+	// Connect to Lotus node
+	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return
+	}
+	defer closer()
+
+	// Create new account for deployment
+	key, ethAddr, deployer := resources.NewAccount()
+	log.Printf("[INFO] Created new account - deployer: %s, ethAddr: %s", deployer, ethAddr)
+
+	// Get funds from default account
+	defaultAddr, err := api.WalletDefaultAddress(ctx)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
+		return
+	}
+
+	// Send funds to deployer account
+	log.Printf("[INFO] Sending funds to deployer account...")
+	resources.SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
+	resources.AssertAddressBalanceConsistent(ctx, api, deployer)
+
+	// Wait for funds to be available
+	log.Printf("[INFO] Waiting for funds to be available...")
+	time.Sleep(30 * time.Second)
+
+	// Read and decode contract
+	contractHex, err := os.ReadFile(contractPath)
+	if err != nil {
+		log.Printf("[ERROR] Failed to read contract file: %v", err)
+		return
+	}
+	contract, err := hex.DecodeString(string(contractHex))
+	if err != nil {
+		log.Printf("[ERROR] Failed to decode contract: %v", err)
+		return
+	}
+
+	// Estimate gas
+	gasParams, err := json.Marshal(ethtypes.EthEstimateGasParams{Tx: ethtypes.EthCall{
+		From: &ethAddr,
+		Data: contract,
+	}})
+	if err != nil {
+		log.Printf("[ERROR] Failed to marshal gas params: %v", err)
+		return
+	}
+	gasLimit, err := api.EthEstimateGas(ctx, gasParams)
+	if err != nil {
+		log.Printf("[ERROR] Failed to estimate gas: %v", err)
+		return
+	}
+
+	// Get gas fees
+	maxPriorityFee, err := api.EthMaxPriorityFeePerGas(ctx)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get max priority fee: %v", err)
+		return
+	}
+
+	// Get nonce
+	nonce, err := api.MpoolGetNonce(ctx, deployer)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get nonce: %v", err)
+		return
+	}
+
+	// Create transaction
+	tx := ethtypes.Eth1559TxArgs{
+		ChainID:              31415926,
+		Value:                big.Zero(),
+		Nonce:                int(nonce),
+		MaxFeePerGas:         types.NanoFil,
+		MaxPriorityFeePerGas: big.Int(maxPriorityFee),
+		GasLimit:             int(gasLimit),
+		Input:                contract,
+		V:                    big.Zero(),
+		R:                    big.Zero(),
+		S:                    big.Zero(),
+	}
+
+	// Sign and submit transaction
+	log.Printf("[INFO] Signing and submitting transaction...")
+	resources.SignTransaction(&tx, key.PrivateKey)
+	txHash := resources.SubmitTransaction(ctx, api, &tx)
+	log.Printf("[INFO] Transaction submitted with hash: %s", txHash)
+
+	// Assert transaction was submitted successfully
+	assert.Sometimes(txHash != ethtypes.EmptyEthHash, "Transaction must be submitted successfully", map[string]interface{}{
+		"tx_hash":     txHash.String(),
+		"deployer":    deployer.String(),
+		"requirement": "Transaction hash must not be empty",
+	})
+
+	// Wait for transaction to be mined
+	log.Printf("[INFO] Waiting for transaction to be mined...")
+	time.Sleep(30 * time.Second)
+
+	// Get contract address from transaction receipt
+	receipt, err := api.EthGetTransactionReceipt(ctx, txHash)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get transaction receipt: %v", err)
+		return
+	}
+
+	// Assert transaction was mined successfully
+	assert.Sometimes(receipt != nil && receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{
+		"tx_hash":     txHash,
+		"status":      receipt.Status,
+		"contract":    receipt.ContractAddress,
+		"requirement": "Transaction must be mined and succeed",
+	})
+
+	log.Printf("[INFO] Transaction receipt: %v", receipt)
+}
+
+func performStateMismatch(ctx context.Context, nodeConfig *resources.NodeConfig) error {
+	log.Printf("[INFO] Starting state mismatch check on node '%s'...", nodeConfig.Name)
+
+	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+	}
+	defer closer()
+
+	err = resources.StateMismatch(ctx, api)
+	if err != nil {
+		return fmt.Errorf("state mismatch check failed: %w", err)
+	}
+
+	log.Printf("[INFO] State mismatch check completed successfully on node '%s'", nodeConfig.Name)
+	return nil
 }
