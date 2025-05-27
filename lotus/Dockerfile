@@ -66,7 +66,10 @@ RUN ./lotus-seed aggregate-manifests "/root/.genesis-sector-1/pre-seal-t01000.js
 RUN ./lotus-seed genesis add-miner localnet-1.json manifest.json
 # Add the second miner to the genesis template
 RUN ./lotus-seed genesis add-miner localnet-2.json manifest.json
-
+RUN go build -o tvx ./cmd/tvx
 RUN  make install
-
+RUN  cp ./tvx /usr/local/bin/tvx
+RUN  cp ./lotus-bench /usr/local/bin/lotus-bench
+RUN  cp ./lotus-shed /usr/local/bin/lotus-shed
+RUN  cp ./lotus-health /usr/local/bin/lotus-health
 ENTRYPOINT ["sleep", "infinity"]
