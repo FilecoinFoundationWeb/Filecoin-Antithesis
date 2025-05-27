@@ -67,6 +67,7 @@ RUN ./lotus-seed genesis add-miner localnet-1.json manifest.json
 # Add the second miner to the genesis template
 RUN ./lotus-seed genesis add-miner localnet-2.json manifest.json
 
+
 RUN make install
 
 COPY ./lotus-bench.sh /opt/antithesis/test/v1/benchmark/serial-lotus-bench.sh

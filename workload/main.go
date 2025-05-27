@@ -49,7 +49,7 @@ import (
 
 func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *string, *int64) {
 	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
-	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch'")
+	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault'")
 	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
 	numWallets := flag.Int("wallets", 1, "Number of wallets for the operation")
 	contractPath := flag.String("contract", "", "Path to the smart contract bytecode file")
@@ -70,31 +70,33 @@ func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *ti
 
 func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType *string) error {
 	validOps := map[string]bool{
-		"create":            true,
-		"delete":            true,
-		"spam":              true,
-		"connect":           true,
-		"deploySimpleCoin":  true,
-		"deployMCopy":       true,
-		"deployTStore":      true,
-		"chaos":             true,
-		"mempoolFuzz":       true,
-		"pingAttack":        true,
-		"createEthAccount":  true,
-		"rpc-benchmark":     true,
-		"deployValueSender": true,
-		"checkConsensus":    true,
-		"deployContract":    true,
-		"stateMismatch":     true,
+		"create":             true,
+		"delete":             true,
+		"spam":               true,
+		"connect":            true,
+		"deploySimpleCoin":   true,
+		"deployMCopy":        true,
+		"deployTStore":       true,
+		"chaos":              true,
+		"mempoolFuzz":        true,
+		"pingAttack":         true,
+		"createEthAccount":   true,
+		"rpc-benchmark":      true,
+		"deployValueSender":  true,
+		"checkConsensus":     true,
+		"deployContract":     true,
+		"stateMismatch":      true,
+		"sendConsensusFault": true,
 	}
 
 	// Operations that don't require a node name
 	noNodeNameRequired := map[string]bool{
-		"spam":           true,
-		"chaos":          true,
-		"pingAttack":     true,
-		"rpc-benchmark":  true,
-		"checkConsensus": true,
+		"spam":               true,
+		"chaos":              true,
+		"pingAttack":         true,
+		"rpc-benchmark":      true,
+		"checkConsensus":     true,
+		"sendConsensusFault": true,
 	}
 
 	if !validOps[*operation] {
@@ -196,6 +198,8 @@ func main() {
 		deploySmartContract(ctx, nodeConfig, *contractPath)
 	case "stateMismatch":
 		err = performStateMismatch(ctx, nodeConfig)
+	case "sendConsensusFault":
+		err = performSendConsensusFault(ctx)
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
@@ -835,5 +839,15 @@ func performStateMismatch(ctx context.Context, nodeConfig *resources.NodeConfig)
 	}
 
 	log.Printf("[INFO] State mismatch check completed successfully on node '%s'", nodeConfig.Name)
+	return nil
+}
+
+func performSendConsensusFault(ctx context.Context) error {
+	log.Println("[INFO] Attempting to send a consensus fault...")
+	err := resources.SendConsensusFault(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to send consensus fault: %w", err)
+	}
+	log.Println("[INFO] SendConsensusFault operation initiated. Check further logs for details.")
 	return nil
 }

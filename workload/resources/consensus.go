@@ -131,6 +131,12 @@ func (cc *ConsensusChecker) getTipsetAtHeight(ctx context.Context, nodeInfo Node
 func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.ChainEpoch) error {
 	log.Printf("Starting consensus check between nodes")
 
+	// Validate height is not negative
+	if height < 0 {
+		log.Printf("Invalid height %d provided, will use random height instead", height)
+		height = 0
+	}
+
 	// First, get chain heads to determine height range
 	var minHead abi.ChainEpoch
 	first := true
@@ -152,6 +158,20 @@ func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.Chain
 		}
 		safeMaxHeight := minHead - 20 // Stay away from head to avoid reorgs
 		height = abi.ChainEpoch(rand.Int63n(int64(safeMaxHeight-1))) + 1
+	} else if height > minHead {
+		log.Printf("Requested height %d is beyond current chain head %d, will use random height instead", height, minHead)
+		height = 0
+		if minHead < 30 {
+			return fmt.Errorf("chain too short for consensus check, height: %d", minHead)
+		}
+		safeMaxHeight := minHead - 20
+		height = abi.ChainEpoch(rand.Int63n(int64(safeMaxHeight-1))) + 1
+	}
+
+	// Ensure we have enough height to walk back without going negative
+	if height < 10 {
+		log.Printf("Height %d is too low for 10-block consensus walk, adjusting starting height", height)
+		height = 10
 	}
 
 	log.Printf("Starting consensus walk from height %d", height)
