@@ -70,14 +70,25 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 		Value: amount,
 	}
 
-	sm, err := api.MpoolPushMessage(ctx, msg, nil)
-	assert.Sometimes(err != nil, "Mpool push message", map[string]any{
-		"from":  from.String(),
-		"to":    to.String(),
-		"error": err,
-	})
+	// Get balance before sending
+	fromBalance, err := api.WalletBalance(ctx, from)
 	if err != nil {
-		log.Printf("Failed to push message to mempool: %v", err)
+		log.Printf("Failed to get balance for sender %s: %v", from, err)
+	} else {
+		log.Printf("Sender %s balance before transfer: %s", from, fromBalance)
+	}
+
+	sm, err := api.MpoolPushMessage(ctx, msg, nil)
+	if err != nil {
+		details := map[string]any{
+			"from":         from.String(),
+			"to":           to.String(),
+			"error":        err.Error(),
+			"value":        amount.String(),
+			"from_balance": fromBalance.String(),
+		}
+		assert.Sometimes(true, "Mpool push message failed", details)
+		log.Printf("Failed to push message to mempool: %v (Details: %+v)", err, details)
 		return fmt.Errorf("failed to push message to mempool: %w", err)
 	}
 	if sm == nil {

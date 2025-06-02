@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 
@@ -30,6 +31,10 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 	checkTs = randomTs
 
 	for checkTs.Height() != 0 {
+		if checkTs == nil {
+			log.Printf("[ERROR] checkTs is nil")
+			return fmt.Errorf("checkTs is nil")
+		}
 		if checkTs.Height()%1000 == 0 {
 			log.Printf("Reached height %d", checkTs.Height())
 		}
@@ -38,6 +43,10 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 		if err != nil {
 			log.Printf("[ERROR] Failed to get tipset at height %d: %v", execTs.Height(), err)
 			return err
+		}
+		if execTs == nil {
+			log.Printf("[ERROR] Got nil tipset for parents at height %d", checkTs.Height())
+			return fmt.Errorf("got nil tipset for parents at height %d", checkTs.Height())
 		}
 		st, err := api.StateCompute(ctx, execTs.Height(), nil, execTsk)
 		if err != nil {

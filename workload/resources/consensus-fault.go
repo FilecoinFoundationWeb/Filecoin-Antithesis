@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/filecoin-project/go-state-types/builtin"
 	miner8 "github.com/filecoin-project/go-state-types/builtin/v8/miner"
@@ -31,7 +32,6 @@ func SendConsensusFault(ctx context.Context) error {
 		return fmt.Errorf("failed to get chain head: %w", err)
 	}
 
-	// Get a block from 2 epochs ago to avoid the "fault epoch ahead" error
 	ts, err := api.ChainGetTipSetByHeight(ctx, head.Height()-2, head.Key())
 	if err != nil {
 		return fmt.Errorf("failed to get tipset at height %d: %w", head.Height()-2, err)
@@ -51,6 +51,7 @@ func SendConsensusFault(ctx context.Context) error {
 	// Get miner info for the block's miner
 	maddr := block1.Miner
 	minfo, err := api.StateMinerInfo(ctx, maddr, types.EmptyTSK)
+	fmt.Printf("Minfo %v", minfo)
 	if err != nil {
 		return fmt.Errorf("failed to get miner info: %w", err)
 	}
@@ -63,11 +64,11 @@ func SendConsensusFault(ctx context.Context) error {
 	log.Printf("Minfo worker %s", minfo.Worker)
 	sig, err := api.WalletSign(ctx, minfo.Worker, signingBytes)
 	if err != nil {
+		time.Sleep(10 * time.Second)
 		return fmt.Errorf("failed to sign block: %w", err)
 	}
 	block2.BlockSig = sig
 
-	// Marshal both blocks
 	buf1 := new(bytes.Buffer)
 	if err := block1.MarshalCBOR(buf1); err != nil {
 		return fmt.Errorf("failed to marshal block1: %w", err)
@@ -94,7 +95,11 @@ func SendConsensusFault(ctx context.Context) error {
 		Method: builtin.MethodsMiner.ReportConsensusFault,
 		Params: sp,
 	}
-
+	balance, err := api.StateMarketBalance(ctx, maddr, types.EmptyTSK)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Printf("Balance before: %v", balance)
 	smsg, err := api.MpoolPushMessage(ctx, msg, nil)
 	if err != nil {
 		return xerrors.Errorf("mpool push failed: %w", err)
@@ -108,6 +113,21 @@ func SendConsensusFault(ctx context.Context) error {
 	if wait.Receipt.ExitCode.IsError() {
 		return fmt.Errorf("consensus fault report failed with exit code: %s", wait.Receipt.ExitCode)
 	}
+	balanceAfter, err := api.StateMarketBalance(ctx, maddr, types.EmptyTSK)
+	if err != nil {
+		log.Println(err)
+	}
 
+	minerinfo, err := api.StateMinerInfo(ctx, maddr, types.EmptyTSK)
+	if err != nil {
+		return fmt.Errorf("failed to get miner info: %w", err)
+	}
+	i := 0
+	for i <= 20 {
+		log.Printf("Minfo worker %s", minerinfo.ConsensusFaultElapsed)
+		log.Printf("Balance after: %v", balanceAfter)
+		time.Sleep(20 * time.Second)
+		i++
+	}
 	return nil
 }

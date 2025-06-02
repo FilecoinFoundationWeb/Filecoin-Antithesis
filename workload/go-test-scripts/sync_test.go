@@ -2,15 +2,20 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
+	"github.com/filecoin-project/lotus/build/buildconstants"
 )
 
 func TestNodeHeightProgression(t *testing.T) {
 	ctx := context.Background()
+	expectedBlockTime := float64(buildconstants.BlockDelaySecs)      // seconds
+	allowedDeviation := float64(buildconstants.BlockDelaySecs) * 0.3 // 30% deviation allowed
 
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
 	if err != nil {
@@ -40,10 +45,12 @@ func TestNodeHeightProgression(t *testing.T) {
 		}
 
 		initialHeight := int64(initialHead.Height())
+		startTime := time.Now()
 		t.Logf("Node '%s' initial chain height: %d", node.Name, initialHeight)
 
 		// Wait for 30 seconds and check if height increased
 		time.Sleep(30 * time.Second)
+		elapsedTime := time.Since(startTime).Seconds()
 
 		currentHead, err := api.ChainHead(ctx)
 		if err != nil {
@@ -52,16 +59,33 @@ func TestNodeHeightProgression(t *testing.T) {
 		}
 
 		currentHeight := int64(currentHead.Height())
+		heightDiff := currentHeight - initialHeight
 		t.Logf("Node '%s' final chain height: %d (change: %d)",
-			node.Name, currentHeight, currentHeight-initialHeight)
+			node.Name, currentHeight, heightDiff)
 
-		// Simple assertion that height should increase
+		// Calculate actual block time
+		actualBlockTime := elapsedTime / float64(heightDiff)
+		t.Logf("Node '%s' average block time: %.2f seconds (expected: %.2f ± %.2f)",
+			node.Name, actualBlockTime, expectedBlockTime, allowedDeviation)
+
+		// Assert that height increased
 		assert.Sometimes(currentHeight > initialHeight, "Chain height progression", map[string]interface{}{
 			"node":           node.Name,
 			"initial_height": initialHeight,
 			"final_height":   currentHeight,
-			"change":         currentHeight - initialHeight,
+			"change":         heightDiff,
 			"property":       "chain height should increase over time",
+		})
+
+		// Assert that block time is within expected range
+		blockTimeWithinRange := math.Abs(actualBlockTime-expectedBlockTime) <= allowedDeviation
+		assert.Sometimes(blockTimeWithinRange, "Block time verification", map[string]interface{}{
+			"node":              node.Name,
+			"actual_block_time": actualBlockTime,
+			"expected":          expectedBlockTime,
+			"deviation":         math.Abs(actualBlockTime - expectedBlockTime),
+			"max_allowed_dev":   allowedDeviation,
+			"property":          fmt.Sprintf("block time should be approximately %d seconds", buildconstants.BlockDelaySecs),
 		})
 	}
 }
