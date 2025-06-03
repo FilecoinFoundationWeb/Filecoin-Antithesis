@@ -14,8 +14,9 @@ import (
 
 func TestNodeHeightProgression(t *testing.T) {
 	ctx := context.Background()
-	expectedBlockTime := float64(buildconstants.BlockDelaySecs)      // seconds
-	allowedDeviation := float64(buildconstants.BlockDelaySecs) * 0.3 // 30% deviation allowed
+	blocktime := uint64(5)
+	expectedBlockTime := float64(blocktime)      // seconds
+	allowedDeviation := float64(blocktime) * 0.3 // 30% deviation allowed
 
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
 	if err != nil {
