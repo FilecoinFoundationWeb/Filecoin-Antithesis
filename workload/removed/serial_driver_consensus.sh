@@ -5,7 +5,7 @@ ATTEMPT=1
 
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Sending consensus fault"
-    /opt/antithesis/app -operation sendConsensusFault
+/opt/antithesis/app -operation sendConsensusFault
     
     if [ $? -eq 0 ]; then
         echo "Success!"

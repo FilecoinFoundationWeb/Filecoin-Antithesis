@@ -271,7 +271,7 @@ func SignTransaction(tx *ethtypes.Eth1559TxArgs, privKey []byte) {
 	}
 }
 
-func SubmitTransaction(ctx context.Context, api api.FullNode, tx *ethtypes.Eth1559TxArgs) ethtypes.EthHash {
+func SubmitTransaction(ctx context.Context, api api.FullNode, tx ethtypes.EthTransaction) ethtypes.EthHash {
 	signed, err := tx.ToRlpSignedMsg()
 	if err != nil {
 		log.Printf("Failed to convert transaction to RLP: %v", err)
@@ -341,4 +341,28 @@ func NewAccount() (*key.Key, ethtypes.EthAddress, address.Address) {
 		return nil, ethtypes.EthAddress{}, address.Address{}
 	}
 	return key, *(*ethtypes.EthAddress)(ethAddr), addr
+}
+
+func SignLegacyHomesteadTransaction(tx *ethtypes.EthLegacyHomesteadTxArgs, privKey []byte) {
+	preimage, err := tx.ToRlpUnsignedMsg()
+	if err != nil {
+		log.Printf("Failed to convert transaction to RLP: %v", err)
+		return
+	}
+
+	// sign the RLP payload
+	signature, err := sigs.Sign(crypto.SigTypeDelegated, privKey, preimage)
+	if err != nil {
+		log.Printf("Failed to sign transaction: %v", err)
+		return
+	}
+
+	signature.Data = append([]byte{ethtypes.EthLegacyHomesteadTxSignaturePrefix}, signature.Data...)
+	signature.Data[len(signature.Data)-1] += 27
+
+	err = tx.InitialiseSignature(*signature)
+	if err != nil {
+		log.Printf("Failed to initialise signature: %v", err)
+		return
+	}
 }

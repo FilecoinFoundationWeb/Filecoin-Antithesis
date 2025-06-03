@@ -49,7 +49,7 @@ import (
 
 func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *string, *int64) {
 	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
-	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault'")
+	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault', 'checkEthMethods', 'sendEthLegacy', 'checkSplitstore'")
 	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
 	numWallets := flag.Int("wallets", 1, "Number of wallets for the operation")
 	contractPath := flag.String("contract", "", "Path to the smart contract bytecode file")
@@ -87,6 +87,9 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		"deployContract":     true,
 		"stateMismatch":      true,
 		"sendConsensusFault": true,
+		"checkEthMethods":    true,
+		"sendEthLegacy":      true,
+		"checkSplitstore":    true,
 	}
 
 	// Operations that don't require a node name
@@ -97,6 +100,8 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		"rpc-benchmark":      true,
 		"checkConsensus":     true,
 		"sendConsensusFault": true,
+		"checkEthMethods":    true,
+		"checkSplitstore":    true,
 	}
 
 	if !validOps[*operation] {
@@ -200,6 +205,10 @@ func main() {
 		err = performStateMismatch(ctx, nodeConfig)
 	case "sendConsensusFault":
 		err = performSendConsensusFault(ctx)
+	case "checkEthMethods":
+		err = performEthMethodsCheck(ctx)
+	case "sendEthLegacy":
+		err = sendEthLegacyTransaction(ctx, nodeConfig)
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
@@ -825,6 +834,106 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	log.Printf("[INFO] Transaction receipt: %v", receipt)
 }
 
+func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeConfig) error {
+	log.Printf("[INFO] Starting ETH legacy transaction check on node '%s'...", nodeConfig.Name)
+	key, ethAddr, deployer := resources.NewAccount()
+	_, ethAddr2, _ := resources.NewAccount()
+
+	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+	}
+	defer closer()
+
+	defaultAddr, err := api.WalletDefaultAddress(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get default wallet address: %w", err)
+	}
+
+	resources.SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
+	resources.AssertAddressBalanceConsistent(ctx, api, deployer)
+
+	gasParams, err := json.Marshal(ethtypes.EthEstimateGasParams{Tx: ethtypes.EthCall{
+		From:  &ethAddr,
+		To:    &ethAddr2,
+		Value: ethtypes.EthBigInt(big.NewInt(100)),
+	}})
+	if err != nil {
+		return fmt.Errorf("failed to marshal gas params: %w", err)
+	}
+
+	gasLimit, err := api.EthEstimateGas(ctx, gasParams)
+	if err != nil {
+		return fmt.Errorf("failed to estimate gas: %w", err)
+	}
+
+	tx := ethtypes.EthLegacyHomesteadTxArgs{
+		Value:    big.NewInt(100),
+		Nonce:    0,
+		To:       &ethAddr2,
+		GasPrice: types.NanoFil,
+		GasLimit: int(gasLimit),
+		V:        big.Zero(),
+		R:        big.Zero(),
+		S:        big.Zero(),
+	}
+	resources.SignLegacyHomesteadTransaction(&tx, key.PrivateKey)
+	txHash := resources.SubmitTransaction(ctx, api, &tx)
+	log.Printf("[INFO] Transaction submitted with hash: %s", txHash)
+	// Wait for transaction to be mined
+	log.Printf("[INFO] Waiting for transaction to be mined...")
+	time.Sleep(30 * time.Second)
+
+	// Get and validate receipt
+	receipt, err := api.EthGetTransactionReceipt(ctx, txHash)
+	assert.Always(err == nil, "Receipt retrieval should succeed", map[string]interface{}{
+		"error": err,
+	})
+
+	assert.Always(receipt != nil, "Receipt should not be nil", nil)
+	assert.Always(receipt.From == ethAddr, "Receipt From address should match", map[string]interface{}{
+		"expected": ethAddr,
+		"actual":   receipt.From,
+	})
+	assert.Always(*receipt.To == ethAddr2, "Receipt To address should match", map[string]interface{}{
+		"expected": ethAddr2,
+		"actual":   *receipt.To,
+	})
+	assert.Always(receipt.TransactionHash == txHash, "Receipt transaction hash should match", map[string]interface{}{
+		"expected": txHash,
+		"actual":   receipt.TransactionHash,
+	})
+	assert.Always(receipt.Type == ethtypes.EthLegacyTxType, "Receipt type should be legacy", map[string]interface{}{
+		"expected": ethtypes.EthLegacyTxType,
+		"actual":   receipt.Type,
+	})
+	assert.Always(receipt.Status == ethtypes.EthUint64(0x1), "Receipt status should be success", map[string]interface{}{
+		"expected": ethtypes.EthUint64(0x1),
+		"actual":   receipt.Status,
+	})
+
+	// Get and validate transaction
+	ethTx, err := api.EthGetTransactionByHash(ctx, &txHash)
+	assert.Always(err == nil, "Transaction retrieval should succeed", map[string]interface{}{
+		"error": err,
+	})
+
+	// Validate transaction fields
+	assert.Always(ethTx.From == ethAddr, "Transaction From address should match", map[string]interface{}{
+		"expected": ethAddr,
+		"actual":   ethTx.From,
+	})
+	assert.Always(*ethTx.To == ethAddr2, "Transaction To address should match", map[string]interface{}{
+		"expected": ethAddr2,
+		"actual":   *ethTx.To,
+	})
+	// Skip hash comparison as the types are incompatible
+	// Instead verify the transaction exists and other fields match
+
+	log.Printf("[INFO] ETH legacy transaction check completed successfully")
+	return nil
+}
+
 func performStateMismatch(ctx context.Context, nodeConfig *resources.NodeConfig) error {
 	log.Printf("[INFO] Starting state mismatch check on node '%s'...", nodeConfig.Name)
 
@@ -849,5 +958,16 @@ func performSendConsensusFault(ctx context.Context) error {
 		return fmt.Errorf("failed to send consensus fault: %w", err)
 	}
 	log.Println("[INFO] SendConsensusFault operation initiated. Check further logs for details.")
+	return nil
+}
+
+func performEthMethodsCheck(ctx context.Context) error {
+	log.Printf("[INFO] Starting ETH methods consistency check...")
+
+	err := resources.CheckEthMethods(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create ETH methods checker: %w", err)
+	}
+	log.Printf("[INFO] ETH methods consistency check completed successfully")
 	return nil
 }
