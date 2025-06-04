@@ -53,15 +53,29 @@ func CheckEthMethods(ctx context.Context) error {
 				fmt.Printf("[FAIL] failed to get tipset @%d via eth_getBlockByNumber: %s\n", i, err)
 				continue
 			}
+			fmt.Printf("[DEBUG] Block by Number - Height: %d, Hash: %s\n", i, ethBlockA.Hash)
 
 			ethBlockB, err := api.EthGetBlockByHash(ctx, ethBlockA.Hash, false)
 			if err != nil {
 				fmt.Printf("[FAIL] failed to get tipset @%d via eth_getBlockByHash: %s\n", i, err)
 				continue
 			}
+			fmt.Printf("[DEBUG] Block by Hash - Height: %d, Hash: %s\n", i, ethBlockB.Hash)
 
 			// Use DeepEqual to check overall block equality
 			equal := reflect.DeepEqual(ethBlockA, ethBlockB)
+			if !equal {
+				fmt.Printf("[WARN] Block mismatch at height %d:\n", i)
+				fmt.Printf("  Block by Number Hash: %s\n", ethBlockA.Hash)
+				fmt.Printf("  Block by Hash Hash: %s\n", ethBlockB.Hash)
+				fmt.Printf("  Block by Number ParentHash: %s\n", ethBlockA.ParentHash)
+				fmt.Printf("  Block by Hash ParentHash: %s\n", ethBlockB.ParentHash)
+				fmt.Printf("  Block by Number Number: %s\n", ethBlockA.Number)
+				fmt.Printf("  Block by Hash Number: %s\n", ethBlockB.Number)
+				fmt.Printf("  Block by Number Timestamp: %s\n", ethBlockA.Timestamp)
+				fmt.Printf("  Block by Hash Timestamp: %s\n", ethBlockB.Timestamp)
+			}
+
 			assert.Always(equal, "Blocks should be identical regardless of retrieval method", map[string]interface{}{
 				"height":        i,
 				"node":          node.Name,
