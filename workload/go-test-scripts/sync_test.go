@@ -70,23 +70,39 @@ func TestNodeHeightProgression(t *testing.T) {
 			node.Name, actualBlockTime, expectedBlockTime, allowedDeviation)
 
 		// Assert that height increased
-		assert.Sometimes(currentHeight > initialHeight, "Chain height progression", map[string]interface{}{
-			"node":           node.Name,
-			"initial_height": initialHeight,
-			"final_height":   currentHeight,
-			"change":         heightDiff,
-			"property":       "chain height should increase over time",
-		})
+		assert.Always(currentHeight > initialHeight,
+			"[Chain Growth] Chain height should increase over time",
+			resources.EnhanceAssertDetails(
+				map[string]interface{}{
+					"node":           node.Name,
+					"initial_height": initialHeight,
+					"final_height":   currentHeight,
+					"change":         heightDiff,
+					"elapsed_time":   elapsedTime,
+					"property":       "Chain height progression",
+					"impact":         "Critical - validates chain liveness",
+					"details":        "Chain height must increase to demonstrate active block production",
+				},
+				node.Name,
+			))
 
 		// Assert that block time is within expected range
 		blockTimeWithinRange := math.Abs(actualBlockTime-expectedBlockTime) <= allowedDeviation
-		assert.Sometimes(blockTimeWithinRange, "Block time verification", map[string]interface{}{
-			"node":              node.Name,
-			"actual_block_time": actualBlockTime,
-			"expected":          expectedBlockTime,
-			"deviation":         math.Abs(actualBlockTime - expectedBlockTime),
-			"max_allowed_dev":   allowedDeviation,
-			"property":          fmt.Sprintf("block time should be approximately %d seconds", buildconstants.BlockDelaySecs),
-		})
+		assert.Sometimes(blockTimeWithinRange,
+			"[Block Time] Block production time should be within expected range",
+			resources.EnhanceAssertDetails(
+				map[string]interface{}{
+					"node":              node.Name,
+					"actual_block_time": actualBlockTime,
+					"expected":          expectedBlockTime,
+					"deviation":         math.Abs(actualBlockTime - expectedBlockTime),
+					"max_allowed_dev":   allowedDeviation,
+					"property":          "Block time consistency",
+					"impact":            "High - indicates network health",
+					"details":           fmt.Sprintf("Block time should be approximately %d seconds", buildconstants.BlockDelaySecs),
+					"recommendation":    "If failing, investigate network conditions and node performance",
+				},
+				node.Name,
+			))
 	}
 }

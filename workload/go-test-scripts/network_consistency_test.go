@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -33,18 +34,25 @@ func TestChainWeightIncreasing(t *testing.T) {
 	defer cancel()
 
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
 
 	nodesToCheck := getRandomNodes(config, 3)
 	var wg sync.WaitGroup
+	errChan := make(chan error, len(nodesToCheck))
 
 	nodeWeights := make(map[string]types.BigInt)
 	for _, nodeCfg := range nodesToCheck {
 		api, closer, err := resources.ConnectToNode(ctx, nodeCfg)
-		assert.Always(err == nil, "Initial connection to node", map[string]interface{}{"node": nodeCfg.Name, "error": err})
+		if err != nil {
+			t.Fatalf("Failed to connect to node: %v", err)
+		}
 
 		head, err := api.ChainHead(ctx)
-		assert.Always(err == nil, "Initial chain head fetch", map[string]interface{}{"node": nodeCfg.Name, "error": err})
+		if err != nil {
+			t.Fatalf("Failed to get chain head: %v", err)
+		}
 
 		nodeWeights[nodeCfg.Name] = head.ParentWeight()
 		closer()
@@ -60,11 +68,17 @@ func TestChainWeightIncreasing(t *testing.T) {
 			defer wg.Done()
 
 			api, closer, err := resources.ConnectToNode(ctx, nodeCfg)
-			assert.Always(err == nil, "Connecting to node for weight check", map[string]interface{}{"node": nodeCfg.Name, "error": err})
+			if err != nil {
+				errChan <- fmt.Errorf("failed to connect to node %s: %v", nodeCfg.Name, err)
+				return
+			}
 			defer closer()
 
 			head, err := api.ChainHead(ctx)
-			assert.Always(err == nil, "Fetching chain head for weight check", map[string]interface{}{"node": nodeCfg.Name, "error": err})
+			if err != nil {
+				errChan <- fmt.Errorf("failed to get chain head for node %s: %v", nodeCfg.Name, err)
+				return
+			}
 
 			currentWeight := head.ParentWeight()
 			initialWeight := nodeWeights[nodeCfg.Name]
@@ -82,6 +96,11 @@ func TestChainWeightIncreasing(t *testing.T) {
 		}(nodeCfg)
 	}
 	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		t.Error(err)
+	}
 }
 
 // --- Test: Parent-Child Relationships ---
@@ -90,7 +109,9 @@ func TestParentChildRelationships(t *testing.T) {
 	defer cancel()
 
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
 
 	nodesToCheck := getRandomNodes(config, 1)
 	if len(nodesToCheck) == 0 {
@@ -100,11 +121,15 @@ func TestParentChildRelationships(t *testing.T) {
 	nodeCfg := nodesToCheck[0]
 
 	api, closer, err := resources.ConnectToNode(ctx, nodeCfg)
-	assert.Always(err == nil, "Connecting to node for parent-child check", map[string]interface{}{"node": nodeCfg.Name, "error": err})
+	if err != nil {
+		t.Fatalf("Failed to connect to node: %v", err)
+	}
 	defer closer()
 
 	head, err := api.ChainHead(ctx)
-	assert.Always(err == nil, "Fetching chain head for parent-child check", map[string]interface{}{"node": nodeCfg.Name, "error": err})
+	if err != nil {
+		t.Fatalf("Failed to get chain head: %v", err)
+	}
 
 	currentTS := head
 	for i := 0; i < 5 && currentTS != nil && currentTS.Height() > 0; i++ {
@@ -152,8 +177,9 @@ func TestBlockProductionRate(t *testing.T) {
 	defer cancel()
 
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
-	assert.Always(err == nil, "Loading the resources config", map[string]interface{}{"error": err})
-
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
 	nodesToCheck := getRandomNodes(config, 1)
 	if len(nodesToCheck) == 0 {
 		t.Skip("No nodes to check for block production rate")
@@ -162,11 +188,15 @@ func TestBlockProductionRate(t *testing.T) {
 	nodeCfg := nodesToCheck[0]
 
 	api, closer, err := resources.ConnectToNode(ctx, nodeCfg)
-	assert.Always(err == nil, "Connecting to node for block rate", map[string]interface{}{"node": nodeCfg.Name, "error": err})
+	if err != nil {
+		t.Fatalf("Failed to connect to node: %v", err)
+	}
 	defer closer()
 
 	head, err := api.ChainHead(ctx)
-	assert.Always(err == nil, "Fetching chain head for block rate", map[string]interface{}{"node": nodeCfg.Name, "error": err})
+	if err != nil {
+		t.Fatalf("Failed to get chain head: %v", err)
+	}
 
 	blockRateMu.Lock()
 	defer blockRateMu.Unlock()

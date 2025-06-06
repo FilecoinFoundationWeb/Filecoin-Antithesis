@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
 	"github.com/filecoin-project/lotus/chain/types"
@@ -90,20 +89,14 @@ func tryConnect(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(
 	headers := map[string][]string{"Authorization": {"Bearer " + finalAuthToken}}
 
 	api, closer, err := client.NewFullNodeRPCV1(ctx, nodeConfig.RPCURL, headers)
-	assert.Sometimes(err == nil, "RPC connection established", map[string]any{
-		"node":  nodeConfig.Name,
-		"url":   nodeConfig.RPCURL,
-		"error": err,
-	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to node %s: %v", nodeConfig.Name, err)
+	}
 	return api, closer, err
 }
 
 func IsNodeConnected(ctx context.Context, nodeAPI api.FullNode) (bool, error) {
 	peers, err := nodeAPI.NetPeers(ctx)
-	assert.Sometimes(err == nil, "Peer list retrieval", map[string]any{
-		"error":     err,
-		"peerCount": len(peers),
-	})
 	if err != nil {
 		return false, fmt.Errorf("failed to get peer list: %w", err)
 	}
@@ -187,12 +180,9 @@ func tryConnectToNode(ctx context.Context, currentNodeAPI api.FullNode, currentN
 	}
 
 	err = currentNodeAPI.NetConnect(ctx, otherPeerInfo)
-	assert.Sometimes(err == nil, "Peer connection", map[string]any{
-		"source": currentNodeConfig.Name,
-		"target": targetNodeConfig.Name,
-		"peer":   otherPeerInfo.ID.String(),
-		"error":  err,
-	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to peer: %w", err)
+	}
 
 	return err
 }

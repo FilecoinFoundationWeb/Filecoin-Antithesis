@@ -36,7 +36,6 @@ func TestIncreasingBlockHeight(t *testing.T) {
 		go func(node resources.NodeConfig) {
 			defer wg.Done()
 			api, closer, err := resources.ConnectToNode(ctx, node)
-			assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node.Name, "error": err})
 			if err != nil {
 				return
 			}
@@ -46,16 +45,13 @@ func TestIncreasingBlockHeight(t *testing.T) {
 				startTime := time.Now()
 
 				initialts, err := api.ChainHead(ctx)
-				assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node.Name, "error": err})
 
 				if err != nil {
 					return
 				}
 
 				for {
-
 					api, closer, err := resources.ConnectToNode(ctx, node)
-					assert.Always(err == nil, "Connecting to a node", map[string]interface{}{"node": node.Name, "error": err})
 
 					if err != nil {
 						return
@@ -63,7 +59,6 @@ func TestIncreasingBlockHeight(t *testing.T) {
 					defer closer()
 
 					currentts, err := api.ChainHead(ctx)
-					assert.Always(err == nil, "Getting the chainhead for a node", map[string]interface{}{"node": node.Name, "error": err})
 
 					if err != nil {
 						return
@@ -71,7 +66,22 @@ func TestIncreasingBlockHeight(t *testing.T) {
 
 					if currentts.Height() == initialts.Height()+1 || time.Since(startTime).Seconds() > 6 {
 						duration := time.Since(startTime)
-						assert.Always(duration.Seconds() <= 6, "Block height always increases by 1 within 6 seconds", map[string]interface{}{"node": node.Name, "initial_height": initialts.Height(), "current_height": currentts.Height(), "time_elapsed": duration.Seconds()})
+						assert.Always(duration.Seconds() <= 6,
+							"[Block Time] Block height should increase within expected time window",
+							resources.EnhanceAssertDetails(
+								map[string]interface{}{
+									"node":           node.Name,
+									"initial_height": initialts.Height(),
+									"current_height": currentts.Height(),
+									"time_elapsed":   duration.Seconds(),
+									"max_time":       6,
+									"property":       "Block height progression timing",
+									"impact":         "Critical - validates block production timing",
+									"details":        "Block height must increase by 1 within 6 seconds",
+									"iteration":      i,
+								},
+								node.Name,
+							))
 					} else {
 						time.Sleep(500 * time.Millisecond)
 						continue

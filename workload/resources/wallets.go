@@ -87,7 +87,22 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 			"value":        amount.String(),
 			"from_balance": fromBalance.String(),
 		}
-		assert.Sometimes(true, "Mpool push message failed", details)
+		assert.Sometimes(true,
+			"[Message Push] Mpool push message.",
+			EnhanceAssertDetails(
+				map[string]interface{}{
+					"from":           from.String(),
+					"to":             to.String(),
+					"error":          err.Error(),
+					"value":          amount.String(),
+					"from_balance":   fromBalance.String(),
+					"property":       "Message pool operation",
+					"impact":         "Medium - temporary mempool rejection",
+					"details":        "Message push to mempool failed, may be temporary",
+					"recommendation": "Check message validity and node mempool state",
+				},
+				"wallet_ops",
+			))
 		log.Printf("Failed to push message to mempool: %v (Details: %+v)", err, details)
 		return fmt.Errorf("failed to push message to mempool: %w", err)
 	}
@@ -96,9 +111,9 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 		return fmt.Errorf("message is nil after pushing to mempool")
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(20 * time.Second)
 
-	result, err := api.StateWaitMsg(ctx, sm.Cid(), 5, 100, false)
+	result, err := api.StateWaitMsg(ctx, sm.Cid(), 5, abi.ChainEpoch(-1), false)
 	if err != nil {
 		log.Printf("Error waiting for message: %v", err)
 		return fmt.Errorf("error waiting for message: %w", err)

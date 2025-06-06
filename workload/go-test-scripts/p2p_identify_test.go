@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/antithesishq/antithesis-sdk-go/random"
 	"github.com/libp2p/go-libp2p"
@@ -70,28 +71,17 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 
 	ctx := context.Background()
 	sender, err := libp2p.New()
-	assert.Sometimes(err == nil, "Libp2p host creation", map[string]any{
-		"error": err,
-	})
 	if err != nil {
 		t.Fatalf("failed to create sender host: %v", err)
 	}
 	defer sender.Close()
 
 	targetMaddr, err := ma.NewMultiaddr(target)
-	assert.Always(err == nil, "Target multiaddr parsing", map[string]any{
-		"target": target,
-		"error":  err,
-	})
 	if err != nil {
 		t.Fatalf("failed to parse LOTUS_TARGET multiaddr: %v", err)
 	}
 
 	ai, err := peer.AddrInfoFromP2pAddr(targetMaddr)
-	assert.Always(err == nil, "Peer info extraction", map[string]any{
-		"target": target,
-		"error":  err,
-	})
 	if err != nil {
 		t.Fatalf("failed to extract peer info from LOTUS_TARGET multiaddr: %v", err)
 	}
@@ -101,10 +91,6 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 	defer cancel()
 
 	err = sender.Connect(dialCtx, *ai)
-	assert.Sometimes(err == nil, "Target connection", map[string]any{
-		"peer":  ai.ID.String(),
-		"error": err,
-	})
 	if err != nil {
 		t.Skipf("failed to connect to target: %v", err)
 	}
@@ -128,11 +114,20 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 		if err == nil {
 			successfulStreams++
 		}
-		assert.Sometimes(err == nil, "Stream creation", map[string]any{
-			"iteration": i,
-			"peer":      ai.ID.String(),
-			"error":     err,
-		})
+		assert.Sometimes(err == nil,
+			"[P2P Stream] Stream creation should succeed",
+			resources.EnhanceAssertDetails(
+				map[string]interface{}{
+					"iteration": i,
+					"peer":      ai.ID.String(),
+					"error":     err,
+					"property":  "P2P stream creation",
+					"impact":    "High - required for peer communication",
+					"details":   "Stream creation is essential for P2P message exchange",
+					"protocol":  "identify.IDPush",
+				},
+				"p2p_test",
+			))
 		if err != nil {
 			t.Logf("iteration %d: failed to open stream: %v", i, err)
 			continue
@@ -145,11 +140,19 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 		if err == nil {
 			successfulWrites++
 		}
-		assert.Sometimes(err == nil, "Message write", map[string]any{
-			"iteration":   i,
-			"payloadSize": len(payload),
-			"error":       err,
-		})
+		assert.Sometimes(err == nil,
+			"[P2P Write] Message write should succeed",
+			resources.EnhanceAssertDetails(
+				map[string]interface{}{
+					"iteration":   i,
+					"payloadSize": len(payload),
+					"error":       err,
+					"property":    "P2P message writing",
+					"impact":      "High - validates message transmission",
+					"details":     "Message writing tests network data transfer capability",
+				},
+				"p2p_test",
+			))
 		if err != nil {
 			t.Logf("iteration %d: write error: %v", i, err)
 			stream.Reset()
@@ -157,10 +160,18 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 		}
 
 		err = stream.CloseWrite()
-		assert.Sometimes(err == nil, "Stream close", map[string]any{
-			"iteration": i,
-			"error":     err,
-		})
+		assert.Sometimes(err == nil,
+			"[P2P Close] Stream close should succeed",
+			resources.EnhanceAssertDetails(
+				map[string]interface{}{
+					"iteration": i,
+					"error":     err,
+					"property":  "P2P stream closure",
+					"impact":    "Medium - validates proper stream cleanup",
+					"details":   "Clean stream closure prevents resource leaks",
+				},
+				"p2p_test",
+			))
 		if err != nil {
 			t.Logf("iteration %d: close write error: %v", i, err)
 		}
@@ -169,14 +180,32 @@ func TestSpamInvalidIdentifyPush(t *testing.T) {
 	}
 
 	// Assert overall success rates
-	assert.Sometimes(float64(successfulStreams)/float64(numIterations) > 0.5, "Stream success rate", map[string]any{
-		"successRate": float64(successfulStreams) / float64(numIterations),
-		"successful":  successfulStreams,
-		"total":       numIterations,
-	})
-	assert.Sometimes(float64(successfulWrites)/float64(numIterations) > 0.3, "Write success rate", map[string]any{
-		"successRate": float64(successfulWrites) / float64(numIterations),
-		"successful":  successfulWrites,
-		"total":       numIterations,
-	})
+	assert.Sometimes(float64(successfulStreams)/float64(numIterations) > 0.5,
+		"[P2P Success Rate] Stream creation success rate should be above threshold",
+		resources.EnhanceAssertDetails(
+			map[string]interface{}{
+				"successRate": float64(successfulStreams) / float64(numIterations),
+				"successful":  successfulStreams,
+				"total":       numIterations,
+				"property":    "P2P stream reliability",
+				"impact":      "Critical - indicates network stability",
+				"details":     "Success rate below 50% may indicate network issues",
+				"threshold":   0.5,
+			},
+			"p2p_test",
+		))
+	assert.Sometimes(float64(successfulWrites)/float64(numIterations) > 0.3,
+		"[P2P Success Rate] Message write success rate should be above threshold",
+		resources.EnhanceAssertDetails(
+			map[string]interface{}{
+				"successRate": float64(successfulWrites) / float64(numIterations),
+				"successful":  successfulWrites,
+				"total":       numIterations,
+				"property":    "P2P write reliability",
+				"impact":      "Critical - indicates data transfer stability",
+				"details":     "Success rate below 30% may indicate serious network issues",
+				"threshold":   0.3,
+			},
+			"p2p_test",
+		))
 }

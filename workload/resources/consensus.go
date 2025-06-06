@@ -227,11 +227,21 @@ func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.Chain
 		}
 
 		// Assert tipset consensus
-		assert.Always(len(tipsetKeys) == 1, "All nodes must have the same tipset", map[string]interface{}{
-			"height":      currentHeight,
-			"tipset_keys": tipsetKeys,
-			"requirement": "All nodes must agree on the same tipset at a given height",
-		})
+		assert.Always(len(tipsetKeys) == 1,
+			"[Consensus Check] All nodes must agree on the same tipset",
+			EnhanceAssertDetails(
+				map[string]interface{}{
+					"height":         currentHeight,
+					"tipset_keys":    tipsetKeys,
+					"property":       "Chain consensus",
+					"impact":         "Critical - indicates chain fork or consensus failure",
+					"details":        "All nodes must have identical tipsets at each height",
+					"recommendation": "Check network connectivity and sync status",
+					"nodes_checked":  len(cc.nodes),
+					"unique_tipsets": len(tipsetKeys),
+				},
+				"consensus_check",
+			))
 
 		log.Printf("Consensus verified at height %d", currentHeight)
 	}
