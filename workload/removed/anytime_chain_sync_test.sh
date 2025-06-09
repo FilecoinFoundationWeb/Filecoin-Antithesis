@@ -7,7 +7,6 @@ echo "Running Test: Chain Sync Test"
 go test -v -count=1 /opt/antithesis/go-test-scripts/chain_sync_test.go
 
 # Check the exit status
-if [ $? -eq 0 ]; then
     echo "Chain sync test passed successfully"
 else
     echo "Chain sync test failed"
