@@ -35,6 +35,15 @@ type RPCResponse struct {
 	} `json:"error,omitempty"`
 }
 
+const (
+	// Maximum number of retries for consensus checks
+	maxConsensusRetries = 3
+	// Time to wait between retries
+	retryDelay = 5 * time.Second
+	// Time to wait for tipsets to settle after getting chain head
+	settlingPeriod = 10 * time.Second
+)
+
 func NewConsensusChecker(ctx context.Context, nodes []NodeConfig) (*ConsensusChecker, error) {
 	checker := &ConsensusChecker{
 		nodes: make(map[string]NodeInfo),
@@ -128,6 +137,57 @@ func (cc *ConsensusChecker) getTipsetAtHeight(ctx context.Context, nodeInfo Node
 	return tipset.Key().String(), nil
 }
 
+// checkTipsetConsensus checks if all nodes agree on the tipset at a given height
+// Returns true if consensus is reached, false otherwise
+func (cc *ConsensusChecker) checkTipsetConsensus(ctx context.Context, height abi.ChainEpoch) (bool, map[string][]string, error) {
+	var wg sync.WaitGroup
+	type nodeResult struct {
+		name      string
+		tipsetKey string
+		err       error
+	}
+
+	results := make(chan nodeResult, len(cc.nodes))
+
+	for nodeName, nodeInfo := range cc.nodes {
+		wg.Add(1)
+		go func(name string, info NodeInfo) {
+			defer wg.Done()
+			result := nodeResult{name: name}
+
+			tipsetKey, err := cc.getTipsetAtHeight(ctx, info, height)
+			if err != nil {
+				result.err = fmt.Errorf("failed to get tipset at height %d from %s: %w", height, name, err)
+			} else {
+				result.tipsetKey = tipsetKey
+			}
+			results <- result
+		}(nodeName, nodeInfo)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	tipsetKeys := make(map[string][]string)
+	var errors []error
+
+	for result := range results {
+		if result.err != nil {
+			errors = append(errors, result.err)
+			continue
+		}
+		tipsetKeys[result.tipsetKey] = append(tipsetKeys[result.tipsetKey], result.name)
+	}
+
+	if len(errors) > 0 {
+		return false, tipsetKeys, fmt.Errorf("errors during consensus check at height %d: %v", height, errors)
+	}
+
+	return len(tipsetKeys) == 1, tipsetKeys, nil
+}
+
 func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.ChainEpoch) error {
 	log.Printf("Starting consensus check between nodes")
 
@@ -176,58 +236,43 @@ func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.Chain
 
 	log.Printf("Starting consensus walk from height %d", height)
 
+	// Wait for settling period after getting chain head
+	log.Printf("Waiting %s for tipsets to settle...", settlingPeriod)
+	time.Sleep(settlingPeriod)
+
 	// Check consensus for 10 consecutive tipsets
 	for i := 0; i < 10; i++ {
 		currentHeight := height - abi.ChainEpoch(i)
 		log.Printf("Checking consensus at height %d", currentHeight)
 
-		var wg sync.WaitGroup
-		type nodeResult struct {
-			name      string
-			tipsetKey string
-			err       error
-		}
+		// Try multiple times with delay between attempts
+		var consensusReached bool
+		var tipsetKeys map[string][]string
+		var lastErr error
 
-		results := make(chan nodeResult, len(cc.nodes))
+		for retry := 0; retry < maxConsensusRetries; retry++ {
+			if retry > 0 {
+				log.Printf("Retry %d/%d for height %d after %s delay", retry+1, maxConsensusRetries, currentHeight, retryDelay)
+				time.Sleep(retryDelay)
+			}
 
-		for nodeName, nodeInfo := range cc.nodes {
-			wg.Add(1)
-			go func(name string, info NodeInfo) {
-				defer wg.Done()
-				result := nodeResult{name: name}
-
-				tipsetKey, err := cc.getTipsetAtHeight(ctx, info, currentHeight)
-				if err != nil {
-					result.err = fmt.Errorf("failed to get tipset at height %d from %s: %w", currentHeight, name, err)
-				} else {
-					result.tipsetKey = tipsetKey
-				}
-				results <- result
-			}(nodeName, nodeInfo)
-		}
-
-		go func() {
-			wg.Wait()
-			close(results)
-		}()
-
-		tipsetKeys := make(map[string][]string)
-		var errors []error
-
-		for result := range results {
-			if result.err != nil {
-				errors = append(errors, result.err)
+			consensusReached, tipsetKeys, lastErr = cc.checkTipsetConsensus(ctx, currentHeight)
+			if lastErr != nil {
+				log.Printf("Error checking consensus (attempt %d/%d): %v", retry+1, maxConsensusRetries, lastErr)
 				continue
 			}
-			tipsetKeys[result.tipsetKey] = append(tipsetKeys[result.tipsetKey], result.name)
+
+			if consensusReached {
+				log.Printf("Consensus reached at height %d on attempt %d", currentHeight, retry+1)
+				break
+			}
+
+			log.Printf("Consensus not reached at height %d on attempt %d, tipset distribution: %v",
+				currentHeight, retry+1, tipsetKeys)
 		}
 
-		if len(errors) > 0 {
-			return fmt.Errorf("errors during consensus check at height %d: %v", currentHeight, errors)
-		}
-
-		// Assert tipset consensus
-		assert.Always(len(tipsetKeys) == 1,
+		// After all retries, make the final assertion
+		assert.Always(consensusReached,
 			"[Consensus Check] All nodes must agree on the same tipset",
 			EnhanceAssertDetails(
 				map[string]interface{}{
@@ -239,6 +284,7 @@ func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.Chain
 					"recommendation": "Check network connectivity and sync status",
 					"nodes_checked":  len(cc.nodes),
 					"unique_tipsets": len(tipsetKeys),
+					"retries":        maxConsensusRetries,
 				},
 				"consensus_check",
 			))

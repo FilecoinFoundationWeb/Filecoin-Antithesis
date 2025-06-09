@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"time"
 
+	"encoding/hex"
+
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -233,5 +235,108 @@ func DeleteWallets(ctx context.Context, api api.FullNode, walletsToDelete []addr
 		}
 		log.Printf("Successfully deleted wallet: %s", wallet.String())
 	}
+	return nil
+}
+
+// SendFundsToEthAddress sends funds from a Filecoin address to an ETH address
+func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.Address, ethAddr string, amount abi.TokenAmount) error {
+	// Remove 0x prefix if present
+	if len(ethAddr) > 2 && ethAddr[:2] == "0x" {
+		ethAddr = ethAddr[2:]
+	}
+
+	// Convert hex string to bytes
+	ethBytes, err := hex.DecodeString(ethAddr)
+	if err != nil {
+		return fmt.Errorf("failed to decode eth address hex string: %w", err)
+	}
+
+	// Convert ETH address to f4 address
+	f4addr, err := address.NewDelegatedAddress(1, ethBytes)
+	if err != nil {
+		return fmt.Errorf("failed to create f4 address from eth address: %w", err)
+	}
+
+	// Create message
+	msg := &types.Message{
+		From:  from,
+		To:    f4addr,
+		Value: amount,
+	}
+
+	// Get balance before sending
+	fromBalance, err := api.WalletBalance(ctx, from)
+	if err != nil {
+		log.Printf("Failed to get balance for sender %s: %v", from, err)
+	} else {
+		log.Printf("Sender %s balance before transfer: %s", from, fromBalance)
+	}
+
+	// Push message to mempool
+	sm, err := api.MpoolPushMessage(ctx, msg, nil)
+	if err != nil {
+		details := map[string]any{
+			"from":         from.String(),
+			"to":           f4addr.String(),
+			"eth_address":  ethAddr,
+			"error":        err.Error(),
+			"value":        amount.String(),
+			"from_balance": fromBalance.String(),
+		}
+		assert.Sometimes(true,
+			"[Message Push] Mpool push message to ETH address.",
+			EnhanceAssertDetails(
+				map[string]interface{}{
+					"from":           from.String(),
+					"to":             f4addr.String(),
+					"eth_address":    ethAddr,
+					"error":          err.Error(),
+					"value":          amount.String(),
+					"from_balance":   fromBalance.String(),
+					"property":       "Message pool operation",
+					"impact":         "Medium - temporary mempool rejection",
+					"details":        "Message push to mempool failed, may be temporary",
+					"recommendation": "Check message validity and node mempool state",
+				},
+				"wallet_ops",
+			))
+		log.Printf("Failed to push message to mempool: %v (Details: %+v)", err, details)
+		return fmt.Errorf("failed to push message to mempool: %w", err)
+	}
+
+	if sm == nil {
+		log.Printf("Message is nil after pushing to mempool")
+		return fmt.Errorf("message is nil after pushing to mempool")
+	}
+
+	// Wait for message execution
+	time.Sleep(20 * time.Second)
+
+	result, err := api.StateWaitMsg(ctx, sm.Cid(), 5, abi.ChainEpoch(-1), false)
+	if err != nil {
+		log.Printf("Error waiting for message: %v", err)
+		return fmt.Errorf("error waiting for message: %w", err)
+	}
+
+	// Check if result is nil
+	if result == nil {
+		log.Printf("Message result is nil")
+		return fmt.Errorf("message result is nil")
+	}
+
+	// Check if the message execution was successful
+	if !result.Receipt.ExitCode.IsSuccess() {
+		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, result.Message)
+		if replayErr != nil {
+			log.Printf("StateReplay failed: %v", replayErr)
+			return fmt.Errorf("state replay error: %w", replayErr)
+		}
+		if replayResult == nil {
+			log.Printf("StateReplay returned nil result")
+			return fmt.Errorf("state replay returned nil result")
+		}
+		return fmt.Errorf("message execution failed with exit code: %d", result.Receipt.ExitCode)
+	}
+
 	return nil
 }
