@@ -23,10 +23,29 @@ echo '{"antithesis_assert": {
 
 RESPONSE=$(curl --silent "$URL")
 
-echo "Response: $RESPONSE"
+#echo "Response: $RESPONSE"
 
 # Check for unhealthy markers
-if echo "$RESPONSE" | grep -q '\[!\]'; then
+
+# empty response then unreachable
+if [[ -z "$RESPONSE" ]]; then
+  echo "Forest node is unreachable: $RESPONSE"
+
+  # Log assertion failure with details
+  echo '{"antithesis_assert": {
+    "hit": true,
+    "must_hit": true,
+    "assert_type": "always",
+    "display_type": "always",
+    "message": "Forest node is unreachable",
+    "condition": false,
+    "id": "Forest node stays healthy",
+    "location": {},
+    "details": {}
+  }}' >> "$output_path"
+
+  exit 1
+elif echo "$RESPONSE" | grep -q '\[!\]'; then
   echo "Forest node is unhealthy: $RESPONSE"
 
   # Log assertion failure with details
