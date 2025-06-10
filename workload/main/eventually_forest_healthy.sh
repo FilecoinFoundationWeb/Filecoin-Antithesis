@@ -26,11 +26,8 @@ RESPONSE=$(curl --silent "$URL")
 echo "Response: $RESPONSE"
 
 # Check for unhealthy markers
-if echo "$RESPONSE" | grep -q '^\[!\]'; then
-  echo "Forest node is unhealthy"
-
-  # Extract all [!] lines
-  UNHEALTHY_LINES=$(echo "$RESPONSE" | grep '^\[!\]')
+if echo "$RESPONSE" | grep -q '\[!\]'; then
+  echo "Forest node is unhealthy: $RESPONSE"
 
   # Log assertion failure with details
   echo '{"antithesis_assert": {
@@ -42,9 +39,7 @@ if echo "$RESPONSE" | grep -q '^\[!\]'; then
     "condition": false,
     "id": "Forest node stays healthy",
     "location": {},
-    "details": {
-      "unhealthy_components": '$(jq -Rs . <<< "$UNHEALTHY_LINES")'
-    }
+    "details": {}
   }}' >> "$output_path"
 
   exit 1
