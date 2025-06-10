@@ -46,25 +46,6 @@
  	},
  	DrandTestnet: {
  		Servers: []string{
---- a/chain/lf3/config.go	2025-02-24 18:13:08
-+++ b/chain/lf3/config.go	2025-02-24 18:13:27
-@@ -12,7 +12,6 @@
- 	"github.com/filecoin-project/go-state-types/abi"
- 
- 	"github.com/filecoin-project/lotus/build/buildconstants"
--	"github.com/filecoin-project/lotus/chain/actors/policy"
- 	"github.com/filecoin-project/lotus/node/modules/dtypes"
- )
- 
-@@ -104,7 +103,7 @@
- 	if buildconstants.F3BootstrapEpoch >= 0 {
- 		c.StaticManifest = NewManifest(
- 			c.BaseNetworkName,
--			policy.ChainFinality,
-+			20,
- 			buildconstants.F3BootstrapEpoch,
- 			time.Duration(buildconstants.BlockDelaySecs)*time.Second,
- 			buildconstants.F3InitialPowerTableCID,
 --- a/node/hello/hello.go	2025-03-19 13:54:54
 +++ b/node/hello/hello.go	2025-03-27 16:59:55
 @@ -77,7 +77,7 @@
@@ -85,4 +66,24 @@
  		return
  	}
  	go func() {
-		
+--- a/build/buildconstants/f3manifest_2k.json
++++ b/build/buildconstants/f3manifest_2k.json
+@@ -2,7 +2,7 @@
+   "Pause": false,
+   "ProtocolVersion": 7,
+   "InitialInstance": 0,
+-  "BootstrapEpoch": 1000,
++  "BootstrapEpoch": 20,
+   "NetworkName": "2k",
+   "ExplicitPower": null,
+   "IgnoreECPower": false,
+@@ -22,7 +22,7 @@
+   },
+   "EC": {
+     "Period": 4000000000,
+-    "Finality": 900,
++    "Finality": 10,
+     "DelayMultiplier": 2,
+     "BaseDecisionBackoffTable": [1.3, 1.69, 2.2, 2.86, 3.71, 4.83, 6.27, 7.5],
+     "HeadLookback": 4,
+	 

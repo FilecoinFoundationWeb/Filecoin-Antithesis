@@ -7,13 +7,13 @@ import (
 	"math/rand"
 	"time"
 
-	"encoding/hex"
-
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
+	"github.com/filecoin-project/go-state-types/builtin"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
+	"github.com/filecoin-project/lotus/chain/types/ethtypes"
 )
 
 // InitializeWallets creates wallets and funds them with a specified amount from the genesis wallet.
@@ -241,58 +241,49 @@ func DeleteWallets(ctx context.Context, api api.FullNode, walletsToDelete []addr
 // SendFundsToEthAddress sends funds from a Filecoin address to an ETH address
 func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.Address, ethAddr string, amount abi.TokenAmount) error {
 	// Remove 0x prefix if present
-	if len(ethAddr) > 2 && ethAddr[:2] == "0x" {
-		ethAddr = ethAddr[2:]
-	}
-
-	// Convert hex string to bytes
-	ethBytes, err := hex.DecodeString(ethAddr)
+	ea, err := ethtypes.ParseEthAddress(ethAddr)
 	if err != nil {
-		return fmt.Errorf("failed to decode eth address hex string: %w", err)
+		return fmt.Errorf("failed to parse target address; address must be a valid FIL address or an ETH address: %w", err)
 	}
-
-	// Convert ETH address to f4 address
-	f4addr, err := address.NewDelegatedAddress(1, ethBytes)
+	fmt.Printf("ea: %s\n", ea)
+	// Convert to f4 address
+	to, err := ea.ToFilecoinAddress()
 	if err != nil {
-		return fmt.Errorf("failed to create f4 address from eth address: %w", err)
+		return fmt.Errorf("failed to convert eth address to filecoin address: %w", err)
 	}
-
+	fmt.Printf("to: %s\n", to)
 	// Create message
+
 	msg := &types.Message{
-		From:  from,
-		To:    f4addr,
-		Value: amount,
+		From:       from,
+		To:         to,
+		Value:      amount,
+		Method:     builtin.MethodsEAM.CreateExternal,
+		Params:     nil,
+		GasLimit:   0,
+		GasFeeCap:  abi.NewTokenAmount(0),
+		GasPremium: abi.NewTokenAmount(0),
 	}
 
-	// Get balance before sending
-	fromBalance, err := api.WalletBalance(ctx, from)
-	if err != nil {
-		log.Printf("Failed to get balance for sender %s: %v", from, err)
-	} else {
-		log.Printf("Sender %s balance before transfer: %s", from, fromBalance)
-	}
-
-	// Push message to mempool
+	// Push message to mempool with automatic gas estimation
 	sm, err := api.MpoolPushMessage(ctx, msg, nil)
 	if err != nil {
 		details := map[string]any{
-			"from":         from.String(),
-			"to":           f4addr.String(),
-			"eth_address":  ethAddr,
-			"error":        err.Error(),
-			"value":        amount.String(),
-			"from_balance": fromBalance.String(),
+			"from":        from.String(),
+			"to":          to.String(),
+			"eth_address": ethAddr,
+			"error":       err.Error(),
+			"value":       amount.String(),
 		}
 		assert.Sometimes(true,
 			"[Message Push] Mpool push message to ETH address.",
 			EnhanceAssertDetails(
 				map[string]interface{}{
 					"from":           from.String(),
-					"to":             f4addr.String(),
+					"to":             to.String(),
 					"eth_address":    ethAddr,
 					"error":          err.Error(),
 					"value":          amount.String(),
-					"from_balance":   fromBalance.String(),
 					"property":       "Message pool operation",
 					"impact":         "Medium - temporary mempool rejection",
 					"details":        "Message push to mempool failed, may be temporary",

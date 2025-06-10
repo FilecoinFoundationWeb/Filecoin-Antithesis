@@ -7,10 +7,26 @@ FROM ubuntu:latest
 # Install necessary packages including Python and Go
 RUN apt-get update -y && \
     apt-get install -y python3 python3-pip python3-requests python3-filelock curl jq \
-    ntpdate && \
+    ntpdate git build-essential pkg-config mesa-opencl-icd ocl-icd-opencl-dev \
+    hwloc libhwloc-dev && \
     curl -OL https://golang.org/dl/go1.23.2.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
     rm go1.23.2.linux-amd64.tar.gz
+
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g npm@latest
+
+# Install Rust and Foundry
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    . $HOME/.cargo/env && \
+    curl -L https://foundry.paradigm.xyz | bash && \
+    . ~/.bashrc && \
+    foundryup
+
+# Add Foundry to PATH
+ENV PATH="/root/.foundry/bin:${PATH}"
 
 # Install Antithesis Python SDK
 RUN pip install antithesis cffi --break-system-packages
@@ -19,9 +35,10 @@ RUN pip install antithesis cffi --break-system-packages
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/go"
 
-# Create directories for Go code
+# Create directories for Go code and smart contracts
 WORKDIR /opt/antithesis
-
+RUN git clone https://github.com/FilOzone/pdp.git pdp 
+RUN cd pdp && npm install && make build
 # Copy the necessary Go files and resources
 COPY ./entrypoint ./entrypoint
 COPY ./resources ./resources
@@ -42,6 +59,11 @@ RUN go mod download
 RUN go build -o ./app ./main.go
 
 RUN rm ./main.go
+
+# Verify Foundry installation
+RUN forge --version && \
+    cast --version && \
+    anvil --version
 
 # Set the entrypoint to an idle state
 ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]
