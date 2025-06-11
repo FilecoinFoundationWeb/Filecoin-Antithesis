@@ -1,4 +1,3 @@
-import os
 import time
 import requests
 from antithesis.assertions import always
@@ -12,6 +11,7 @@ URL = f"http://{FOREST_IP}:{PORT}{ENDPOINT}"
 # Sleep to ensure the service is ready
 time.sleep(20)
 
+# curl healthcheck
 try:
     response = requests.get(URL, timeout=5)
     response_text = response.text
@@ -19,7 +19,7 @@ except requests.RequestException:
     response_text = ""
     always(False, "Forest node stays reachable")
     exit(1)
-
+# if we have [!] it means something is unhealthy
 if "[!]" in response_text:
     always(False, "Forest node stays healthy")
     exit(1)
