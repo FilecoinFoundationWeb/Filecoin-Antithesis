@@ -8,15 +8,28 @@ URL="http://${FOREST_IP}:${PORT}${ENDPOINT}"
 # Antithesis SDK output path
 output_path="${ANTITHESIS_OUTPUT_DIR}/sdk.jsonl"
 
-# Write initial SDK assertion (assume healthy)
+# initial SDK assertion (assume healthy)
 echo '{"antithesis_assert": {
     "hit": false, 
     "must_hit": true, 
     "assert_type": "always", 
-    "display_type": "always", 
+    "display_type": "Always", 
     "message": "Forest node stays healthy", 
-    "condition": true, 
+    "condition": false, 
     "id": "Forest node stays healthy", 
+    "location": {}, 
+    "details": null
+    }}' >> "$output_path"
+
+# initial SDK assertion (assume reachable)
+echo '{"antithesis_assert": {
+    "hit": false, 
+    "must_hit": true, 
+    "assert_type": "always", 
+    "display_type": "Always", 
+    "message": "Forest node stays reachable", 
+    "condition": false, 
+    "id": "Forest node stays reachable", 
     "location": {}, 
     "details": null
     }}' >> "$output_path"
@@ -36,12 +49,12 @@ if [[ -z "$RESPONSE" ]]; then
     "hit": true,
     "must_hit": true,
     "assert_type": "always",
-    "display_type": "always",
-    "message": "Forest node is unreachable",
+    "display_type": "Always",
+    "message": "Forest node stays reachable",
     "condition": false,
-    "id": "Forest node stays healthy",
+    "id": "Forest node stays reachable",
     "location": {},
-    "details": {}
+    "details": null
   }}' >> "$output_path"
 
   exit 1
@@ -53,12 +66,12 @@ elif echo "$RESPONSE" | grep -q '\[!\]'; then
     "hit": true,
     "must_hit": true,
     "assert_type": "always",
-    "display_type": "always",
+    "display_type": "Always",
     "message": "Forest node stays healthy",
     "condition": false,
     "id": "Forest node stays healthy",
     "location": {},
-    "details": {}
+    "details": null
   }}' >> "$output_path"
 
   exit 1
