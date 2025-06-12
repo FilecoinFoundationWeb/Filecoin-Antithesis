@@ -3,10 +3,21 @@
 # Set RPC URL
 export RPC_URL="http://lotus-1:1234/rpc/v1"
 
+# Print environment setup
+echo "Environment Variables:"
+echo "--------------------"
+echo "RPC_URL: $RPC_URL"
+echo "KEYSTORE: $KEYSTORE"
+echo "PASSWORD: $PASSWORD"
+
 pwd
-# Set keystore path and password as used in geth_keystore.go
 export KEYSTORE="/opt/antithesis/resources/smart-contracts/keystore"
 export PASSWORD="testpassword123"
+
+# Print updated environment variables
+echo "Updated Environment Variables:"
+echo "--------------------------"
+echo "PASSWORD: $PASSWORD"
 
 # Find the keystore file (it starts with "UTC--")
 KEYSTORE_FILE=$(find $KEYSTORE -type f -name "UTC--*" | head -n 1)
@@ -14,6 +25,7 @@ if [ -z "$KEYSTORE_FILE" ]; then
     echo "Error: No keystore file found in $KEYSTORE"
     exit 1
 fi
+echo "KEYSTORE_FILE: $KEYSTORE_FILE"
 
 # Get the address from the keystore file
 clientAddr=$(cat $KEYSTORE_FILE | jq -r '.address')
@@ -22,13 +34,16 @@ if [ -z "$clientAddr" ]; then
     exit 1
 fi
 
-# Add 0x prefix if not present
-if [[ ! "$clientAddr" =~ ^0x ]]; then
-    clientAddr="0x$clientAddr"
-fi
+# # Add 0x prefix if not present
+# if [[ ! "$clientAddr" =~ ^0x ]]; then
+#     clientAddr="0x$clientAddr"
+# fi
 
 NONCE="$(cast nonce --rpc-url "$RPC_URL" "$clientAddr")"
 
+echo "Runtime Variables:"
+echo "----------------"
+echo "KEYSTORE_FILE: $KEYSTORE_FILE"
 echo "clientAddr: $clientAddr"
 echo "NONCE: $NONCE"
 
@@ -37,7 +52,6 @@ echo "Checking balance..."
 BALANCE=$(cast balance --rpc-url "$RPC_URL" "$clientAddr")
 echo "ETH Balance: $BALANCE"
 
-# Change to the pdp directory where node_modules and dependencies are installed
 cd /opt/antithesis/pdp
 
 echo "Deploying PDP verifier"
