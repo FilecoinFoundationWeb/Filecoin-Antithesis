@@ -54,12 +54,21 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 			return err
 		}
 		if st.Root != checkTs.ParentState() {
-			assert.Always(st.Root == checkTs.ParentState(), "State mismatch at height %d", map[string]any{
-				"exec_ts_height":  execTs.Height(),
-				"check_ts_height": checkTs.Height(),
-				"exec_ts_root":    st.Root,
-				"check_ts_root":   checkTs.ParentState(),
-			})
+			assert.Always(st.Root == checkTs.ParentState(),
+				"[State Consistency] Computed state must match parent state",
+				EnhanceAssertDetails(
+					map[string]interface{}{
+						"exec_ts_height":  execTs.Height(),
+						"check_ts_height": checkTs.Height(),
+						"exec_ts_root":    st.Root.String(),
+						"check_ts_root":   checkTs.ParentState().String(),
+						"property":        "State computation consistency",
+						"impact":          "Critical - indicates state computation error",
+						"details":         "Computed state root must match parent state root",
+						"recommendation":  "Check state computation logic and tipset traversal",
+					},
+					"state_compute",
+				))
 			return err
 		}
 		checkTs = execTs

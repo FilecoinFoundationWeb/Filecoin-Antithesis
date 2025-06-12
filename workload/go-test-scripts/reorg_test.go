@@ -92,10 +92,21 @@ func TestReorgAfterDisconnectReconnect(t *testing.T) {
 	}
 	t.Logf("Final heads: Lotus1=%d, Lotus2=%d", final1.Height(), final2.Height())
 
-	assert.Always(final1.Key() == final2.Key(), "Chains must match after reconnect", map[string]interface{}{
-		"lotus1": final1.Key().String(),
-		"lotus2": final2.Key().String(),
-	})
+	assert.Always(final1.Key() == final2.Key(),
+		"[Chain Consistency] Chain tips must match after network reconnection",
+		resources.EnhanceAssertDetails(
+			map[string]interface{}{
+				"lotus1_key":     final1.Key().String(),
+				"lotus2_key":     final2.Key().String(),
+				"lotus1_height":  final1.Height(),
+				"lotus2_height":  final2.Height(),
+				"property":       "Chain tip consistency",
+				"impact":         "Critical - validates chain convergence after network partition",
+				"details":        "After network reconnection, nodes must converge to the same chain tip",
+				"recommendation": "If failing, check network connectivity and node sync status",
+			},
+			"multiple_nodes",
+		))
 }
 
 func readFile(t *testing.T, path string) string {

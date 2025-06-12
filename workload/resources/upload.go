@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
@@ -25,7 +24,6 @@ import (
 	"github.com/filecoin-project/lotus/lib/sigs"
 	_ "github.com/filecoin-project/lotus/lib/sigs/delegated"
 	_ "github.com/filecoin-project/lotus/lib/sigs/secp"
-	"github.com/multiformats/go-varint"
 	cbg "github.com/whyrusleeping/cbor-gen"
 	"golang.org/x/crypto/sha3"
 )
@@ -283,36 +281,6 @@ func SubmitTransaction(ctx context.Context, api api.FullNode, tx ethtypes.EthTra
 		return ethtypes.EthHash{}
 	}
 	return txHash
-}
-
-func AssertAddressBalanceConsistent(ctx context.Context, api api.FullNode, addr address.Address) {
-	payload := addr.Payload()
-	_, _, err := varint.FromUvarint(payload)
-	if err != nil {
-		log.Printf("Failed to get namespace from address: %v", err)
-		return
-	}
-	fbal, err := api.WalletBalance(ctx, addr)
-	if err != nil {
-		log.Printf("Failed to get balance for address: %v", err)
-		return
-	}
-
-	ethAddr, err := ethtypes.EthAddressFromFilecoinAddress(addr)
-	if err != nil {
-		log.Printf("Failed to get Ethereum address for address: %v", err)
-		return
-	}
-
-	ebal, err := api.EthGetBalance(ctx, ethAddr, ethtypes.NewEthBlockNumberOrHashFromPredefined("latest"))
-	if err != nil {
-		log.Printf("Failed to get Ethereum balance for address: %v", err)
-		return
-	}
-	assert.Always(fbal.Equals(types.BigInt(ebal)), "Address balance inconsistent", map[string]any{
-		"filecoin_balance": fbal,
-		"ethereum_balance": ebal,
-	})
 }
 
 func NewAccount() (*key.Key, ethtypes.EthAddress, address.Address) {

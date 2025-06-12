@@ -1,6 +1,7 @@
 #!/usr/bin/env -S python3 -u
 
 import requests
+import time
 
 from antithesis.assertions import (
     reachable,
@@ -18,6 +19,9 @@ def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict
     '''
 
     print(f"Workload [request.py]: executing a request on a {node_type} node")
+
+    max_retries = 5
+    wait_seconds = 1
 
     headers = {
         "Content-Type": "application/json",
@@ -40,7 +44,18 @@ def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict
                 kwargs.update({payload_mapping[method]: payload})
 
         func = getattr(requests, method)
-        response = func(rpc_url, headers=headers, **kwargs)
+
+        for attempt in range(max_retries):
+            try:
+                response = func(rpc_url, headers=headers, **kwargs)
+                break
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(wait_seconds)
+                else:
+                    raise
+        
         reachable("A RPC request was send and a response was received", None)
 
         return {
