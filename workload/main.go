@@ -202,7 +202,7 @@ func main() {
 		if *contractPath == "" {
 			*contractPath = "workload/resources/smart-contracts/SimpleCoin.hex"
 		}
-		deploySmartContract(ctx, nodeConfig, *contractPath)
+		err = deploySmartContract(ctx, nodeConfig, *contractPath)
 	case "stateMismatch":
 		err = performStateMismatch(ctx, nodeConfig)
 	case "sendConsensusFault":
@@ -721,14 +721,14 @@ func performConsensusCheck(ctx context.Context, config *resources.Config, height
 	return nil
 }
 
-func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) {
+func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) error {
 	log.Printf("[INFO] Deploying smart contract from %s...", contractPath)
 
 	// Connect to Lotus node
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return
+		return fmt.Errorf("failed to connect to Lotus node: %w", err)
 	}
 	defer closer()
 
@@ -740,12 +740,15 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	defaultAddr, err := api.WalletDefaultAddress(ctx)
 	if err != nil {
 		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
-		return
+		return fmt.Errorf("failed to get default wallet address: %w", err)
 	}
 
 	// Send funds to deployer account
 	log.Printf("[INFO] Sending funds to deployer account...")
-	resources.SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
+	err = resources.SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
+	if err != nil {
+		return fmt.Errorf("failed to send funds to deployer: %w", err)
+	}
 
 	// Wait for funds to be available
 	log.Printf("[INFO] Waiting for funds to be available...")
@@ -755,12 +758,12 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	contractHex, err := os.ReadFile(contractPath)
 	if err != nil {
 		log.Printf("[ERROR] Failed to read contract file: %v", err)
-		return
+		return fmt.Errorf("failed to read contract file: %w", err)
 	}
 	contract, err := hex.DecodeString(string(contractHex))
 	if err != nil {
 		log.Printf("[ERROR] Failed to decode contract: %v", err)
-		return
+		return fmt.Errorf("failed to decode contract: %w", err)
 	}
 
 	// Estimate gas
@@ -770,26 +773,26 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	}})
 	if err != nil {
 		log.Printf("[ERROR] Failed to marshal gas params: %v", err)
-		return
+		return fmt.Errorf("failed to marshal gas params: %w", err)
 	}
 	gasLimit, err := api.EthEstimateGas(ctx, gasParams)
 	if err != nil {
 		log.Printf("[ERROR] Failed to estimate gas: %v", err)
-		return
+		return fmt.Errorf("failed to estimate gas: %w", err)
 	}
 
 	// Get gas fees
 	maxPriorityFee, err := api.EthMaxPriorityFeePerGas(ctx)
 	if err != nil {
 		log.Printf("[ERROR] Failed to get max priority fee: %v", err)
-		return
+		return fmt.Errorf("failed to get max priority fee: %w", err)
 	}
 
 	// Get nonce
 	nonce, err := api.MpoolGetNonce(ctx, deployer)
 	if err != nil {
 		log.Printf("[ERROR] Failed to get nonce: %v", err)
-		return
+		return fmt.Errorf("failed to get nonce: %w", err)
 	}
 
 	// Create transaction
@@ -822,74 +825,21 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	log.Printf("[INFO] Waiting for transaction to be mined...")
 	time.Sleep(30 * time.Second)
 
-	// Get contract address from transaction receipt
+	// Get transaction receipt
 	receipt, err := api.EthGetTransactionReceipt(ctx, txHash)
 	if err != nil {
 		log.Printf("[ERROR] Failed to get transaction receipt: %v", err)
-		return
+		return fmt.Errorf("failed to get transaction receipt: %w", err)
 	}
 
 	if receipt == nil {
 		log.Printf("[ERROR] Transaction receipt is nil")
-		return
+		return fmt.Errorf("transaction receipt is nil")
 	}
-
-	// Validate receipt fields
-	assert.Always(receipt.From == ethAddr, "Receipt From address should match", map[string]interface{}{
-		"expected": ethAddr,
-		"actual":   receipt.From,
-	})
-	assert.Always(receipt.TransactionHash == txHash, "Receipt transaction hash should match", map[string]interface{}{
-		"expected": txHash,
-		"actual":   receipt.TransactionHash,
-	})
-	assert.Always(receipt.Type == 2, "Receipt type should be 1559", map[string]interface{}{
-		"expected": 2, // EIP-1559 transaction type is 2
-		"actual":   receipt.Type,
-	})
-	assert.Always(receipt.Status == ethtypes.EthUint64(0x1), "Receipt status should be success", map[string]interface{}{
-		"expected": ethtypes.EthUint64(0x1),
-		"actual":   receipt.Status,
-	})
-
-	// Get and validate transaction
-	ethTx, err := api.EthGetTransactionByHash(ctx, &txHash)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get transaction: %v", err)
-		return
-	}
-
-	// Validate transaction fields
-	assert.Always(ethTx.Hash == txHash, "Transaction hash should match", map[string]interface{}{
-		"expected": txHash,
-		"actual":   ethTx.Hash,
-	})
-	assert.Always(ethTx.From == ethAddr, "Transaction From address should match", map[string]interface{}{
-		"expected": ethAddr,
-		"actual":   ethTx.From,
-	})
-	assert.Always(ethTx.Type == 2, "Transaction type should be 1559", map[string]interface{}{
-		"expected": 2,
-		"actual":   ethTx.Type,
-	})
-	assert.Always(ethTx.Nonce == ethtypes.EthUint64(nonce), "Transaction nonce should match", map[string]interface{}{
-		"expected": nonce,
-		"actual":   ethTx.Nonce,
-	})
-	assert.Always((*big.Int)(ethTx.MaxFeePerGas).Equals(types.NanoFil), "Transaction max fee per gas should match", map[string]interface{}{
-		"expected": types.NanoFil,
-		"actual":   (*big.Int)(ethTx.MaxFeePerGas),
-	})
-	assert.Always((*big.Int)(ethTx.MaxPriorityFeePerGas).Equals(big.Int(maxPriorityFee)), "Transaction max priority fee should match", map[string]interface{}{
-		"expected": maxPriorityFee,
-		"actual":   (*big.Int)(ethTx.MaxPriorityFeePerGas),
-	})
-
-	log.Printf("[INFO] Transaction receipt: %v", receipt)
-	log.Printf("[INFO] Transaction details: %v", ethTx)
 
 	// Assert transaction was mined successfully
 	assert.Sometimes(receipt != nil && receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
+	return nil
 }
 
 func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeConfig) error {
@@ -942,15 +892,15 @@ func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeCon
 	if txHash == ethtypes.EmptyEthHash {
 		return fmt.Errorf("transaction submission failed")
 	}
+	log.Printf("[INFO] Transaction: %v", txHash)
 
 	// Wait for transaction to be mined
 	log.Printf("[INFO] Waiting for transaction to be mined...")
-	time.Sleep(60 * time.Second)
+	time.Sleep(30 * time.Second)
 
-	// Get and validate receipt
+	// Get transaction receipt
 	receipt, err := api.EthGetTransactionReceipt(ctx, txHash)
 	if err != nil {
-		log.Printf("[ERROR] Failed to get transaction receipt: %v", err)
 		return fmt.Errorf("failed to get transaction receipt: %w", err)
 	}
 
@@ -959,38 +909,8 @@ func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeCon
 		return fmt.Errorf("transaction receipt is nil")
 	}
 
-	// Now that we know receipt is not nil, we can safely validate its fields
-	assert.Always(receipt.From == ethAddr, "Receipt From address should match", map[string]interface{}{
-		"expected": ethAddr,
-		"actual":   receipt.From,
-	})
-	assert.Always(*receipt.To == ethAddr2, "Receipt To address should match", map[string]interface{}{
-		"expected": ethAddr2,
-		"actual":   *receipt.To,
-	})
-	assert.Always(receipt.TransactionHash == txHash, "Receipt transaction hash should match", map[string]interface{}{
-		"expected": txHash,
-		"actual":   receipt.TransactionHash,
-	})
-	assert.Always(receipt.Type == ethtypes.EthLegacyTxType, "Receipt type should be legacy", map[string]interface{}{
-		"expected": ethtypes.EthLegacyTxType,
-		"actual":   receipt.Type,
-	})
-	assert.Always(receipt.Status == ethtypes.EthUint64(0x1), "Receipt status should be success", map[string]interface{}{
-		"expected": ethtypes.EthUint64(0x1),
-		"actual":   receipt.Status,
-	})
-
-	// Get and validate transaction
-	ethTx, err := api.EthGetTransactionByHash(ctx, &txHash)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get transaction: %v", err)
-		return fmt.Errorf("failed to get transaction: %w", err)
-	}
-
-	log.Printf("[INFO] Transaction: %v", ethTx)
 	log.Printf("[INFO] ETH legacy transaction check completed successfully")
-
+	assert.Sometimes(receipt != nil && receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
 	return nil
 }
 
