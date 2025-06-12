@@ -1,3 +1,5 @@
+#!/usr/bin/env -S python3 -u
+
 import time
 import requests
 from antithesis.assertions import always
