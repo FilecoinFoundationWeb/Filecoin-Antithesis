@@ -20,7 +20,7 @@ method_list=(
     eth_feeHistory
     Filecoin.ChainGetParentReceipts
     Filecoin.ChainGetParentMessages
-    Filecoin.ChainGetTipSet
+    #Filecoin.ChainGetTipSet
 )
 
 endpoint_list=(
