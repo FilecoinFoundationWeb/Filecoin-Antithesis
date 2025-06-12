@@ -239,7 +239,7 @@ func DeleteWallets(ctx context.Context, api api.FullNode, walletsToDelete []addr
 }
 
 // SendFundsToEthAddress sends funds from a Filecoin address to an ETH address
-func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.Address, ethAddr string, amount abi.TokenAmount) error {
+func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.Address, ethAddr string) error {
 	// Remove 0x prefix if present
 	ea, err := ethtypes.ParseEthAddress(ethAddr)
 	if err != nil {
@@ -253,11 +253,14 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 	}
 	fmt.Printf("to: %s\n", to)
 	// Create message
-
+	amountFIL, err := types.ParseFIL("1000")
+	if err != nil {
+		return fmt.Errorf("failed to parse amount: %w", err)
+	}
 	msg := &types.Message{
 		From:       from,
 		To:         to,
-		Value:      amount,
+		Value:      abi.TokenAmount(amountFIL),
 		Method:     builtin.MethodsEAM.CreateExternal,
 		Params:     nil,
 		GasLimit:   0,
@@ -273,7 +276,7 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 			"to":          to.String(),
 			"eth_address": ethAddr,
 			"error":       err.Error(),
-			"value":       amount.String(),
+			"value":       amountFIL.String(),
 		}
 		assert.Sometimes(true,
 			"[Message Push] Mpool push message to ETH address.",
@@ -283,7 +286,7 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 					"to":             to.String(),
 					"eth_address":    ethAddr,
 					"error":          err.Error(),
-					"value":          amount.String(),
+					"value":          amountFIL.String(),
 					"property":       "Message pool operation",
 					"impact":         "Medium - temporary mempool rejection",
 					"details":        "Message push to mempool failed, may be temporary",

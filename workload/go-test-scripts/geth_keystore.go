@@ -7,7 +7,6 @@ import (
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/filecoin-project/go-state-types/abi"
 )
 
 func main() {
@@ -50,8 +49,8 @@ func main() {
 	}
 
 	// Send 10000 FIL to the ETH address
-	amount := abi.NewTokenAmount(1000)
-	err = resources.SendFundsToEthAddress(ctx, api, fromAddr, account.Address.Hex(), amount)
+
+	err = resources.SendFundsToEthAddress(ctx, api, fromAddr, account.Address.Hex())
 	if err != nil {
 		fmt.Printf("Failed to fund wallet: %v\n", err)
 		return
