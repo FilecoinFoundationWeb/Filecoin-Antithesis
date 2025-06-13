@@ -55,7 +55,7 @@ func DeployContractWithValue(ctx context.Context, api api.FullNode, sender addre
 	}
 	time.Sleep(5 * time.Second)
 
-	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
+	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, abi.ChainEpoch(-1), false)
 	if err != nil {
 		log.Printf("Error waiting for contract creation message: %v", err)
 		return result
@@ -203,7 +203,7 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 	}
 	time.Sleep(5 * time.Second)
 
-	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
+	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 5, abi.ChainEpoch(-1), false)
 	if err != nil {
 		log.Printf("Error waiting for invoke message to execute: %v", err)
 		return nil, err
