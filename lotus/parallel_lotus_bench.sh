@@ -1,26 +1,28 @@
 #!/usr/bin/env bash
 
 method_list=(
-    eth_call
-    Filecoin.StateMinerInfo
-    Filecoin.ChainHead
-    eth_getBalance
-    eth_getBlockByNumber
-    eth_blockNumber
-    eth_getLogs
-    eth_getTransactionReceipt
-    eth_getBlockByHash
-    Filecoin.ChainGetTipSetByHeight
-    Filecoin.WalletBalance
-    Filecoin.StateMinerPartitions
-    Filecoin.StateReadState
-    eth_getTransactionByHash
-    eth_getBlockReceipts
-    Filecoin.StateLookupID
     eth_feeHistory
-    Filecoin.ChainGetParentReceipts
-    Filecoin.ChainGetParentMessages
+    Filecoin.ChainHead
+
+    # THE FOLLOWING EXIT WITH 500 STATUS CODES (NEED MORE PARAMETERS)
+    #Filecoin.StateMinerPartitions
+    #Filecoin.ChainGetParentMessages
+    #Filecoin.WalletBalance
+    #eth_getTransactionByHash
+    #Filecoin.StateLookupID
+    #eth_getBlockByNumber
+    #eth_getTransactionReceipt
+    #eth_getBlockReceipts
+    #eth_getBalance
+    #Filecoin.ChainGetTipSetByHeight
+    #Filecoin.StateMinerInfo
     #Filecoin.ChainGetTipSet
+    #Filecoin.StateReadState
+    #eth_getLogs
+    #eth_call
+    #eth_getBlockByHash
+    #Filecoin.ChainGetParentReceipts
+    #eth_blockNumber
 )
 
 endpoint_list=(
