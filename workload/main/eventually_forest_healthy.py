@@ -18,12 +18,12 @@ try:
     response = requests.get(URL, timeout=5)
     response_text = response.text
 except requests.RequestException:
-    response_text = ""
-    always(False, "Forest node stays reachable")
+    response_text = "No response from Forest healthcheck call"
+    always(False, "Forest node stays reachable", response_text)
     exit(1)
 # if we have [!] it means something is unhealthy
 if "[!]" in response_text:
-    always(False, "Forest node stays healthy")
+    always(False, "Forest node stays healthy", response_text)
     exit(1)
 else:
     print("Forest node is healthy:", response_text)
