@@ -25,7 +25,7 @@ WORKDIR /opt/antithesis
 # Copy the necessary Go files and resources
 COPY ./entrypoint ./entrypoint
 COPY ./resources ./resources
-COPY ./go-test-scripts ./go-test-scripts
+#COPY ./go-test-scripts ./go-test-scripts
 
 COPY go.mod ./go.mod
 COPY go.sum ./go.sum

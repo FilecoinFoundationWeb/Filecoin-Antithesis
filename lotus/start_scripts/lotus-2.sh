@@ -19,6 +19,7 @@ lotus --version
 
 cp /root/.genesis-sector-2/pre-seal-t01001.key ${LOTUS_2_DATA_DIR}/key
 cp /lotus_instrumented/customer/config-2.toml "${LOTUS_2_DATA_DIR}/config.toml"
+lotus wallet new bls
 # This node will sync from the genesis devnet.car
 lotus --repo="${LOTUS_2_PATH}" daemon --genesis=${LOTUS_1_DATA_DIR}/devgen.car  --bootstrap=false --config=${LOTUS_2_DATA_DIR}/config.toml&
 lotus wait-api

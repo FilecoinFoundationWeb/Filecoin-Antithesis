@@ -49,7 +49,7 @@ import (
 
 func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *string, *int64) {
 	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
-	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault', 'checkEthMethods', 'sendEthLegacy', 'checkSplitstore', 'incomingblock', 'blockfuzz'")
+	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault', 'checkEthMethods', 'sendEthLegacy', 'checkSplitstore', 'incomingblock', 'blockfuzz', 'checkBackfill'")
 	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
 	numWallets := flag.Int("wallets", 1, "Number of wallets for the operation")
 	contractPath := flag.String("contract", "", "Path to the smart contract bytecode file")
@@ -92,6 +92,7 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		"checkSplitstore":    true,
 		"incomingblock":      true,
 		"blockfuzz":          true,
+		"checkBackfill":      true,
 	}
 
 	// Operations that don't require a node name
@@ -213,6 +214,8 @@ func main() {
 		err = sendEthLegacyTransaction(ctx, nodeConfig)
 	case "blockfuzz":
 		err = performBlockFuzzing(ctx, nodeConfig)
+	case "checkBackfill":
+		err = performCheckBackfill(ctx, config)
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
@@ -838,7 +841,7 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	}
 
 	// Assert transaction was mined successfully
-	assert.Sometimes(receipt != nil && receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
+	assert.Sometimes(receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
 	return nil
 }
 
@@ -910,7 +913,7 @@ func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeCon
 	}
 
 	log.Printf("[INFO] ETH legacy transaction check completed successfully")
-	assert.Sometimes(receipt != nil && receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
+	assert.Sometimes(receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
 	return nil
 }
 
@@ -927,7 +930,6 @@ func performStateMismatch(ctx context.Context, nodeConfig *resources.NodeConfig)
 		return fmt.Errorf("state mismatch check failed: %w", err)
 	}
 
-	log.Printf("[INFO] State mismatch assert.Alwayscheck completed successfully on node '%s'", nodeConfig.Name)
 	return nil
 }
 
@@ -967,5 +969,32 @@ func performBlockFuzzing(ctx context.Context, nodeConfig *resources.NodeConfig) 
 	}
 
 	log.Printf("[INFO] Block fuzzing completed successfully")
+	return nil
+}
+
+func performCheckBackfill(ctx context.Context, config *resources.Config) error {
+	log.Println("[INFO] Starting chain index backfill check...")
+
+	// Filter nodes to "Lotus1" and "Lotus2"
+	nodeNames := []string{"Lotus1", "Lotus2"}
+	var filteredNodes []resources.NodeConfig
+	for _, node := range config.Nodes {
+		for _, name := range nodeNames {
+			if node.Name == name {
+				filteredNodes = append(filteredNodes, node)
+			}
+		}
+	}
+
+	if len(filteredNodes) == 0 {
+		return fmt.Errorf("no nodes matching '%s' or '%s' found in config", nodeNames[0], nodeNames[1])
+	}
+
+	err := resources.CheckChainBackfill(ctx, filteredNodes)
+	if err != nil {
+		return fmt.Errorf("chain backfill check failed: %w", err)
+	}
+
+	log.Println("[INFO] Chain index backfill check completed.")
 	return nil
 }
