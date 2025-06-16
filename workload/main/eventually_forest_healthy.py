@@ -23,7 +23,10 @@ except requests.RequestException:
     exit(1)
 # if we have [!] it means something is unhealthy
 if "[!]" in response_text:
-    always(False, "Forest node stays healthy", response_text)
-    exit(1)
+    if "f3 not running" and "epoch up to date" and "rpc server running" and "sync ok" and "peers connected" in response_text:
+        print("Disabled F3 check for Forest")
+    else:
+        always(False, "Forest node stays healthy", response_text)
+        exit(1)
 else:
     print("Forest node is healthy:", response_text)
