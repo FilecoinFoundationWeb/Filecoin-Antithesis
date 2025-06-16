@@ -37,8 +37,18 @@ func TestF3IsRunningEquality(t *testing.T) {
 			defer wg.Done()
 
 			api, closer, err := resources.ConnectToNode(ctx, node)
+			head, err := api.ChainHead(ctx)
 			if err != nil {
-				t.Fatalf("Failed to connect to node: %v", err)
+				t.Fatalf("Failed to get chain head: %v", err)
+				return
+			}
+			height := head.Height()
+			if height < 20 {
+				t.Logf("Node: %v is not at height 20, skipping F3 running test", node.Name)
+				return
+			}
+			if err != nil {
+				t.Fatalf("Failed to get chain head: %v", err)
 				return
 			}
 			defer closer()

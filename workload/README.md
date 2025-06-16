@@ -9,7 +9,6 @@ This directory contains the workload implementation for testing Filecoin nodes u
 - `resources/`: Helper functions and utilities
 - `go-test-scripts/`: Go test files for specific test scenarios
 - `entrypoint/`: Entry point scripts for workload execution
-- `types/`: Common type definitions
 
 ## Writing New Workloads
 
@@ -89,7 +88,7 @@ func TestMyNewScenario(t *testing.T) {
 
 ### 4. Adding Test Composer Commands (main/)
 
-Test Composer commands in `main/` follow naming conventions:
+Test Composer commands in `main/` follow naming conventions (Read more [here](https://antithesis.com/docs/test_templates/)):
 - `parallel_*`: Commands that can run in parallel
 - `anytime_*`: Commands that can run at any time
 - `eventually_*`: Commands that verify eventual properties
@@ -134,4 +133,4 @@ Here's a typical workflow for adding a new test:
 5. Create Test Composer command in `main/`
 6. Add appropriate assertions for test properties
 7. Test and validate the implementation
-```
+
