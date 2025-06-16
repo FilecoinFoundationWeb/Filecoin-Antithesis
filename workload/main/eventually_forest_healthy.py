@@ -24,7 +24,7 @@ except requests.RequestException:
 # if we have [!] it means something is unhealthy
 if "[!]" in response_text:
     if "f3 not running" and "epoch up to date" and "rpc server running" and "sync ok" and "peers connected" in response_text:
-        print("Disabled F3 check for Forest")
+        print("Forest node is healthy (Disabled F3 check for Forest):", response_text)
     else:
         always(False, "Forest node stays healthy", response_text)
         exit(1)
