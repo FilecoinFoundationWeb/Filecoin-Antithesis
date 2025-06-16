@@ -105,6 +105,7 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		"sendConsensusFault": true,
 		"checkEthMethods":    true,
 		"checkSplitstore":    true,
+		"checkBackfill":      true,
 	}
 
 	if !validOps[*operation] {
@@ -994,7 +995,7 @@ func performCheckBackfill(ctx context.Context, config *resources.Config) error {
 	if err != nil {
 		return fmt.Errorf("chain backfill check failed: %w", err)
 	}
-
+	assert.Sometimes(true, "Chain index backfill check completed.", map[string]interface{}{"requirement": "Chain index backfill check completed."})
 	log.Println("[INFO] Chain index backfill check completed.")
 	return nil
 }
