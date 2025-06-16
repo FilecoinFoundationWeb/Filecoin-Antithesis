@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 method_list=(
-    eth_feeHistory
-    Filecoin.ChainHead
+    #eth_feeHistory
+    #Filecoin.ChainHead
 
     # THE FOLLOWING EXIT WITH 500 STATUS CODES (NEED MORE PARAMETERS)
     #Filecoin.StateMinerPartitions
