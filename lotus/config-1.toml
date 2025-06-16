@@ -284,7 +284,7 @@
   #
   # type: bool
   # env var: LOTUS_EVENTS_ENABLEACTOREVENTSAPI
-  #EnableActorEventsAPI = false
+  EnableActorEventsAPI = false
 
   # FilterTTL specifies the time to live for actor event filters. Filters that haven't been accessed longer than
   # this time become eligible for automatic deletion.

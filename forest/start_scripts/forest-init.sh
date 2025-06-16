@@ -10,10 +10,11 @@ if [ ! -f "$FIRST_RUN_FLAG" ]; then
   DRAND_SERVER="http://10.20.20.21"
   json=$(curl -s "$DRAND_SERVER/info")
   formatted_json=$(jq --arg server "$DRAND_SERVER" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$json")
+  echo "formatted_json: $formatted_json"
   export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
   export FOREST_F3_FINALITY=20
   NETWORK_NAME=$(jq -r '.NetworkName' "${LOTUS_1_DATA_DIR}/localnet.json")
-  export NETWORK_NAME
+  export NETWORK_NAME=$NETWORK_NAME
   forest --version
   cp /forest/forest_config.toml.tpl "${FOREST_DATA_DIR}/forest_config.toml"
   echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
@@ -34,7 +35,8 @@ else
   formatted_json=$(jq --arg server "$DRAND_SERVER" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$json")
   export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
   export FOREST_F3_FINALITY=21
-  export NETWORK_NAME
+  NETWORK_NAME=$(jq -r '.NetworkName' "${LOTUS_1_DATA_DIR}/localnet.json")
+  export NETWORK_NAME=$NETWORK_NAME
   echo "forest: starting forest..."
   forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
          --config "${FOREST_DATA_DIR}/forest_config.toml" \

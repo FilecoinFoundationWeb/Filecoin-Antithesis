@@ -8,6 +8,7 @@ import (
 
 	"github.com/filecoin-project/go-state-types/builtin"
 	miner8 "github.com/filecoin-project/go-state-types/builtin/v8/miner"
+	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/actors"
 	"github.com/filecoin-project/lotus/chain/types"
 )
@@ -84,7 +85,7 @@ func SendConsensusFault(ctx context.Context) error {
 							log.Printf("Consensus fault reported in message %s", smsg.Cid())
 
 							// Wait for message execution
-							wait, err := api1.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
+							wait, err := api1.StateWaitMsg(ctx, smsg.Cid(), 5, api.LookbackNoLimit, false)
 							if err == nil && !wait.Receipt.ExitCode.IsError() {
 								return nil // Success with first miner
 							}
@@ -178,7 +179,7 @@ func SendConsensusFault(ctx context.Context) error {
 	log.Printf("Consensus fault reported in message %s", smsg.Cid())
 
 	// Wait for message execution
-	wait, err := api2.StateWaitMsg(ctx, smsg.Cid(), 5, 100, false)
+	wait, err := api2.StateWaitMsg(ctx, smsg.Cid(), 5, api.LookbackNoLimit, false)
 	if err != nil {
 		return fmt.Errorf("waiting for message: %w", err)
 	}
