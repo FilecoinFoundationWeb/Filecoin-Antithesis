@@ -1,6 +1,5 @@
 #!/bin/bash
 
-export LOTUS_F3_BOOTSTRAP_EPOCH=21
 export DRAND_CHAIN_INFO=chain_info
 export LOTUS_PATH=${LOTUS_2_PATH}
 export LOTUS_MINER_PATH=${LOTUS_MINER_2_PATH}

@@ -69,5 +69,6 @@ RUN ./lotus-seed genesis add-miner localnet-2.json manifest.json
 
 
 RUN make install
+RUN install -C lotus-shed /usr/local/bin/lotus-shed
 
 ENTRYPOINT ["sleep", "infinity"]
