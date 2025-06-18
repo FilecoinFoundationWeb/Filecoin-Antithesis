@@ -31,4 +31,4 @@ failed_checks = any(
     line.startswith['[!]'] and 'f3 not running' not in line for line in lines
 )
 
-assert(failed_checks, "[Forest] Node is healthy during quiescence check (Not checking F3)", {"Response Text": response_text})
+always(failed_checks, "[Forest] Node is healthy during quiescence check (Not checking F3)", {"Response Text": response_text})
