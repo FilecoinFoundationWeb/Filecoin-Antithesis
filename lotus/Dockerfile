@@ -58,15 +58,14 @@ RUN ./lotus-seed --sector-dir=/root/.genesis-sector-1 pre-seal --sector-size 2Ki
 #Pre-seal for the second miner
 RUN ./lotus-seed --sector-dir=/root/.genesis-sector-2 pre-seal --sector-size 2KiB --num-sectors 3 --miner-addr t01001 
 # Create genesis template for first miner
-RUN ./lotus-seed genesis new localnet-1.json
+RUN ./lotus-seed genesis new --network-name="2k" localnet-1.json
 # Create genesis template for second miner 
-RUN ./lotus-seed genesis new localnet-2.json
+RUN ./lotus-seed genesis  new --network-name="2k" localnet-2.json
 # Add the first miner to the genesis template
 RUN ./lotus-seed aggregate-manifests "/root/.genesis-sector-1/pre-seal-t01000.json" "/root/.genesis-sector-2/pre-seal-t01001.json" > manifest.json
 RUN ./lotus-seed genesis add-miner localnet-1.json manifest.json
 # Add the second miner to the genesis template
 RUN ./lotus-seed genesis add-miner localnet-2.json manifest.json
-
 
 RUN make install
 
