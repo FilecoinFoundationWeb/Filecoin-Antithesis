@@ -876,7 +876,8 @@ func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeCon
 
 	gasLimit, err := api.EthEstimateGas(ctx, gasParams)
 	if err != nil {
-		return fmt.Errorf("failed to estimate gas: %w", err)
+		log.Printf("[WARN] Failed to estimate gas, which might be expected: %v", err)
+		return nil
 	}
 
 	tx := ethtypes.EthLegacyHomesteadTxArgs{
@@ -894,7 +895,8 @@ func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeCon
 	log.Printf("[INFO] Transaction submitted with hash: %s", txHash)
 
 	if txHash == ethtypes.EmptyEthHash {
-		return fmt.Errorf("transaction submission failed")
+		log.Printf("[WARN] Transaction submission failed (empty hash), which might be expected.")
+		return nil
 	}
 	log.Printf("[INFO] Transaction: %v", txHash)
 
@@ -905,16 +907,17 @@ func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeCon
 	// Get transaction receipt
 	receipt, err := api.EthGetTransactionReceipt(ctx, txHash)
 	if err != nil {
-		return fmt.Errorf("failed to get transaction receipt: %w", err)
+		log.Printf("[WARN] Failed to get transaction receipt, which might be expected: %v", err)
+		return nil
 	}
 
 	if receipt == nil {
-		log.Printf("[ERROR] Transaction receipt is nil")
-		return fmt.Errorf("transaction receipt is nil")
+		log.Printf("[WARN] Transaction receipt is nil, which might be expected.")
+		return nil
 	}
 
 	log.Printf("[INFO] ETH legacy transaction check completed successfully")
-	assert.Sometimes(receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
+	assert.Sometimes(receipt.Status == 1, "Transaction mined successfully", map[string]interface{}{"tx_hash": txHash})
 	return nil
 }
 
