@@ -33,7 +33,7 @@ func SendConsensusFault(ctx context.Context) error {
 	}
 
 	// Try head-1 tipset
-	ts, err := api1.ChainGetTipSetByHeight(ctx, head.Height()-1, types.EmptyTSK)
+	ts, err := api1.ChainGetTipSetByHeight(ctx, head.Height()-2, types.EmptyTSK)
 	if err != nil {
 		return fmt.Errorf("failed to get tipset: %w", err)
 	}
@@ -111,7 +111,7 @@ func SendConsensusFault(ctx context.Context) error {
 	}
 
 	// Try head-1 tipset
-	ts, err = api2.ChainGetTipSetByHeight(ctx, head.Height()-1, types.EmptyTSK)
+	ts, err = api2.ChainGetTipSetByHeight(ctx, head.Height()-2, types.EmptyTSK)
 	if err != nil {
 		return fmt.Errorf("failed to get tipset: %w", err)
 	}
