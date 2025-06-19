@@ -22,7 +22,7 @@ def get_genesis_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
         "method": method
     })
     response = request(node_type, rpc_url, auth_token, "post", payload)
-    if response and response['response'].status_code != 200:
+    if not response and response['response'].status_code != 200:
         always(False, "List existing wallets on the chain", {"node_type":node_type,"response":response})
         print(f"Workload [rpc.py]: bad response status code during get_genesis_wallet for {method} on a {node_type} node")
         return None
@@ -56,7 +56,7 @@ def create_wallet(node_type:str, rpc_url:str, auth_token:str) -> str:
         "params": [1]
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
-    if response and response['response'].status_code != 200:
+    if not response and response['response'].status_code != 200:
         always(False, "Create a new wallet", {"node_type":node_type,"response":response})
         print(f"Workload [rpc.py]: bad response status code during create_wallet for {method} on a {node_type} node")
         return None
@@ -80,7 +80,7 @@ def delete_wallet(node_type:str, rpc_url:str, auth_token:str, wallet:str) -> boo
         "params": [wallet]
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
-    if response and response['response'].status_code != 200:
+    if not response and response['response'].status_code != 200:
         always(False, "Delete a wallet", {"node type":node_type,"response":response})
         print(f"Workload [rpc.py]: bad response status code during delete_wallet for {method} on a {node_type} node")
         return False
@@ -105,7 +105,7 @@ def get_wallet_private_key(node_type:str, rpc_url:str, auth_token:str, wallet:st
         "params": [wallet]
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
-    if response and response['response'].status_code != 200:
+    if not response and response['response'].status_code != 200:
         always(False, "Get a wallet private key", {"node type":node_type,"response":response})
         print(f"Workload [rpc.py]: bad response status code during get_wallet_private_key for {method} on a {node_type} node")
         return None
@@ -126,7 +126,7 @@ def get_wallet_balance(node_type:str, rpc_url:str, auth_token: str, wallet:str):
         "params": [wallet]
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
-    if response and response['response'].status_code != 200:
+    if not response and response['response'].status_code != 200:
         # sdk
         print(f"Workload [rpc.py]: bad response status code during get_wallet_balance for {method} on a {node_type} node")
         return None
@@ -154,7 +154,7 @@ def get_chainhead(node_type, rpc_url:str, auth_token:str) -> str:
         "method": method
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
-    if response and response['response'].status_code != 200:
+    if not response and response['response'].status_code != 200:
         always(False, "Get the chainhead", {"node type":node_type,"response":response})
         print(f"Workload [rpc.py]: bad response status code during get_chainhead for {method} on a {node_type} node")
         return None
@@ -202,7 +202,7 @@ def estimate_message_gas(node_type:str, rpc_url:str, auth_token:str, from_wallet
         ]
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
-    if response and response['response'].status_code != 200:
+    if not response and response['response'].status_code != 200:
         always(False, "Estimate message gas for a transaction", {"node type":node_type,"response":response})
         print(f"Workload [rpc.py]: bad response status code during estimate_message_gas for {method} on a {node_type} node")
         return None
@@ -254,7 +254,7 @@ def mpool_push_message(node_type:str, rpc_url:str, auth_token:str, from_wallet:s
         ]
     })
     response = request(node_type, rpc_url, auth_token, 'post', payload)
-    if response and response['response'].status_code != 200:
+    if not response and response['response'].status_code != 200:
         always(False, "Push message to mpool", {"node type":node_type,"response":response})
         print(f"Workload [rpc.py]: bad response status code during push_message for {method} on a {node_type} node")
         return None
@@ -278,7 +278,7 @@ def sync_state(node_type:str, rpc_url:str, auth_token:str):
         "params": []
     })
     response = request(node_type, rpc_url, auth_token, "post", payload)
-    if response and response['response'].status_code != 200:
+    if not response and response['response'].status_code != 200:
         #sdk.always(declare=False, id="Get status of a sync state", message="Get status of a sync state", condition=False, details={"node type":node_type,"response":response['response']})
         print(f"Workload [rpc.py]: bad response status code during SyncState for {method} on a {node_type} node")
         return None
