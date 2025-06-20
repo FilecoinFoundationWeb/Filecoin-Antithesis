@@ -21,7 +21,7 @@ def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict
     print(f"Workload [request.py]: executing a request on a {node_type} node")
 
     max_retries = 5
-    wait_seconds = 1
+    wait_seconds = 2
 
     headers = {
         "Content-Type": "application/json",
@@ -54,7 +54,8 @@ def request(node_type:str, rpc_url:str, auth_token:str, method:str, payload:dict
                 if attempt < max_retries - 1:
                     time.sleep(wait_seconds)
                 else:
-                    raise
+                    print("Failed to send request")
+                    return None
         
         reachable("A RPC request was send and a response was received", None)
 

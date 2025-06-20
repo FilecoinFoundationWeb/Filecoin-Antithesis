@@ -1,32 +1,42 @@
 #!/usr/bin/env -S python3 -u
 
+from antithesis.assertions import (
+    always,
+    unreachable
+)
 import time
 import requests
-from antithesis.assertions import always
 
-# Forest node config
+# forest node config
 FOREST_IP = "10.20.20.28"
 PORT = "2346"
 ENDPOINT = "/healthz?verbose"
 URL = f"http://{FOREST_IP}:{PORT}{ENDPOINT}"
 
-# Sleep to ensure the service is ready
+# sleep to ensure the service is ready
+print("Sleeping 20 seconds before starting health check...")
 time.sleep(20)
+print("Sleep completed!")
 
-# curl healthcheck
+# checking that forest is reachable
 try:
     response = requests.get(URL, timeout=5)
     response_text = response.text
-except requests.RequestException:
-    response_text = "No response from Forest healthcheck call"
-    always(False, "Forest node stays reachable", response_text)
+except Exception as e:
+    unreachable("[Forest] Node is unreachable during quiescence period", {"Exception": e})
     exit(1)
-# if we have [!] it means something is unhealthy
-if "[!]" in response_text:
-    if "f3 not running" and "epoch up to date" and "rpc server running" and "sync ok" and "peers connected" in response_text:
-        print("Forest node is healthy (Disabled F3 check for Forest):", response_text)
-    else:
-        always(False, "Forest node stays healthy", response_text)
-        exit(1)
-else:
-    print("Forest node is healthy:", response_text)
+
+lines = response_text.strip().split('\n')
+
+print(lines)
+print(type(lines))
+
+for x in lines:
+    print(x)
+    print(type(x))
+
+failed_checks = any(
+    line.startswith('[!]') and 'f3 not running' not in line for line in lines
+)
+
+always(not failed_checks, "[Forest] Node is healthy during quiescence check (Not checking F3)", {"Response Text": response_text})

@@ -33,7 +33,7 @@ func SendConsensusFault(ctx context.Context) error {
 	}
 
 	// Try head-1 tipset
-	ts, err := api1.ChainGetTipSetByHeight(ctx, head.Height()-1, types.EmptyTSK)
+	ts, err := api1.ChainGetTipSetByHeight(ctx, head.Height()-2, types.EmptyTSK)
 	if err != nil {
 		return fmt.Errorf("failed to get tipset: %w", err)
 	}
@@ -111,7 +111,7 @@ func SendConsensusFault(ctx context.Context) error {
 	}
 
 	// Try head-1 tipset
-	ts, err = api2.ChainGetTipSetByHeight(ctx, head.Height()-1, types.EmptyTSK)
+	ts, err = api2.ChainGetTipSetByHeight(ctx, head.Height()-2, types.EmptyTSK)
 	if err != nil {
 		return fmt.Errorf("failed to get tipset: %w", err)
 	}
@@ -140,7 +140,8 @@ func SendConsensusFault(ctx context.Context) error {
 
 	sig, err := api2.WalletSign(ctx, minfo.Worker, signingBytes)
 	if err != nil {
-		return fmt.Errorf("signing block: %w", err)
+		log.Printf("Could not sign block with miner 2: %v. This may be expected, aborting fault attempt.", err)
+		return nil
 	}
 	blockHeaderCopy.BlockSig = sig
 

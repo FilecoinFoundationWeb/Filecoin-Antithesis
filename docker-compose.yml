@@ -70,7 +70,7 @@ services:
     volumes:
       - ./data/lotus-1:${LOTUS_1_DATA_DIR}
       - ./lotus/start_scripts/lotus-1.sh:${LOTUS_1_DATA_DIR}/lotus-1.sh
-      - ./lotus/parallel_lotus_bench.sh:/opt/antithesis/test/v1/main/parallel_driver_lotus_bench.sh
+      - ./lotus/lotus_bench.sh:/opt/antithesis/test/v1/main/serial_driver_lotus_bench.sh
       - ./data/lotus-2:${LOTUS_2_DATA_DIR}
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
