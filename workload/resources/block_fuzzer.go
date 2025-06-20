@@ -328,6 +328,7 @@ func FuzzBlockSubmission(ctx context.Context, api api.FullNode) error {
 	// Submit all test cases
 	for _, tc := range testCases {
 		log.Printf("[INFO] Submitting test case: %s", tc.name)
+		log.Printf("[INFO] Block: %+v", tc.block)
 		err := api.SyncSubmitBlock(ctx, tc.block)
 
 		if err != nil {

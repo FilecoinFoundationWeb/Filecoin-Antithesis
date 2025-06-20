@@ -217,7 +217,6 @@ services:
       - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
       - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
     environment:
-      - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${LOTUS_MINER_1_ACTOR_ADDRESS}
       - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
       - FOREST_SHARK_HEIGHT=${SHARK_HEIGHT}
       - FOREST_HYGGE_HEIGHT=${HYGGE_HEIGHT}

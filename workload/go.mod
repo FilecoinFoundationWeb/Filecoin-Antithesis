@@ -4,14 +4,18 @@ go 1.23.0
 
 toolchain go1.24.0
 
+replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20240515191416-fc5f0ca64291
+
 require (
 	github.com/antithesishq/antithesis-sdk-go v0.4.2
 	github.com/filecoin-project/go-address v1.2.0
 	github.com/filecoin-project/go-bitfield v0.2.4
+	github.com/filecoin-project/go-cbor-util v0.0.1
 	github.com/filecoin-project/go-f3 v0.7.3
 	github.com/filecoin-project/go-state-types v0.15.0
 	github.com/filecoin-project/lotus v1.31.0
 	github.com/ipfs/go-cid v0.4.1
+	github.com/ipld/go-ipld-prime v0.21.0
 	github.com/libp2p/go-libp2p v0.37.2
 	github.com/libp2p/go-libp2p-pubsub v0.11.0
 	github.com/libp2p/go-msgio v0.3.0
@@ -143,7 +147,6 @@ require (
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66 // indirect
 	github.com/raulk/clock v1.1.0 // indirect
 	github.com/raulk/go-watchdog v1.3.0 // indirect
-	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
