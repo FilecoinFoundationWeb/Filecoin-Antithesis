@@ -282,6 +282,10 @@ services:
       - .env
     environment:
       - CURIO_IP=${CURIO_IP}
+    ports:
+      - "12300:12300"
+      - "4701:4701"
+      - "32100:32100"
     entrypoint: ["${CURIO_DATA_DIR}/curio-init.sh"]
     networks:
       antithesis-net:

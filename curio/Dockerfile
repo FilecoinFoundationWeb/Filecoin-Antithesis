@@ -7,7 +7,7 @@ FROM lotus:${LOTUS_TAG} as lotus-builder
 FROM docker.io/golang:latest
 
 # First, copy the lotus binaries from the builder stage into our final image
-COPY --from=lotus-builder /usr/local/bin/lotus* /usr/local/bin/
+COPY --from=lotus-builder /usr/local/bin /usr/local/bin
 
 # Now, proceed with the Curio build
 RUN apt-get update && apt-get install -y --no-install-recommends dnsutils git ca-certificates build-essential clang ocl-icd-opencl-dev ocl-icd-libopencl1 jq libhwloc-dev
@@ -38,9 +38,12 @@ RUN set -eux; \
     cargo --version; \
     rustc --version;
 
-RUN git clone --depth 1 --branch main https://github.com/filecoin-project/curio.git /opt/curio
+RUN git clone --branch main https://github.com/filecoin-project/curio.git /opt/curio
 
 WORKDIR /opt/curio
+RUN git checkout v1.25.1
+# COPY curio.patch .
+# RUN git apply curio.patch
 
 ### make configurable filecoin-ffi build
 ARG FFI_BUILD_FROM_SOURCE=0
@@ -51,6 +54,7 @@ RUN make clean deps
 ARG RUSTFLAGS=""
 ARG GOFLAGS=""
 
-RUN make build
+RUN make 2k
 RUN install -C curio /usr/local/bin/curio
+RUN curio fetch-params 2048
 ENTRYPOINT ["sleep", "infinity"] 

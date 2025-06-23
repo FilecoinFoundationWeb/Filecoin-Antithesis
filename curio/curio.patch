@@ -1,0 +1,18 @@
+diff --git a/deps/apiinfo.go b/deps/apiinfo.go
+index 7fc2943..30dcf09 100644
+--- a/deps/apiinfo.go
++++ b/deps/apiinfo.go
+@@ -67,12 +67,7 @@ func GetFullNodeAPIV1Curio(ctx *cli.Context, ainfoCfg []string) (api.Chain, json
+ 		}
+ 
+ 		// Validate network match
+-		networkName, err := v1api.StateNetworkName(ctx.Context)
+-		if err != nil {
+-			clog.Warnf("Failed to get network name from node %s: %s", head.addr, err.Error())
+-			closer()
+-			continue
+-		}
++		networkName := "2k"
+ 
+ 		// Compare with binary's network using BuildTypeString()
+ 		if !(strings.HasPrefix(string(networkName), "test") || strings.HasPrefix(string(networkName), "local")) {

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-set -e
-
 echo CURIO_REPO_PATH="$CURIO_REPO_PATH"
 echo Wait for lotus is ready ...
 lotus wait-api
@@ -24,7 +22,7 @@ if [ ! -f "$CURIO_REPO_PATH"/.init.curio ]; then
   if [ ! -f "$CURIO_REPO_PATH"/.init.setup ]; then
     DEFAULT_WALLET=$(lotus wallet default)
     echo Create a new miner actor ...
-    lotus-shed miner create "$DEFAULT_WALLET" "$DEFAULT_WALLET" "$DEFAULT_WALLET" 8MiB
+    lotus-shed miner create "$DEFAULT_WALLET" "$DEFAULT_WALLET" "$DEFAULT_WALLET" 2KiB
     touch "$CURIO_REPO_PATH"/.init.setup
     lotus wallet export "$DEFAULT_WALLET" >"$CURIO_REPO_PATH"/default.key
   fi
@@ -40,12 +38,32 @@ if [ ! -f "$CURIO_REPO_PATH"/.init.curio ]; then
   echo Starting Curio node to attach storage ...
   curio run --nosync --layers seal,post,gui &
   CURIO_PID=$!
-  until curio cli --machine "$myip":12300 wait-api; do
-    echo "Waiting for the curio CLI to become ready..."
-    sleep 5
+  
+  # Wait for the API to be ready with a timeout
+  echo "Waiting for the curio API to become ready..."
+  max_attempts=12
+  attempt=1
+  ready=false
+  while [ $attempt -le $max_attempts ]; do
+      if curio cli --machine "$myip":12300 wait-api >/dev/null 2>&1; then
+          echo "Curio API is ready."
+          ready=true
+          break
+      fi
+      echo "Waiting for the curio API to become ready (attempt ${attempt}/${max_attempts})..."
+      sleep 5
+      attempt=$((attempt + 1))
   done
+
+  if [ "$ready" = false ]; then
+      echo "Curio API did not become ready in time. Exiting."
+      kill -15 $CURIO_PID || kill -9 $CURIO_PID
+      exit 1
+  fi
+  
   curio cli --machine "$myip":12300 log set-level --system chain --system chainxchg debug
-  curio cli --machine "$myip":12300 storage attach --init --seal --store "$CURIO_REPO_PATH"
+  curio cli --machine $myip:12300 storage attach --init --seal --store --unseal $CURIO_REPO_PATH
+
   touch "$CURIO_REPO_PATH"/.init.curio
   echo Stopping Curio node ...
   echo Try to stop curio...
@@ -58,4 +76,4 @@ FULLNODE_API_INFO=$TOKEN:/dns/forest/tcp/${FOREST_RPC_PORT}/http
 export FULLNODE_API_INFO
 lotus wallet import "$CURIO_REPO_PATH"/default.key || true
 echo Starting curio node ...
-exec curio run --nosync --name devnet --layers seal,post,gui
+exec curio run --nosync --layers seal,post,gui
