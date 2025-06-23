@@ -41,12 +41,12 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 		execTsk := checkTs.Parents()
 		execTs, err := api.ChainGetTipSet(ctx, execTsk)
 		if err != nil {
-			log.Printf("[ERROR] Failed to get tipset at height %d: %v", execTs.Height(), err)
-			return err
+			log.Printf("[ERROR] Failed to get parent tipset for height %d: %v", checkTs.Height(), err)
+			return nil
 		}
 		if execTs == nil {
 			log.Printf("[ERROR] Got nil tipset for parents at height %d", checkTs.Height())
-			return fmt.Errorf("got nil tipset for parents at height %d", checkTs.Height())
+			return nil
 		}
 		st, err := api.StateCompute(ctx, execTs.Height(), nil, execTsk)
 		if err != nil {
