@@ -60,6 +60,6 @@ forest-wallet --remote-wallet import ${LOTUS_2_DATA_DIR}/key || true
 forest-cli net connect "$(cat ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr)"
 forest-cli net connect "$(cat ${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr)"
 
-forest-cli sync wait&
+forest-cli sync wait
 echo "forest: ready."
 sleep infinity
