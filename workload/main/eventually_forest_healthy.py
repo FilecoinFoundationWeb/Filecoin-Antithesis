@@ -26,6 +26,8 @@ except:
     unreachable("[Forest] Node is unreachable during quiescence period", None)
     exit(1)
 
+lines = response_text.strip().split('\n')
+
 failed_checks = any(
     line.startswith('[!]') and 'f3 not running' not in line for line in lines
 )
