@@ -91,7 +91,7 @@ jobs:
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
       
   scheduled_run_b:
-    name: "Nightly @ 9 PM EST [Malicious Node]"
+    name: "Nightly @ 9 PM EST"
     if: github.event_name == 'schedule' && github.event.schedule == '0 1 * * *'
     runs-on: ubuntu-latest
     permissions:
@@ -105,15 +105,13 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:v2.0.4;forest:latest;lotus:latest;workload:latest;lotus-mal:latest
+          images: drand:v2.0.4;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
-          description: "Scheduled Filecoin Continuous Test: 12 hr nightly run [malicious]"
+          description: "Scheduled Filecoin Continuous Test: 12 hr nightly run #2"
           email_recipients: "filecoin-notifications.0607b605acbba4a098334f1cf7aad48b.show-sender.prefer-html@streams.zulipchat.com"
           additional_parameters: |-
             custom.duration=12
-            custom.is_lotus_malicious=true
-            custom.docker_compose_filename=docker-compose-mal.yml
-            antithesis.source=malicious
+            antithesis.source=second-main
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B07TJ2GA07J
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN_FOREST }}
       

@@ -22,18 +22,11 @@ print("Sleep completed!")
 try:
     response = requests.get(URL, timeout=5)
     response_text = response.text
-except Exception as e:
-    unreachable("[Forest] Node is unreachable during quiescence period", {"Exception": e})
+except:
+    unreachable("[Forest] Node is unreachable during quiescence period", None)
     exit(1)
 
 lines = response_text.strip().split('\n')
-
-print(lines)
-print(type(lines))
-
-for x in lines:
-    print(x)
-    print(type(x))
 
 failed_checks = any(
     line.startswith('[!]') and 'f3 not running' not in line for line in lines

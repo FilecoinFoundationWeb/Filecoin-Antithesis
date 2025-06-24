@@ -17,12 +17,13 @@ method_list=(
     Filecoin.ChainGetParentReceipts
 
     eth_feeHistory
+    eth_getBlockByNumber
 
-    # THE FOLLOWING ARE NOT YET SUPPORTED
-    #eth_getTransactionByHash
-    #eth_getBlockByNumber
-    #eth_getTransactionReceipt
-    #eth_getBlockReceipts
+    # METHODS ATTEMPTED BUT TODO
+    # eth_getTransactionReceipt
+    # eth_getBlockReceipts
+
+    # METHODS NOT YET ADDED
     #eth_getBalance
     #eth_getLogs
     #eth_call
@@ -79,10 +80,52 @@ get_random_epoch() {
     fi
 
     local range=$(($head_epoch - $min_epoch + 1))
-    local random_epoch
-    random_epoch=$((RANDOM % $range + $min_epoch))
+    local random_epoch=$((RANDOM % $range + $min_epoch))
 
     echo "$random_epoch"
+    return 0
+}
+
+get_random_block_number() {
+    local min_block=${1:-0}
+
+    # Get latest block number in hex via curl
+    local latest_block_hex=$(curl -s -X POST "$endpoint" \
+      -H "Content-Type: application/json" \
+      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' | jq -r '.result')
+
+    if [ $? -ne 0 ] || [ -z "$latest_block_hex" ]; then
+        echo "Failed to get latest block number"
+        return 1
+    fi
+
+    local latest_block_dec=$((16#${latest_block_hex:2}))
+
+    if [ "$latest_block_dec" -lt "$min_block" ]; then
+        echo "Invalid block range"
+        return 1
+    fi
+
+    local range=$(($latest_block_dec - $min_block + 1))
+    local random_block=$((RANDOM % $range + $min_block))
+
+    block_data=$(curl -s -X POST "$endpoint" \
+      -H "Content-Type: application/json" \
+      -d "{\"jsonrpc\": \"2.0\", \"method\":\"eth_getBlockByNumber\",\"params\":[\"$random_block\", false],\"id\":1}")
+
+    if [ $? -ne 0 ]; then
+        echo "Failed to get block data from chosen block"
+        return 1
+    fi
+
+    block_result=$(echo "$block_data" | jq -r '.result')
+
+    if [ "$block_result" == "null" ]; then
+        echo "Block $random_block is null or not available"
+        return 1
+    fi
+
+    echo "$random_block"
     return 0
 }
 
@@ -254,5 +297,17 @@ case $method in
         tx_hash=$(get_recent_tx_hash) || exit 0
         echo "transaction hash: $tx_hash"
         # ./lotus-bench rpc --method="$method:::[\"$tx_hash\"]" --endpoint="$endpoint"
+        ;;
+    eth_getBlockByNumber)
+        block_number=$(get_random_block_number) || exit 0
+        echo "random block number: $block_number"
+        full_tx_objects="false"
+        echo "full transaction objects: $full_tx_objects"
+        ./lotus-bench rpc --method="$method:::[\"$block_number\", $full_tx_objects]" --endpoint="$endpoint"
+        ;;
+    eth_getTransactionReceipt)
+        tx_hash=$(get_recent_tx_hash) || exit 0
+        echo "transaction hash: $tx_hash"
+        ./lotus-bench rpc --method="$method:::[$tx_hash]" --endpoint="$endpoint"
         ;;
 esac
