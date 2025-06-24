@@ -339,16 +339,13 @@ func FuzzBlockSubmission(ctx context.Context, api api.FullNode) error {
 		// The node should reject all these malformed blocks
 		assert.Always(err != nil,
 			"[Block Validation] Malformed block submission should be rejected",
-			EnhanceAssertDetails(
-				map[string]interface{}{
-					"test_case": tc.name,
-					"error":     err,
-					"property":  "Block validation",
-					"impact":    "Critical - validates block validation security",
-					"details":   "Node must reject malformed blocks to maintain chain integrity",
-				},
-				"block_fuzzer",
-			))
+			map[string]interface{}{
+				"test_case": tc.name,
+				"error":     err,
+				"property":  "Block validation",
+				"impact":    "Critical - validates block validation security",
+				"details":   "Node must reject malformed blocks to maintain chain integrity",
+			})
 
 		// Add a small delay between test cases
 		time.Sleep(100 * time.Millisecond)
