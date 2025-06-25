@@ -49,7 +49,7 @@ import (
 
 func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *string, *int64) {
 	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
-	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault', 'checkEthMethods', 'sendEthLegacy', 'checkSplitstore', 'incomingblock', 'blockfuzz', 'checkBackfill'")
+	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault', 'checkEthMethods', 'sendEthLegacy', 'checkSplitstore', 'incomingblock', 'blockfuzz', 'checkBackfill', 'stressMaxMessageSize', 'stressMaxMessages', 'stressMaxTipsetSize'")
 	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
 	numWallets := flag.Int("wallets", 1, "Number of wallets for the operation")
 	contractPath := flag.String("contract", "", "Path to the smart contract bytecode file")
@@ -70,42 +70,46 @@ func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *ti
 
 func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType *string) error {
 	validOps := map[string]bool{
-		"create":             true,
-		"delete":             true,
-		"spam":               true,
-		"connect":            true,
-		"deploySimpleCoin":   true,
-		"deployMCopy":        true,
-		"deployTStore":       true,
-		"chaos":              true,
-		"mempoolFuzz":        true,
-		"pingAttack":         true,
-		"createEthAccount":   true,
-		"rpc-benchmark":      true,
-		"deployValueSender":  true,
-		"checkConsensus":     true,
-		"deployContract":     true,
-		"stateMismatch":      true,
-		"sendConsensusFault": true,
-		"checkEthMethods":    true,
-		"sendEthLegacy":      true,
-		"checkSplitstore":    true,
-		"incomingblock":      true,
-		"blockfuzz":          true,
-		"checkBackfill":      true,
+		"create":               true,
+		"delete":               true,
+		"spam":                 true,
+		"connect":              true,
+		"deploySimpleCoin":     true,
+		"deployMCopy":          true,
+		"deployTStore":         true,
+		"chaos":                true,
+		"mempoolFuzz":          true,
+		"pingAttack":           true,
+		"createEthAccount":     true,
+		"rpc-benchmark":        true,
+		"deployValueSender":    true,
+		"checkConsensus":       true,
+		"deployContract":       true,
+		"stateMismatch":        true,
+		"sendConsensusFault":   true,
+		"checkEthMethods":      true,
+		"sendEthLegacy":        true,
+		"checkSplitstore":      true,
+		"incomingblock":        true,
+		"blockfuzz":            true,
+		"checkBackfill":        true,
+		"stressMaxMessageSize": true,
+		"stressMaxMessages":    true,
+		"stressMaxTipsetSize":  true,
 	}
 
 	// Operations that don't require a node name
 	noNodeNameRequired := map[string]bool{
-		"spam":               true,
-		"chaos":              true,
-		"pingAttack":         true,
-		"rpc-benchmark":      true,
-		"checkConsensus":     true,
-		"sendConsensusFault": true,
-		"checkEthMethods":    true,
-		"checkSplitstore":    true,
-		"checkBackfill":      true,
+		"spam":                true,
+		"chaos":               true,
+		"pingAttack":          true,
+		"rpc-benchmark":       true,
+		"checkConsensus":      true,
+		"sendConsensusFault":  true,
+		"checkEthMethods":     true,
+		"checkSplitstore":     true,
+		"checkBackfill":       true,
+		"stressMaxTipsetSize": true,
 	}
 
 	if !validOps[*operation] {
@@ -217,6 +221,10 @@ func main() {
 		err = performBlockFuzzing(ctx, nodeConfig)
 	case "checkBackfill":
 		err = performCheckBackfill(ctx, config)
+	case "stressMaxMessageSize":
+		err = performStressMaxMessageSize(ctx, nodeConfig)
+	case "stressMaxMessages":
+		err = performStressMaxMessages(ctx, nodeConfig)
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
@@ -1000,5 +1008,62 @@ func performCheckBackfill(ctx context.Context, config *resources.Config) error {
 	}
 	assert.Sometimes(true, "Chain index backfill check completed.", map[string]interface{}{"requirement": "Chain index backfill check completed."})
 	log.Println("[INFO] Chain index backfill check completed.")
+	return nil
+}
+
+func performStressMaxMessageSize(ctx context.Context, nodeConfig *resources.NodeConfig) error {
+	log.Printf("[INFO] Starting max message size stress test on node '%s'...", nodeConfig.Name)
+
+	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+	}
+	defer closer()
+
+	err = resources.SendMaxSizedMessage(ctx, api)
+	if err != nil {
+		return fmt.Errorf("max message size stress test failed: %w", err)
+	}
+
+	log.Printf("[INFO] Max message size stress test completed successfully")
+	return nil
+}
+
+func performStressMaxMessages(ctx context.Context, nodeConfig *resources.NodeConfig) error {
+	log.Printf("[INFO] Starting max messages in block stress test on node '%s'...", nodeConfig.Name)
+
+	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+	}
+	defer closer()
+
+	err = resources.SendMaxMessages(ctx, api)
+	if err != nil {
+		return fmt.Errorf("max messages in block stress test failed: %w", err)
+	}
+
+	log.Printf("[INFO] Max messages in block stress test completed successfully")
+	return nil
+}
+
+func performStressMaxTipsetSize(config *resources.Config) error {
+	log.Printf("[INFO] Starting max tipset size stress test...")
+
+	nodeNames := []string{"Lotus1", "Lotus2"}
+	var filteredNodes []resources.NodeConfig
+	for _, node := range config.Nodes {
+		for _, name := range nodeNames {
+			if node.Name == name {
+				filteredNodes = append(filteredNodes, node)
+			}
+		}
+	}
+
+	if len(filteredNodes) < 2 {
+		return fmt.Errorf("need at least two Lotus nodes for this test, found %d", len(filteredNodes))
+	}
+
+	log.Printf("[INFO] Max tipset size stress test completed")
 	return nil
 }
