@@ -39,16 +39,13 @@ func CheckChainBackfill(ctx context.Context, nodes []NodeConfig) error {
 			errMsg = err.Error()
 		}
 
-		details := EnhanceAssertDetails(
-			map[string]interface{}{
-				"error":    errMsg,
-				"height":   backfillHeight,
-				"property": "Chain index validation",
-				"impact":   "High - validates chain index consistency",
-				"details":  "Chain index validation ensures proper chain state tracking",
-			},
-			node.Name,
-		)
+		details := map[string]interface{}{
+			"error":    errMsg,
+			"height":   backfillHeight,
+			"property": "Chain index validation",
+			"impact":   "High - validates chain index consistency",
+			"details":  "Chain index validation ensures proper chain state tracking",
+		}
 		assert.Sometimes(err == nil, "[Chain Validation] Chain index validation should succeed", details)
 
 		if err == nil {

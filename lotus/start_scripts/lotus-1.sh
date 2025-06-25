@@ -25,6 +25,7 @@ export CGO_CFLAGS="-D__BLST_PORTABLE__"
 export LOTUS_CHAININDEXER_ENABLEINDEXER=true
 curl 10.20.20.21/info | jq -c > chain_info
 export DRAND_CHAIN_INFO=chain_info
+
 lotus --version
 cp /root/.genesis-sector-1/pre-seal-t01000.key ${LOTUS_1_DATA_DIR}/key
 cp /lotus_instrumented/customer/config-1.toml "${LOTUS_1_DATA_DIR}/config.toml"
@@ -35,11 +36,14 @@ lotus log set-level --system panic-reporter --system incrt --system bitswap-clie
 
 lotus daemon --lotus-make-genesis=${LOTUS_1_DATA_DIR}/devgen.car --genesis-template=${LOTUS_1_DATA_DIR}/localnet.json --bootstrap=false --config=${LOTUS_1_DATA_DIR}/config.toml lotus daemon --log-level=chain:INFO&
 lotus wait-api
-
-echo "lotus-1: finished waiting for API, importing wallet now."
+echo "lotus-1: finished waiting for API, proceeding with network setup."
 
 lotus net listen > ${LOTUS_1_DATA_DIR}/ipv4addr
 cat ${LOTUS_1_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr
 lotus net id > ${LOTUS_1_DATA_DIR}/p2pID
 lotus auth create-token --perm admin > ${LOTUS_1_DATA_DIR}/jwt
+
+# Connect to peers with retries
+connect_to_peers
+
 sleep infinity

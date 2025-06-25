@@ -78,80 +78,65 @@ func CheckEthMethods(ctx context.Context) error {
 
 			assert.Always(equal,
 				"[Block Consistency] Blocks should be identical regardless of retrieval method",
-				EnhanceAssertDetails(
-					map[string]interface{}{
-						"height":         i,
-						"node":           node.Name,
-						"blockByNumber":  ethBlockA,
-						"blockByHash":    ethBlockB,
-						"property":       "Block data consistency",
-						"impact":         "Critical - indicates API inconsistency",
-						"details":        "Block data must be identical when retrieved by number or hash",
-						"recommendation": "Check block retrieval and serialization logic",
-					},
-					"eth_methods",
-				))
+				map[string]interface{}{
+					"height":         i,
+					"node":           node.Name,
+					"blockByNumber":  ethBlockA,
+					"blockByHash":    ethBlockB,
+					"property":       "Block data consistency",
+					"impact":         "Critical - indicates API inconsistency",
+					"details":        "Block data must be identical when retrieved by number or hash",
+					"recommendation": "Check block retrieval and serialization logic",
+				})
 
 			// Additional specific field checks for better error reporting
 			assert.Always(ethBlockA.Hash == ethBlockB.Hash,
 				"[Block Hash] Block hashes must be identical",
-				EnhanceAssertDetails(
-					map[string]interface{}{
-						"height":        i,
-						"node":          node.Name,
-						"blockByNumber": ethBlockA.Hash,
-						"blockByHash":   ethBlockB.Hash,
-						"property":      "Block hash consistency",
-						"impact":        "Critical - indicates hash computation error",
-						"details":       "Block hash must be identical across retrieval methods",
-					},
-					"eth_methods",
-				))
+				map[string]interface{}{
+					"height":        i,
+					"node":          node.Name,
+					"blockByNumber": ethBlockA.Hash,
+					"blockByHash":   ethBlockB.Hash,
+					"property":      "Block hash consistency",
+					"impact":        "Critical - indicates hash computation error",
+					"details":       "Block hash must be identical across retrieval methods",
+				})
 
 			assert.Always(ethBlockA.Number == ethBlockB.Number,
 				"[Block Number] Block numbers must be identical",
-				EnhanceAssertDetails(
-					map[string]interface{}{
-						"height":        i,
-						"node":          node.Name,
-						"blockByNumber": ethBlockA.Number,
-						"blockByHash":   ethBlockB.Number,
-						"property":      "Block number consistency",
-						"impact":        "Critical - indicates block height mismatch",
-						"details":       "Block number must be identical across retrieval methods",
-					},
-					"eth_methods",
-				))
+				map[string]interface{}{
+					"height":        i,
+					"node":          node.Name,
+					"blockByNumber": ethBlockA.Number,
+					"blockByHash":   ethBlockB.Number,
+					"property":      "Block number consistency",
+					"impact":        "Critical - indicates block height mismatch",
+					"details":       "Block number must be identical across retrieval methods",
+				})
 
 			assert.Always(ethBlockA.ParentHash == ethBlockB.ParentHash,
 				"[Parent Hash] Parent hashes must be identical",
-				EnhanceAssertDetails(
-					map[string]interface{}{
-						"height":        i,
-						"node":          node.Name,
-						"blockByNumber": ethBlockA.ParentHash,
-						"blockByHash":   ethBlockB.ParentHash,
-						"property":      "Parent hash consistency",
-						"impact":        "Critical - indicates chain linking error",
-						"details":       "Parent hash must be identical across retrieval methods",
-					},
-					"eth_methods",
-				))
+				map[string]interface{}{
+					"height":        i,
+					"node":          node.Name,
+					"blockByNumber": ethBlockA.ParentHash,
+					"blockByHash":   ethBlockB.ParentHash,
+					"property":      "Parent hash consistency",
+					"impact":        "Critical - indicates chain linking error",
+					"details":       "Parent hash must be identical across retrieval methods",
+				})
 
 			assert.Always(ethBlockA.Timestamp == ethBlockB.Timestamp,
 				"[Block Timestamp] Block timestamps must be identical",
-				EnhanceAssertDetails(
-					map[string]interface{}{
-						"height":        i,
-						"node":          node.Name,
-						"blockByNumber": ethBlockA.Timestamp,
-						"blockByHash":   ethBlockB.Timestamp,
-						"property":      "Block timestamp consistency",
-						"impact":        "Critical - indicates timestamp mismatch",
-						"details":       "Block timestamp must be identical across retrieval methods",
-					},
-					"eth_methods",
-				))
+				map[string]interface{}{
+					"height":        i,
+					"node":          node.Name,
+					"blockByNumber": ethBlockA.Timestamp,
+					"blockByHash":   ethBlockB.Timestamp,
+					"property":      "Block timestamp consistency",
+					"impact":        "Critical - indicates timestamp mismatch",
+					"details":       "Block timestamp must be identical across retrieval methods",
+				})
 
 			if equal {
 				fmt.Printf("[OK] blocks received via eth_getBlockByNumber and eth_getBlockByHash for tipset @%d are identical\n", i)

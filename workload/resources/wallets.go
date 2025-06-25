@@ -82,30 +82,20 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 
 	sm, err := api.MpoolPushMessage(ctx, msg, nil)
 	if err != nil {
-		details := map[string]any{
-			"from":         from.String(),
-			"to":           to.String(),
-			"error":        err.Error(),
-			"value":        amount.String(),
-			"from_balance": fromBalance.String(),
-		}
 		assert.Sometimes(true,
 			"[Message Push] Mpool push message.",
-			EnhanceAssertDetails(
-				map[string]interface{}{
-					"from":           from.String(),
-					"to":             to.String(),
-					"error":          err.Error(),
-					"value":          amount.String(),
-					"from_balance":   fromBalance.String(),
-					"property":       "Message pool operation",
-					"impact":         "Medium - temporary mempool rejection",
-					"details":        "Message push to mempool failed, may be temporary",
-					"recommendation": "Check message validity and node mempool state",
-				},
-				"wallet_ops",
-			))
-		log.Printf("Failed to push message to mempool: %v (Details: %+v)", err, details)
+			map[string]interface{}{
+				"from":           from.String(),
+				"to":             to.String(),
+				"error":          err.Error(),
+				"value":          amount.String(),
+				"from_balance":   fromBalance.String(),
+				"property":       "Message pool operation",
+				"impact":         "Medium - temporary mempool rejection",
+				"details":        "Message push to mempool failed, may be temporary",
+				"recommendation": "Check message validity and node mempool state",
+			})
+		log.Printf("Failed to push message to mempool: %v", err)
 		return fmt.Errorf("failed to push message to mempool: %w", err)
 	}
 	if sm == nil {
@@ -271,30 +261,20 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 	// Push message to mempool with automatic gas estimation
 	sm, err := api.MpoolPushMessage(ctx, msg, nil)
 	if err != nil {
-		details := map[string]any{
-			"from":        from.String(),
-			"to":          to.String(),
-			"eth_address": ethAddr,
-			"error":       err.Error(),
-			"value":       amountFIL.String(),
-		}
 		assert.Sometimes(true,
 			"[Message Push] Mpool push message to ETH address.",
-			EnhanceAssertDetails(
-				map[string]interface{}{
-					"from":           from.String(),
-					"to":             to.String(),
-					"eth_address":    ethAddr,
-					"error":          err.Error(),
-					"value":          amountFIL.String(),
-					"property":       "Message pool operation",
-					"impact":         "Medium - temporary mempool rejection",
-					"details":        "Message push to mempool failed, may be temporary",
-					"recommendation": "Check message validity and node mempool state",
-				},
-				"wallet_ops",
-			))
-		log.Printf("Failed to push message to mempool: %v (Details: %+v)", err, details)
+			map[string]interface{}{
+				"from":           from.String(),
+				"to":             to.String(),
+				"eth_address":    ethAddr,
+				"error":          err.Error(),
+				"value":          amountFIL.String(),
+				"property":       "Message pool operation",
+				"impact":         "Medium - temporary mempool rejection",
+				"details":        "Message push to mempool failed, may be temporary",
+				"recommendation": "Check message validity and node mempool state",
+			})
+		log.Printf("Failed to push message to mempool: %v", err)
 		return fmt.Errorf("failed to push message to mempool: %w", err)
 	}
 

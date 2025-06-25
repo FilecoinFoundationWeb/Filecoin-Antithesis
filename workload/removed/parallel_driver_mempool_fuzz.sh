@@ -8,9 +8,8 @@ NODE_NAMES=("Lotus1" "Lotus2")
 random_index=$((RANDOM % ${#NODE_NAMES[@]}))
 NODE=${NODE_NAMES[$random_index]}
 
-COUNT=50
-CONCURRENCY=$((RANDOM % 5 + 3))
-DURATION="30s"
+# Send more messages since we're not doing complex mutations anymore
+COUNT=100
 
 if [ ! -f "$APP_BINARY" ]; then
     echo "Error: $APP_BINARY not found."
@@ -25,9 +24,7 @@ fi
 $APP_BINARY -operation "$OPERATION" \
     -node "$NODE" \
     -count "$COUNT" \
-    -concurrency "$CONCURRENCY" \
-    -config "$CONFIG_FILE" \
-    -duration "$DURATION"
+    -config "$CONFIG_FILE"
 
 exit_code=$?
 if [ $exit_code -ne 0 ]; then

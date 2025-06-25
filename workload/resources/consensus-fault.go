@@ -32,10 +32,15 @@ func SendConsensusFault(ctx context.Context) error {
 		return fmt.Errorf("failed to get chain head: %w", err)
 	}
 
-	// Try head-1 tipset
-	ts, err := api1.ChainGetTipSetByHeight(ctx, head.Height()-2, types.EmptyTSK)
+	// Try head-10 tipset to ensure we're well behind the current epoch
+	targetHeight := head.Height() - 10
+	if targetHeight <= 0 {
+		return fmt.Errorf("chain height too low: %d", head.Height())
+	}
+
+	ts, err := api1.ChainGetTipSetByHeight(ctx, targetHeight, types.EmptyTSK)
 	if err != nil {
-		return fmt.Errorf("failed to get tipset: %w", err)
+		return fmt.Errorf("failed to get tipset at height %d: %w", targetHeight, err)
 	}
 
 	// Try with first block from tipset
@@ -110,10 +115,15 @@ func SendConsensusFault(ctx context.Context) error {
 		return fmt.Errorf("failed to get chain head: %w", err)
 	}
 
-	// Try head-1 tipset
-	ts, err = api2.ChainGetTipSetByHeight(ctx, head.Height()-2, types.EmptyTSK)
+	// Try head-10 tipset for second miner as well
+	targetHeight = head.Height() - 10
+	if targetHeight <= 0 {
+		return fmt.Errorf("chain height too low: %d", head.Height())
+	}
+
+	ts, err = api2.ChainGetTipSetByHeight(ctx, targetHeight, types.EmptyTSK)
 	if err != nil {
-		return fmt.Errorf("failed to get tipset: %w", err)
+		return fmt.Errorf("failed to get tipset at height %d: %w", targetHeight, err)
 	}
 
 	// Try with first block from tipset
