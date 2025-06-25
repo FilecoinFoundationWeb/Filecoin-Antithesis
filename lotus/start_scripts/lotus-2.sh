@@ -24,6 +24,28 @@ export DRAND_CHAIN_INFO=chain_info
 
 lotus --version
 
+# Function to connect to peers with retries
+connect_to_peers() {
+    max_attempts=5
+    for peer in "${LOTUS_1_DATA_DIR}/ipv4addr" "${FOREST_DATA_DIR}/forest-listen-addr"; do
+        if [ -f "$peer" ]; then
+            attempt=1
+            while [ $attempt -le $max_attempts ]; do
+                echo "lotus-2: Attempting to connect to peer from $peer (attempt $attempt/$max_attempts)"
+                if lotus net connect $(cat $peer); then
+                    echo "lotus-2: Successfully connected to peer from $peer"
+                    break
+                fi
+                echo "lotus-2: Failed to connect to peer from $peer"
+                attempt=$((attempt + 1))
+                sleep 5
+            done
+        else
+            echo "lotus-2: Peer address file $peer not found"
+        fi
+    done
+}
+
 # Initialization steps
 if [ "$INIT_MODE" = "true" ]; then
     echo "lotus-2: Running in initialization mode..."
@@ -49,12 +71,7 @@ cat ${LOTUS_2_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_2_DATA_DI
 lotus net id > ${LOTUS_2_DATA_DIR}/p2pID
 lotus auth create-token --perm admin > ${LOTUS_2_DATA_DIR}/jwt
 
-# Connect to lotus-1 if it exists
-if [ -f "${LOTUS_1_DATA_DIR}/ipv4addr" ]; then
-    echo "lotus-2: Connecting to lotus-1..."
-    lotus net connect $(cat ${LOTUS_1_DATA_DIR}/ipv4addr)
-else
-    echo "lotus-2: Could not find lotus-1 address, skipping connection"
-fi
+# Connect to peers with retries
+connect_to_peers
 
 sleep infinity
