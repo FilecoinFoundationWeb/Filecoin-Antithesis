@@ -23,8 +23,22 @@ COPY ./forest_config.toml.tpl .
 # Step 4: Copy and apply the patch (this changes more frequently, so it's placed later)
 # COPY ./forest.patch ./forest.patch
 # RUN git apply ./forest.patch
+
 # Step 5: make install + Rust instrumentation for code coverage 
-RUN make install
+#RUN make install
+
+# Step 5: cargo build forest-cli, forest-tool, anmd forest-wallet.
+
+RUN cargo build --release --bin forest-cli
+RUN cp /forest/target/release/forest-cli /usr/local/cargo/bin/forest-cli
+
+RUN cargo build --release --bin forest-tool
+RUN cp /forest/target/release/forest-tool /usr/local/cargo/bin/forest-tool
+
+RUN cargo build --release --bin forest-wallet
+RUN cp /forest/target/release/forest-wallet /usr/local/cargo/bin/forest-wallet
+
+
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
 ENV LD_LIBRARY_PATH=/usr/local/lib
 ENV RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 \ 

@@ -6,14 +6,15 @@ echo "Running regression test for forest MessagePool panic"
 
 export TOKEN=$(cat ${FOREST_DATA_DIR}/jwt)
 export FULLNODE_API_INFO=$TOKEN:/ip4/${FOREST_IP}/tcp/${FOREST_RPC_PORT}/http
-export FOREST_RPC_URL=${FOREST_IP}:${FOREST_RPC_PORT} 
+export FOREST_RPC_URL="http://${FOREST_IP}:${FOREST_RPC_PORT}/rpc/v0"
 echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
+echo "FOREST_RPC_URL: $FOREST_RPC_URL"
 
 # Get the last 100 tipsets and send MpoolSelect requests for each
 forest-cli chain head --format json -n 100 | \
 jq -c '.[] | { cids: .cids }' | \
 while read -r line; do
-  CIDS=$(echo "$line" | jq -c '[.cids[] | {"\/": .}]')
+  CIDS=$(echo "$line" | jq -c '[.cids[] | {"/": .}]')
   JSON=$(jq -n --argjson cids "$CIDS" --argjson id 1 '{
     jsonrpc: "2.0",
     method: "Filecoin.MpoolSelect",
