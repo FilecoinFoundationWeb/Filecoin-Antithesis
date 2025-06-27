@@ -1,7 +1,7 @@
 FROM docker.io/rust:1.81-bookworm as builder
 
 # Pin forest to a specific branch
-ARG GIT_COMMIT="9ae9c64"
+ARG GIT_COMMIT="3894679"
 
 # Step 1: Install dependencies
 RUN apt-get update && \
@@ -23,7 +23,6 @@ COPY ./forest_config.toml.tpl .
 # Step 4: Copy and apply the patch (this changes more frequently, so it's placed later)
 # COPY ./forest.patch ./forest.patch
 # RUN git apply ./forest.patch
-
 # Step 5: make install + Rust instrumentation for code coverage 
 RUN make install
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
