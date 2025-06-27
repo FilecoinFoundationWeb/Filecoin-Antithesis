@@ -32,4 +32,4 @@ failed_checks = any(
     line.startswith('[!]') for line in lines
 )
 
-always(not failed_checks, "[Forest] Node is healthy during quiescence check (Not checking F3)", {"Response Text": response_text})
+always(not failed_checks, "[Forest] Node is healthy during quiescence check", {"Response Text": response_text})
