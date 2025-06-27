@@ -257,6 +257,7 @@ services:
       - ./data/forest:${FOREST_DATA_DIR}
       - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
       - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
+      - ./forest/forest_mpool_select_killer.sh:/opt/antithesis/test/v1/main/serial_driver_forest_mpool_select_killer.sh
     environment:
       - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${LOTUS_MINER_1_ACTOR_ADDRESS}
       - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
