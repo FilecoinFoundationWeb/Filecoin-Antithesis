@@ -11,10 +11,14 @@ echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 echo "FOREST_RPC_URL: $FOREST_RPC_URL"
 
 # Check if we have 100 tipsets
-HEIGHT=$(forest-cli chain head --format json | jq '.[0].height')
-if [ "$HEIGHT" -lt 100 ]; then
-  echo "Current height: $HEIGHT"
+HEIGHT=$(forest-cli chain head --format json | jq -r '.height')
+INT_HEIGHT=$(($HEIGHT))
+echo "Current height: $HEIGHT"
+if [ "$INT_HEIGHT" -lt 100 ]; then
   echo "Chain head is not at 100 yet!. Exiting script.."
+  exit 1
+else
+  echo "Chain head is at 100!. Running script.."
   exit 1
 fi
 
