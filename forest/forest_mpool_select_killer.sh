@@ -10,6 +10,14 @@ export FOREST_RPC_URL="http://${FOREST_IP}:${FOREST_RPC_PORT}/rpc/v0"
 echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 echo "FOREST_RPC_URL: $FOREST_RPC_URL"
 
+# Check if we have 100 tipsets
+HEIGHT=$(forest-cli chain head --format json | jq '.[0].height')
+if [ "$HEIGHT" -lt 100 ]; then
+  echo "Current height: $HEIGHT"
+  echo "Chain head is not at 100 yet!. Exiting script.."
+  exit 1
+fi
+
 # Get the last 100 tipsets and send MpoolSelect requests for each
 forest-cli chain head --format json -n 100 | \
 jq -c '.[] | { cids: .cids }' | \
