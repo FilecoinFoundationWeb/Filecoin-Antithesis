@@ -1,7 +1,7 @@
 FROM docker.io/rust:1.81-bookworm as builder
 
 # Pin forest to a specific branch
-ARG GIT_COMMIT="9ae9c64"
+ARG GIT_COMMIT="3894679"
 
 # Step 1: Install dependencies
 RUN apt-get update && \
@@ -24,8 +24,16 @@ COPY ./forest_config.toml.tpl .
 # COPY ./forest.patch ./forest.patch
 # RUN git apply ./forest.patch
 
-# Step 5: make install + Rust instrumentation for code coverage 
-RUN make install
+# Step 5: Build forest binaries: forest-cli, forest-tool, forest-wallet, and instrumented forest
+RUN cargo build --release --bin forest-cli
+RUN cp /forest/target/release/forest-cli /usr/local/cargo/bin/forest-cli
+
+RUN cargo build --release --bin forest-tool
+RUN cp /forest/target/release/forest-tool /usr/local/cargo/bin/forest-tool
+
+RUN cargo build --release --bin forest-wallet
+RUN cp /forest/target/release/forest-wallet /usr/local/cargo/bin/forest-wallet
+
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
 ENV LD_LIBRARY_PATH=/usr/local/lib
 ENV RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 \ 
