@@ -13,7 +13,7 @@ export FOREST_RPC_URL="http://${FOREST_IP}:${FOREST_RPC_PORT}/rpc/v0"
 
 # Check if we have 100 tipsets
 TIPSETS=$(forest-cli chain head --format json -n 100)
-HEIGHT=$($TIPSETS | jq 'length')
+HEIGHT=$(echo "$TIPSETS" | jq 'length')
 echo "Current height: $HEIGHT"
 if [ "$HEIGHT" -lt 100 ]; then
   echo "Chain head is not at 100 yet! Exiting script.."
@@ -23,8 +23,7 @@ else
 fi
 
 # Get the last 100 tipsets and send MpoolSelect requests for each
-$TIPSETS \
-jq -c '.[] | { cids: .cids }' | \
+echo "$TIPSETS" | jq -c '.[] | { cids: .cids }' | \
 while read -r line; do
   CIDS=$(echo "$line" | jq -c '[.cids[] | {"/": .}]')
   JSON=$(jq -n --argjson cids "$CIDS" --argjson id 1 '{
