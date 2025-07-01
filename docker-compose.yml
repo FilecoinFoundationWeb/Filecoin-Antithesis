@@ -285,6 +285,8 @@ services:
     environment:
       - CURIO_IP=${CURIO_IP}
     ports:
+      - "443:443"
+      - "80:80"
       - "12300:12300"
       - "4701:4701"
       - "32100:32100"
