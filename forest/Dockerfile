@@ -25,13 +25,13 @@ COPY ./forest_config.toml.tpl .
 # RUN git apply ./forest.patch
 
 # Step 5: Build forest binaries: forest-cli, forest-tool, forest-wallet, and instrumented forest
-RUN cargo build --release --bin forest-cli
+RUN cargo build --quiet --release --bin forest-cli 
 RUN cp /forest/target/release/forest-cli /usr/local/cargo/bin/forest-cli
-
-RUN cargo build --release --bin forest-tool
+ 
+RUN cargo build --quiet --release --bin forest-tool
 RUN cp /forest/target/release/forest-tool /usr/local/cargo/bin/forest-tool
 
-RUN cargo build --release --bin forest-wallet
+RUN cargo build --quiet --release --bin forest-wallet
 RUN cp /forest/target/release/forest-wallet /usr/local/cargo/bin/forest-wallet
 
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
@@ -43,7 +43,7 @@ ENV RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-c
 WORKDIR /forest
 RUN sed -i 's/strip = true/strip = false/' Cargo.toml
 # change cargo.toml profile for instrumentation
-RUN cargo build --release --bin forest
+RUN cargo build --quiet --release --bin forest 
 RUN cp /forest/target/release/forest /usr/local/cargo/bin/forest
 # Overwrite the forest binary from the make install
 WORKDIR /
