@@ -18,7 +18,6 @@ if [ "$HEIGHT" -lt 100 ]; then
   exit 1
 else
   echo "Chain head is at 100!. Running script.."
-  exit 1
 fi
 
 # Get the last 100 tipsets and send MpoolSelect requests for each
