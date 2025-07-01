@@ -27,12 +27,15 @@ COPY ./forest_config.toml.tpl .
 # Step 5: Build forest binaries: forest-cli, forest-tool, forest-wallet, and instrumented forest
 RUN cargo build --quiet --release --bin forest-cli 
 RUN cp /forest/target/release/forest-cli /usr/local/cargo/bin/forest-cli
+RUN cargo clean
  
 RUN cargo build --quiet --release --bin forest-tool
 RUN cp /forest/target/release/forest-tool /usr/local/cargo/bin/forest-tool
+RUN cargo clean
 
 RUN cargo build --quiet --release --bin forest-wallet
 RUN cp /forest/target/release/forest-wallet /usr/local/cargo/bin/forest-wallet
+RUN cargo clean
 
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
 ENV LD_LIBRARY_PATH=/usr/local/lib
@@ -45,6 +48,7 @@ RUN sed -i 's/strip = true/strip = false/' Cargo.toml
 # change cargo.toml profile for instrumentation
 RUN cargo build --quiet --release --bin forest 
 RUN cp /forest/target/release/forest /usr/local/cargo/bin/forest
+RUN cargo clean
 # Overwrite the forest binary from the make install
 WORKDIR /
 RUN mkdir /symbols && ln -s /usr/local/cargo/bin/forest /symbols/forest
