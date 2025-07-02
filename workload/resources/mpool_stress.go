@@ -62,14 +62,14 @@ func SendMaxSizedMessage(ctx context.Context, nodeAPI api.FullNode) error {
 }
 
 func SendMaxMessages(ctx context.Context, nodeAPI api.FullNode) error {
-	log.Println("[INFO] Starting test for maximum messages in a block...")
+	log.Println("[INFO] Starting test for sending 200 messages...")
 
 	fromAddr, err := nodeAPI.WalletDefaultAddress(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get default wallet: %w", err)
 	}
 
-	for i := 0; i < MaxMessagesPerBlock; i++ {
+	for i := 0; i < 200; i++ {
 		toAddr, err := nodeAPI.WalletNew(ctx, types.KTSecp256k1)
 		if err != nil {
 			log.Printf("[WARN] failed to create new wallet for destination: %v", err)
@@ -100,6 +100,6 @@ func SendMaxMessages(ctx context.Context, nodeAPI api.FullNode) error {
 		log.Printf("[DEBUG] Pushed message %d with CID %s", i, signedMsg.Cid())
 	}
 
-	log.Printf("[INFO] Pushed %d messages to the mempool.", MaxMessagesPerBlock)
+	log.Printf("[INFO] Pushed 200 messages to the mempool.")
 	return nil
 }
