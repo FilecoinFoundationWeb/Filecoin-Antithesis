@@ -47,9 +47,9 @@ import (
 //   - Make sure to return nil for success or an error if something fails
 //   - Follow the pattern of other operation functions for consistency
 
-func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *string, *int64) {
+func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *string, *int64, *string) {
 	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
-	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault', 'checkEthMethods', 'sendEthLegacy', 'checkSplitstore', 'incomingblock', 'blockfuzz', 'checkBackfill', 'stressMaxMessageSize', 'stressMaxMessages', 'stressMaxTipsetSize'")
+	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault', 'checkEthMethods', 'sendEthLegacy', 'checkSplitstore', 'incomingblock', 'blockfuzz', 'checkBackfill', 'stressMaxMessageSize', 'stressMaxMessages', 'stressMaxTipsetSize', 'createEthKeystore'")
 	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
 	numWallets := flag.Int("wallets", 1, "Number of wallets for the operation")
 	contractPath := flag.String("contract", "", "Path to the smart contract bytecode file")
@@ -63,9 +63,10 @@ func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *ti
 	concurrency := flag.Int("concurrency", 5, "Number of concurrent operations")
 	rpcURL := flag.String("rpc-url", "", "RPC URL for eth_chainId operation")
 	height := flag.Int64("height", 0, "Chain height to check consensus at (0 for current height)")
+	keystoreDir := flag.String("keystore-dir", "", "Directory to store the Ethereum keystore")
 
 	flag.Parse()
-	return configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, rpcURL, height
+	return configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, rpcURL, height, keystoreDir
 }
 
 func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType *string) error {
@@ -96,6 +97,7 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		"stressMaxMessageSize": true,
 		"stressMaxMessages":    true,
 		"stressMaxTipsetSize":  true,
+		"createEthKeystore":    true,
 	}
 
 	// Operations that don't require a node name
@@ -110,6 +112,7 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		"checkSplitstore":     true,
 		"checkBackfill":       true,
 		"stressMaxTipsetSize": true,
+		"createEthKeystore":   true,
 	}
 
 	if !validOps[*operation] {
@@ -144,7 +147,7 @@ func main() {
 	log.Println("[INFO] Starting workload...")
 
 	// Parse command line flags
-	configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, rpcURL, height := parseFlags()
+	configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, rpcURL, height, keystoreDir := parseFlags()
 
 	// Create context
 	ctx := context.Background()
@@ -225,6 +228,45 @@ func main() {
 		err = performStressMaxMessageSize(ctx, nodeConfig)
 	case "stressMaxMessages":
 		err = performStressMaxMessages(ctx, nodeConfig)
+	case "createEthKeystore":
+		if *keystoreDir == "" {
+			log.Printf("[ERROR] keystore-dir is required for createEthKeystore operation")
+			os.Exit(1)
+		}
+
+		// Create keystore and get Ethereum address
+		ethAddr, keystorePath, err := resources.CreateEthKeystore(*keystoreDir)
+		if err != nil {
+			log.Printf("[ERROR] Failed to create Ethereum keystore: %v", err)
+			os.Exit(1)
+		}
+
+		// Connect to Lotus node to fund the account
+		api, closer, err := resources.ConnectToNode(ctx, config.Nodes[0])
+		if err != nil {
+			log.Printf("[ERROR] Failed to connect to Lotus node: %v", err)
+			os.Exit(1)
+		}
+		defer closer()
+
+		// Get genesis wallet to fund the new account
+		genesisWallet, err := resources.GetGenesisWallet(ctx, api)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get genesis wallet: %v", err)
+			os.Exit(1)
+		}
+
+		// Fund the Ethereum account
+		err = resources.SendFundsToEthAddress(ctx, api, genesisWallet, ethAddr.Hex())
+		if err != nil {
+			log.Printf("[ERROR] Failed to fund Ethereum account: %v", err)
+			os.Exit(1)
+		}
+
+		log.Printf("[INFO] Successfully created and funded Ethereum keystore:")
+		log.Printf("  - Address: %s", ethAddr.Hex())
+		log.Printf("  - Keystore: %s", keystorePath)
+		log.Printf("  - Password file: %s/password.txt", *keystoreDir)
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
