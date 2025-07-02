@@ -29,7 +29,7 @@ except:
 lines = response_text.strip().split('\n')
 
 failed_checks = any(
-    line.startswith('[!]') and 'f3 not running' not in line for line in lines
+    line.startswith('[!]') for line in lines
 )
 
-always(not failed_checks, "[Forest] Node is healthy during quiescence check (Not checking F3)", {"Response Text": response_text})
+always(not failed_checks, "[Forest] Node is healthy during quiescence check", {"Response Text": response_text})
