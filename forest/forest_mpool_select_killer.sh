@@ -11,18 +11,29 @@ export FOREST_RPC_URL="http://${FOREST_IP}:${FOREST_RPC_PORT}/rpc/v0"
 #echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 #echo "FOREST_RPC_URL: $FOREST_RPC_URL"
 
-# Check if we have 100 tipsets
-TIPSETS=$(forest-cli chain head --format json -n 100)
-HEIGHT=$(echo "$TIPSETS" | jq 'length')
-echo "Current height: $HEIGHT"
-if [ "$HEIGHT" -lt 100 ]; then
-  echo "Chain head is not at 100 yet! Exiting script.."
+MAX_TIPSETS=100 
+
+CURRENT_HEIGHT=$(forest-cli chain head --format json | jq '.[0].epoch')
+echo "Current height: $CURRENT_HEIGHT"
+if [ "$CURRENT_HEIGHT" -lt 1 ]; then
+  echo "Chain head is at 0. Exiting script.."
+  exit 1
+elif [ "$CURRENT_HEIGHT" == "null" ]; then
+  echo "Could not get chain head. Exiting script.."
   exit 1
 else
-  echo "Chain head is at 100! Running script.."
+  echo "Running script.."
 fi
 
-# Get the last 100 tipsets and send MpoolSelect requests for each
+if [ "$CURRENT_HEIGHT" -gt "$MAX_TIPSETS" ]; then
+  NUM_TIPSETS=$MAX_TIPSETS
+else
+  NUM_TIPSETS=$CURRENT_HEIGHT
+fi
+
+TIPSETS=$(forest-cli chain head --format json -n "$NUM_TIPSETS")
+
+# Get the tipsets and send MpoolSelect requests for each
 echo "$TIPSETS" | jq -c '.[] | { cids: .cids }' | \
 while read -r line; do
   CIDS=$(echo "$line" | jq -c '[.cids[] | {"/": .}]')
@@ -42,4 +53,6 @@ while read -r line; do
 
 done
 
+echo #add new line before
 echo "Finished running regression test for forest MessagePool panic"
+exit 0
