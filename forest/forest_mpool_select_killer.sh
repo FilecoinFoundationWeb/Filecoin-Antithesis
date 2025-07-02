@@ -11,7 +11,7 @@ export FOREST_RPC_URL="http://${FOREST_IP}:${FOREST_RPC_PORT}/rpc/v0"
 #echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 #echo "FOREST_RPC_URL: $FOREST_RPC_URL"
 
-MAX_TIPSETS=100 
+MAX_TIPSETS=50
 
 CURRENT_HEIGHT=$(forest-cli chain head --format json | jq '.[0].epoch')
 echo "Current height: $CURRENT_HEIGHT"
