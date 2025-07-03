@@ -38,7 +38,12 @@ ENV GOPATH="/go"
 # Create directories for Go code and smart contracts
 WORKDIR /opt/antithesis
 RUN git clone https://github.com/FilOzone/pdp.git pdp 
-RUN cd pdp && npm install && make build
+RUN cd pdp && make build
+
+WORKDIR /opt/antithesis/
+RUN git clone https://github.com/FilOzone/filecoin-services-payments.git payments
+RUN cd payments && forge build
+
 # Copy the necessary Go files and resources
 COPY ./entrypoint ./entrypoint
 COPY ./resources ./resources

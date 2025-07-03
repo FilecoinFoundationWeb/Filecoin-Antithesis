@@ -1,18 +1,34 @@
-diff --git a/deps/apiinfo.go b/deps/apiinfo.go
-index 7fc2943..30dcf09 100644
---- a/deps/apiinfo.go
-+++ b/deps/apiinfo.go
-@@ -67,12 +67,7 @@ func GetFullNodeAPIV1Curio(ctx *cli.Context, ainfoCfg []string) (api.Chain, json
- 		}
+--- a/harmony/harmonydb/harmonydb.go
++++ b/harmony/harmonydb/harmonydb.go
+@@ -25,6 +25,11 @@ import (
+        "github.com/filecoin-project/curio/deps/config"
+ )
  
- 		// Validate network match
--		networkName, err := v1api.StateNetworkName(ctx.Context)
--		if err != nil {
--			clog.Warnf("Failed to get network name from node %s: %s", head.addr, err.Error())
--			closer()
--			continue
--		}
-+		networkName := "2k"
++var logger = logging.Logger("harmonydb")
++
++//go:embed sql
++var fs embed.FS
++
+ type ITestID string
  
- 		// Compare with binary's network using BuildTypeString()
- 		if !(strings.HasPrefix(string(networkName), "test") || strings.HasPrefix(string(networkName), "local")) {
+ // ItestNewID see ITestWithID doc
+@@ -41,8 +46,6 @@ type DB struct {
+        BTFP      atomic.Uintptr // BeginTransactionFramePointer
+ }
+ 
+-var logger = logging.Logger("harmonydb")
+-
+ // NewFromConfig is a convenience function.
+ // In usage:
+ //
+@@ -265,9 +268,6 @@ retry:
+        return nil
+ }
+ 
+-//go:embed sql
+-var fs embed.FS
+-
+ func (db *DB) upgrade() error {
+        // Does the version table exist? if not, make it.
+        // NOTE: This cannot change except via the next sql file.
+		

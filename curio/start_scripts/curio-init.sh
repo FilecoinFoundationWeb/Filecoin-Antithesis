@@ -7,7 +7,7 @@ echo Wait for lotus is ready ...
 lotus wait-api
 head=0
 # Loop until the head is greater than 9
-while [[ $head -le 20 ]]; do
+while [[ $head -le 9 ]]; do
     head=$(lotus chain list | awk '{print $1}' | awk -F':' '{print $1}' | tail -1)
     if [[ $head -le 9 ]]; then
         echo "Current head: $head, which is not greater than 9. Waiting..."
@@ -128,6 +128,7 @@ if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
   # Create JWT token
   echo "Creating JWT token..."
   pdptool create-jwt-token pdp | grep -v "JWT Token:" > jwt_token.txt
+  cp /var/lib/curio/jwt_token.txt /root/devgen/contracts/jwt_token.txt
 
   # Test connectivity to the PDP service endpoint
   echo "Testing PDP connectivity..."

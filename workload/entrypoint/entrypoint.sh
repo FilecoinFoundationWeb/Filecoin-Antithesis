@@ -103,6 +103,9 @@ echo "Contract addresses have been saved to $SHARED_DIR"
 echo "JSON file: $SHARED_DIR/contract-addresses.json"
 echo "Individual address files have been created in $SHARED_DIR"
 
+# cd /opt/antithesis/payments/
+# make deploy-devnet
+
 # Verify the files were created
 if [ -f "$SHARED_DIR/contract-addresses.json" ]; then
     echo "Contract addresses JSON file was created successfully"

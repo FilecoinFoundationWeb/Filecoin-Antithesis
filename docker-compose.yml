@@ -301,10 +301,6 @@ services:
     depends_on:
       lotus-1:
         condition: service_healthy
-      lotus-2:
-        condition: service_healthy
-      forest:
-        condition: service_healthy
       yugabyte:
         condition: service_started
 
