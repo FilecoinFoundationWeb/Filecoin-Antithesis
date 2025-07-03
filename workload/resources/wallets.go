@@ -243,7 +243,7 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 	}
 	fmt.Printf("to: %s\n", to)
 	// Create message
-	amountFIL, err := types.ParseFIL("1000")
+	amountFIL, err := types.ParseFIL("10000")
 	if err != nil {
 		return fmt.Errorf("failed to parse amount: %w", err)
 	}

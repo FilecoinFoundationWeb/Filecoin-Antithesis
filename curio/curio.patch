@@ -1,34 +1,25 @@
---- a/harmony/harmonydb/harmonydb.go
-+++ b/harmony/harmonydb/harmonydb.go
-@@ -25,6 +25,11 @@ import (
-        "github.com/filecoin-project/curio/deps/config"
- )
+--- a/pdp/contract/addresses.go	2025-07-03 12:06:40
++++ b/pdp/contract/addresses.go	2025-07-03 12:07:07
+@@ -2,6 +2,7 @@
  
-+var logger = logging.Logger("harmonydb")
-+
-+//go:embed sql
-+var fs embed.FS
-+
- type ITestID string
+ import (
+ 	"math/big"
++	"os"
  
- // ItestNewID see ITestWithID doc
-@@ -41,8 +46,6 @@ type DB struct {
-        BTFP      atomic.Uintptr // BeginTransactionFramePointer
+ 	"github.com/ethereum/go-ethereum/common"
+ 	"github.com/snadrus/must"
+@@ -16,6 +17,14 @@
  }
  
--var logger = logging.Logger("harmonydb")
--
- // NewFromConfig is a convenience function.
- // In usage:
- //
-@@ -265,9 +268,6 @@ retry:
-        return nil
- }
- 
--//go:embed sql
--var fs embed.FS
--
- func (db *DB) upgrade() error {
-        // Does the version table exist? if not, make it.
-        // NOTE: This cannot change except via the next sql file.
-		
+ func ContractAddresses() PDPContracts {
++
++	pdpAddr := os.Getenv("CURIO_PDP_VERIFIER_ADDRESS")
++	if pdpAddr != "" {
++		return PDPContracts{
++			PDPVerifier: common.HexToAddress(pdpAddr),
++		}
++	}
++
+ 	switch build.BuildType {
+ 	case build.BuildCalibnet:
+ 		return PDPContracts{

@@ -4,7 +4,7 @@ set -e  # Exit on error
 
 # Configuration
 PDP_URL=${PDP_URL:-"http://curio:80"}  # Can be overridden by environment variable
-CONTRACT_PATH="/root/devgen/contracts/service-implementation.addr"
+CONTRACT_PATH="/root/devgen/contracts/verifier-proxy.addr"
 JWT_PATH="/root/devgen/contracts/jwt_token.txt"
 TEST_FILE="test_piece.txt"
 

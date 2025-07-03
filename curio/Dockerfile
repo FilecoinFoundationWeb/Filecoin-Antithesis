@@ -38,12 +38,12 @@ RUN set -eux; \
     cargo --version; \
     rustc --version;
 
-RUN git clone --branch main https://github.com/filecoin-project/curio.git /opt/curio
+RUN git clone https://github.com/filecoin-project/curio.git /opt/curio
 
 WORKDIR /opt/curio
-RUN git checkout v1.25.1
-# COPY curio.patch .
-# RUN git apply curio.patch
+RUN git checkout main
+COPY curio.patch .
+RUN git apply curio.patch
 
 ### make configurable filecoin-ffi build
 ARG FFI_BUILD_FROM_SOURCE=0
