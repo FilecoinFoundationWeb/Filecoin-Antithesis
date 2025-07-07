@@ -1,5 +1,5 @@
 # Dockerfile to build instrumented version of lotus
-FROM docker.io/golang:1.23.7-bookworm
+FROM docker.io/golang:1.23.10-bookworm
 
 # Installing rust
 RUN apt-get update && \
