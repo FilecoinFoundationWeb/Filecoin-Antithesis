@@ -49,7 +49,7 @@ import (
 
 func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *string, *int64) {
 	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
-	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault', 'checkEthMethods', 'sendEthLegacy', 'checkSplitstore', 'incomingblock', 'blockfuzz', 'checkBackfill', 'stressMaxMessageSize', 'stressMaxMessages', 'stressMaxTipsetSize'")
+	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault', 'checkEthMethods', 'sendEthLegacy', 'checkSplitstore', 'incomingblock', 'blockfuzz', 'checkBackfill', 'stressMaxMessageSize', 'stressMaxMessages', 'stressMaxTipsetSize', 'checkFinalizedTipsets'")
 	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
 	numWallets := flag.Int("wallets", 1, "Number of wallets for the operation")
 	contractPath := flag.String("contract", "", "Path to the smart contract bytecode file")
@@ -70,46 +70,48 @@ func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *ti
 
 func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType *string) error {
 	validOps := map[string]bool{
-		"create":               true,
-		"delete":               true,
-		"spam":                 true,
-		"connect":              true,
-		"deploySimpleCoin":     true,
-		"deployMCopy":          true,
-		"deployTStore":         true,
-		"chaos":                true,
-		"mempoolFuzz":          true,
-		"pingAttack":           true,
-		"createEthAccount":     true,
-		"rpc-benchmark":        true,
-		"deployValueSender":    true,
-		"checkConsensus":       true,
-		"deployContract":       true,
-		"stateMismatch":        true,
-		"sendConsensusFault":   true,
-		"checkEthMethods":      true,
-		"sendEthLegacy":        true,
-		"checkSplitstore":      true,
-		"incomingblock":        true,
-		"blockfuzz":            true,
-		"checkBackfill":        true,
-		"stressMaxMessageSize": true,
-		"stressMaxMessages":    true,
-		"stressMaxTipsetSize":  true,
+		"create":                true,
+		"delete":                true,
+		"spam":                  true,
+		"connect":               true,
+		"deploySimpleCoin":      true,
+		"deployMCopy":           true,
+		"deployTStore":          true,
+		"chaos":                 true,
+		"mempoolFuzz":           true,
+		"pingAttack":            true,
+		"createEthAccount":      true,
+		"rpc-benchmark":         true,
+		"deployValueSender":     true,
+		"checkConsensus":        true,
+		"deployContract":        true,
+		"stateMismatch":         true,
+		"sendConsensusFault":    true,
+		"checkEthMethods":       true,
+		"sendEthLegacy":         true,
+		"checkSplitstore":       true,
+		"incomingblock":         true,
+		"blockfuzz":             true,
+		"checkBackfill":         true,
+		"stressMaxMessageSize":  true,
+		"stressMaxMessages":     true,
+		"stressMaxTipsetSize":   true,
+		"checkFinalizedTipsets": true,
 	}
 
 	// Operations that don't require a node name
 	noNodeNameRequired := map[string]bool{
-		"spam":                true,
-		"chaos":               true,
-		"pingAttack":          true,
-		"rpc-benchmark":       true,
-		"checkConsensus":      true,
-		"sendConsensusFault":  true,
-		"checkEthMethods":     true,
-		"checkSplitstore":     true,
-		"checkBackfill":       true,
-		"stressMaxTipsetSize": true,
+		"spam":                  true,
+		"chaos":                 true,
+		"pingAttack":            true,
+		"rpc-benchmark":         true,
+		"checkConsensus":        true,
+		"sendConsensusFault":    true,
+		"checkEthMethods":       true,
+		"checkSplitstore":       true,
+		"checkBackfill":         true,
+		"stressMaxTipsetSize":   true,
+		"checkFinalizedTipsets": true,
 	}
 
 	if !validOps[*operation] {
@@ -225,6 +227,8 @@ func main() {
 		err = performStressMaxMessageSize(ctx, nodeConfig)
 	case "stressMaxMessages":
 		err = performStressMaxMessages(ctx, nodeConfig)
+	case "checkFinalizedTipsets":
+		err = performCheckFinalizedTipsets()
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
@@ -1063,7 +1067,53 @@ func performStressMaxTipsetSize(config *resources.Config) error {
 	if len(filteredNodes) < 2 {
 		return fmt.Errorf("need at least two Lotus nodes for this test, found %d", len(filteredNodes))
 	}
+	return nil
+}
 
-	log.Printf("[INFO] Max tipset size stress test completed")
+func performCheckFinalizedTipsets() error {
+	log.Printf("[INFO] Starting finalized tipset comparison...")
+
+	url1 := "http://lotus-1:1234"
+	url2 := "http://lotus-2:1235"
+
+	log.Printf("[INFO] Comparing finalized tipsets between %s and %s", url1, url2)
+
+	// Make RPC request to first node
+	status1, resp1 := resources.DoRawRPCRequest(url1, 2, `{
+		"jsonrpc": "2.0",
+		"method": "Filecoin.ChainGetTipSet",
+		"params": [{"tag": "finalized"}],
+		"id": 1
+	}`)
+	log.Printf("[INFO] Node 1 response: %s", string(resp1))
+	if status1 != 200 {
+		return fmt.Errorf("failed to get tipset from %s: status %d", url1, status1)
+	}
+
+	// Make RPC request to second node
+	status2, resp2 := resources.DoRawRPCRequest(url2, 2, `{
+		"jsonrpc": "2.0",
+		"method": "Filecoin.ChainGetTipSet",
+		"params": [{"tag": "finalized"}],
+		"id": 1
+	}`)
+	log.Printf("[INFO] Node 2 response: %s", string(resp2))
+	if status2 != 200 {
+		return fmt.Errorf("failed to get tipset from %s: status %d", url2, status2)
+	}
+
+	// Compare responses with assert
+	assert.Always(bytes.Equal(resp1, resp2),
+		"[Finalized TipSet] Both nodes must have identical finalized tipsets",
+		map[string]interface{}{
+			"node1_response": string(resp1),
+			"node2_response": string(resp2),
+			"property":       "Finalized tipset consistency",
+			"impact":         "Critical - indicates consensus failure or chain fork",
+			"details":        "Finalized tipsets must be identical across nodes",
+			"recommendation": "Check network connectivity and node sync status",
+		})
+
+	log.Printf("[INFO] Finalized tipsets match between nodes")
 	return nil
 }

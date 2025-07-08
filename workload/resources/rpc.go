@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -169,4 +171,27 @@ func RunBenchmark(endpoint string, duration time.Duration, methods []MethodConfi
 	}
 
 	wg.Wait()
+}
+
+func DoRawRPCRequest(endpoint string, version int, body string) (int, []byte) {
+	endpoint = fmt.Sprintf("%s/rpc/v%d", endpoint, version)
+	request, err := http.NewRequest("POST", endpoint, bytes.NewReader([]byte(body)))
+	if err != nil {
+		return 0, nil
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return 0, nil
+	}
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			log.Printf("Failed to close response body: %v", err)
+		}
+	}()
+	respBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		return 0, nil
+	}
+	return response.StatusCode, respBody
 }
