@@ -18,7 +18,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN git clone https://github.com/chainsafe/forest /forest
 # After Go installation and before Rust build
 WORKDIR /forest/f3-sidecar
-RUN go mod edit -require github.com/filecoin-project/go-f3@08b78bcdd4f28819254b29a580b3aa374c7a119d
+RUN go get github.com/filecoin-project/go-f3@08b78bcdd4f28819254b29a580b3aa374c7a119d
 RUN go mod tidy
 WORKDIR /forest
 RUN git checkout ${GIT_COMMIT}
