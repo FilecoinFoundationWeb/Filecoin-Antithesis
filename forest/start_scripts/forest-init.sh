@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-sleep 5
+sleep 10
 
 FIRST_RUN_FLAG="${FOREST_DATA_DIR}/.initialized"
 
