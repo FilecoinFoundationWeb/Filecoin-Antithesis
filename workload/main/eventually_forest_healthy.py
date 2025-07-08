@@ -30,23 +30,23 @@ lines = response_text.strip().split('\n')
 
 for line in lines:
     passing_check = line.startswith('[+]')
-    if line.contains("epoch up to date"):
+    if "epoch up to date" in line:
         print(passing_check)
         print(line)
         always(passing_check, "[Forest] Node epoch is up to date during quiescence check", {"Response Text": line})
-    elif line.contains("rpc server running"):
+    elif "rpc server running" in line:
         print(passing_check)
         print(line)
         always(passing_check, "[Forest] Node rpc server is running during quiescence check", {"Response Text": line})
-    elif line.contains("sync ok"):
+    elif "sync ok" in line:
         print(passing_check)
         print(line)
         always(passing_check, "[Forest] Node is syncing during a quiscence check", {"Response Text": line})
-    elif line.contains("peers connected"):
+    elif "peers connected" in line:
         print(passing_check)
         print(line)
         always(passing_check, "[Forest] Node is connected to peers during a quiescence check", {"Response Text": line})
-    elif line.contains("f3 not running"):
+    elif "f3 not running" in line:
         print(passing_check)
         print(line)
         always(passing_check, "[Forest] Node has f3 running during a quiescence check", {"Response Text": line})
