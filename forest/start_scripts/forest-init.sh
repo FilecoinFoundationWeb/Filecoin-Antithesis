@@ -49,10 +49,10 @@ echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 echo "forest: collecting network info…"
 forest-cli net listen | head -n1 > "${FOREST_DATA_DIR}/forest-listen-addr"
 echo "forest: connecting to lotus nodes…"
-forest-wallet --remote-wallet import ${LOTUS_1_DATA_DIR}/key || true
-forest-wallet --remote-wallet import ${LOTUS_2_DATA_DIR}/key || true
 forest-cli net connect "$(cat ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr)"
 forest-cli net connect "$(cat ${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr)"
+forest-wallet --remote-wallet import ${LOTUS_1_DATA_DIR}/key 
+forest-wallet --remote-wallet import ${LOTUS_2_DATA_DIR}/key
 
 forest-cli sync wait
 echo "forest: ready."

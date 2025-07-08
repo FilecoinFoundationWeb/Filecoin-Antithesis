@@ -32,8 +32,8 @@ func SendConsensusFault(ctx context.Context) error {
 		return fmt.Errorf("failed to get chain head: %w", err)
 	}
 
-	// Try head-10 tipset to ensure we're well behind the current epoch
-	targetHeight := head.Height() - 10
+	// Try head-3 tipset to ensure we're well behind the current epoch
+	targetHeight := head.Height() - 3
 	if targetHeight <= 0 {
 		return fmt.Errorf("chain height too low: %d", head.Height())
 	}
@@ -115,8 +115,8 @@ func SendConsensusFault(ctx context.Context) error {
 		return fmt.Errorf("failed to get chain head: %w", err)
 	}
 
-	// Try head-10 tipset for second miner as well
-	targetHeight = head.Height() - 10
+	// Try head-3 tipset for second miner as well
+	targetHeight = head.Height() - 3
 	if targetHeight <= 0 {
 		return fmt.Errorf("chain height too low: %d", head.Height())
 	}

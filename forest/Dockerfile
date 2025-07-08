@@ -1,7 +1,7 @@
 FROM docker.io/rust:1.81-bookworm as builder
 
 # Pin forest to a specific branch
-ARG GIT_COMMIT="719f81b"
+ARG GIT_COMMIT="main"
 
 # Step 1: Install dependencies
 RUN apt-get update && \
@@ -16,6 +16,10 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path --profile mini
 ENV PATH="/root/.cargo/bin:${PATH}" 
 # Step 3: Clone the repository (this is cached unless the repository changes)
 RUN git clone https://github.com/chainsafe/forest /forest
+# After Go installation and before Rust build
+WORKDIR /forest/f3-sidecar
+RUN go get github.com/filecoin-project/go-f3@08b78bcdd4f28819254b29a580b3aa374c7a119d
+RUN go mod tidy
 WORKDIR /forest
 RUN git checkout ${GIT_COMMIT}
 
