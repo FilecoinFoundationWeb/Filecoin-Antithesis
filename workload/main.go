@@ -228,7 +228,7 @@ func main() {
 	case "stressMaxMessages":
 		err = performStressMaxMessages(ctx, nodeConfig)
 	case "checkFinalizedTipsets":
-		err = performCheckFinalizedTipsets()
+		err = performCheckFinalizedTipsets(ctx)
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
@@ -1070,50 +1070,125 @@ func performStressMaxTipsetSize(config *resources.Config) error {
 	return nil
 }
 
-func performCheckFinalizedTipsets() error {
+func performCheckFinalizedTipsets(ctx context.Context) error {
 	log.Printf("[INFO] Starting finalized tipset comparison...")
+
+	// Load configuration
+	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Filter nodes to "Lotus1" and "Lotus2"
+	nodeNames := []string{"Lotus1", "Lotus2"}
+	var filteredNodes []resources.NodeConfig
+	for _, node := range config.Nodes {
+		for _, name := range nodeNames {
+			if node.Name == name {
+				filteredNodes = append(filteredNodes, node)
+			}
+		}
+	}
+
+	if len(filteredNodes) < 2 {
+		return fmt.Errorf("need at least two Lotus nodes for this test, found %d", len(filteredNodes))
+	}
+
+	api1, closer1, err := resources.ConnectToNode(ctx, filteredNodes[0])
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[0].Name, err)
+	}
+	defer closer1()
+
+	api2, closer2, err := resources.ConnectToNode(ctx, filteredNodes[1])
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[1].Name, err)
+	}
+	defer closer2()
+
+	ch1, err := api1.ChainHead(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get chain head from %s: %w", filteredNodes[0].Name, err)
+	}
+
+	ch2, err := api2.ChainHead(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get chain head from %s: %w", filteredNodes[1].Name, err)
+	}
+
+	h1 := ch1.Height()
+	h2 := ch2.Height()
+
+	var head int64
+	if h1 > h2 {
+		head = int64(h2)
+	} else {
+		head = int64(h1)
+	}
+
+	log.Printf("[INFO] Using common chain height: %d", head)
 
 	url1 := "http://lotus-1:1234"
 	url2 := "http://lotus-2:1235"
-
-	log.Printf("[INFO] Comparing finalized tipsets between %s and %s", url1, url2)
+	log.Printf("[INFO] Comparing tipsets between %s and %s at height %d", url1, url2, head)
 
 	// Make RPC request to first node
-	status1, resp1 := resources.DoRawRPCRequest(url1, 2, `{
+	status1, resp1 := resources.DoRawRPCRequest(url1, 2, fmt.Sprintf(`{
 		"jsonrpc": "2.0",
 		"method": "Filecoin.ChainGetTipSet",
-		"params": [{"tag": "finalized"}],
+		"params": [
+			{
+				"height": {
+					"at": %d,
+					"previous": true,
+					"anchor": {
+						"tag": "finalized"
+					}
+				}
+			}
+		],
 		"id": 1
-	}`)
+	}`, head))
 	log.Printf("[INFO] Node 1 response: %s", string(resp1))
 	if status1 != 200 {
-		return fmt.Errorf("failed to get tipset from %s: status %d", url1, status1)
+		return fmt.Errorf("failed to get tipset from %s: status %d, response: %s", url1, status1, string(resp1))
 	}
 
 	// Make RPC request to second node
-	status2, resp2 := resources.DoRawRPCRequest(url2, 2, `{
+	status2, resp2 := resources.DoRawRPCRequest(url2, 2, fmt.Sprintf(`{
 		"jsonrpc": "2.0",
 		"method": "Filecoin.ChainGetTipSet",
-		"params": [{"tag": "finalized"}],
+		"params": [
+			{
+				"height": {
+					"at": %d,
+					"previous": true,
+					"anchor": {
+						"tag": "finalized"
+					}
+				}
+			}
+		],
 		"id": 1
-	}`)
+	}`, head))
 	log.Printf("[INFO] Node 2 response: %s", string(resp2))
 	if status2 != 200 {
-		return fmt.Errorf("failed to get tipset from %s: status %d", url2, status2)
+		return fmt.Errorf("failed to get tipset from %s: status %d, response: %s", url2, status2, string(resp2))
 	}
 
 	// Compare responses with assert
 	assert.Always(bytes.Equal(resp1, resp2),
-		"[Finalized TipSet] Both nodes must have identical finalized tipsets",
+		"[Finalized TipSet] Both nodes must have identical tipsets at height",
 		map[string]interface{}{
 			"node1_response": string(resp1),
 			"node2_response": string(resp2),
-			"property":       "Finalized tipset consistency",
+			"height":         head,
+			"property":       "Finalized tipset consistency at height",
 			"impact":         "Critical - indicates consensus failure or chain fork",
-			"details":        "Finalized tipsets must be identical across nodes",
+			"details":        fmt.Sprintf("Finalized tipsets at height %d must be identical across nodes", head),
 			"recommendation": "Check network connectivity and node sync status",
 		})
 
-	log.Printf("[INFO] Finalized tipsets match between nodes")
+	log.Printf("[INFO] Tipset comparison completed")
 	return nil
 }
