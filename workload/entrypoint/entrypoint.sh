@@ -1,6 +1,5 @@
 #!/bin/bash
 
-set -e
 RPC_LOTUS="http://10.20.20.24:1234/rpc/v1"
 echo "Workload [entrypoint]: synchronizing system time..."
 # Attempt to sync time with NTP server
@@ -18,7 +17,7 @@ current_time=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
 echo "Current system time: $current_time"
 
 # Waiting for the chain head to pass a certain height
-INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-10}"
+INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-5}"
 BLOCK_HEIGHT_REACHED=0
 
 echo "Workload [entrypoint]: waiting for block height to reach ${INIT_BLOCK_HEIGHT}"
@@ -102,9 +101,37 @@ fi
 echo "Contract addresses have been saved to $SHARED_DIR"
 echo "JSON file: $SHARED_DIR/contract-addresses.json"
 echo "Individual address files have been created in $SHARED_DIR"
+sleep 10
+cd /opt/antithesis/payments/
+ADDR=$(cast wallet address --keystore "$KEYSTORE" --password "$PASSWORD")
+MAX_RETRIES=5
+for i in $(seq 1 $MAX_RETRIES); do
+    CURRENT_NONCE=$(cast nonce --rpc-url "$RPC_URL" $ADDR)
+    if [ "$CURRENT_NONCE" -ge "4" ]; then
+        break
+    fi
+    echo "Waiting for nonce to update (current: $CURRENT_NONCE, expected: >=4)"
+    sleep 10
+done
+make deploy-devnet 2>&1 | tee /tmp/payments_deploy.log
 
-# cd /opt/antithesis/payments/
-# make deploy-devnet
+# Extract Payments addresses from the deployment output
+PAYMENTS_IMPL=$(grep "Implementation Address:" /tmp/payments_deploy.log | tail -n1 | awk '{print $3}')
+PAYMENTS_PROXY=$(grep "Payments Contract Address:" /tmp/payments_deploy.log | tail -n1 | awk '{print $4}')
+
+# Update the JSON file with Payments addresses
+jq --arg impl "$PAYMENTS_IMPL" --arg proxy "$PAYMENTS_PROXY" '. + {
+    "payments_implementation": $impl,
+    "payments_proxy": $proxy
+}' "$SHARED_DIR/contract-addresses.json" > /tmp/updated.json && mv /tmp/updated.json "$SHARED_DIR/contract-addresses.json"
+
+# Save individual address files
+if [ ! -z "$PAYMENTS_IMPL" ]; then
+    echo "$PAYMENTS_IMPL" > "$SHARED_DIR/payments-implementation.addr"
+fi
+if [ ! -z "$PAYMENTS_PROXY" ]; then
+    echo "$PAYMENTS_PROXY" > "$SHARED_DIR/payments-proxy.addr"
+fi
 
 # Verify the files were created
 if [ -f "$SHARED_DIR/contract-addresses.json" ]; then

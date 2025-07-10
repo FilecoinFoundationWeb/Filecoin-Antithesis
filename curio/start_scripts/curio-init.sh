@@ -60,6 +60,14 @@ if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
     touch $CURIO_REPO_PATH/.init.config
   fi
 
+  if [ -f /root/devgen/contracts/verifier-proxy.addr ]; then
+    echo "Verifier proxy address file exists."
+    export CURIO_PDP_VERIFIER_ADDRESS=$(cat /root/devgen/contracts/verifier-proxy.addr)
+    echo "CURIO_PDP_VERIFIER_ADDRESS=$CURIO_PDP_VERIFIER_ADDRESS"
+  else
+    echo "Verifier proxy address file does not exist."
+  fi
+
   # Add storage attachment
   echo "Starting Curio node to attach storage..."
   curio run --nosync --layers seal,post,pdp-only,gui &
