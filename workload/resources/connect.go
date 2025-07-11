@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/filecoin-project/go-jsonrpc"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
+	"github.com/filecoin-project/lotus/api/v2api"
 	"github.com/filecoin-project/lotus/chain/types"
 )
 
@@ -87,12 +90,34 @@ func tryConnect(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(
 	}
 	finalAuthToken := strings.TrimSpace(string(authToken))
 	headers := map[string][]string{"Authorization": {"Bearer " + finalAuthToken}}
-
 	api, closer, err := client.NewFullNodeRPCV1(ctx, nodeConfig.RPCURL, headers)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to node %s: %v", nodeConfig.Name, err)
 	}
 	return api, closer, err
+}
+
+func ConnectToNodeV2(ctx context.Context, nodeConfig NodeConfig) (v2api.FullNode, func(), error) {
+	authToken, err := ioutil.ReadFile(nodeConfig.AuthTokenPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read auth token for node %s: %v", nodeConfig.Name, err)
+	}
+	finalAuthToken := strings.TrimSpace(string(authToken))
+	headers := map[string][]string{"Authorization": {"Bearer " + finalAuthToken}}
+	api, closer, err := NewFullNodeRPCV2(ctx, nodeConfig.RPCURL, headers)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to node %s: %v", nodeConfig.Name, err)
+	}
+	return api, closer, err
+}
+
+// NewFullNodeRPCV2 creates a new http jsonrpc client for the /v2 API.
+func NewFullNodeRPCV2(ctx context.Context, addr string, requestHeader http.Header, opts ...jsonrpc.Option) (v2api.FullNode, jsonrpc.ClientCloser, error) {
+	var res v2api.FullNodeStruct
+	closer, err := jsonrpc.NewMergeClient(ctx, addr, "Filecoin",
+		api.GetInternalStructs(&res), requestHeader, append([]jsonrpc.Option{jsonrpc.WithErrors(api.RPCErrors)}, opts...)...)
+
+	return &res, closer, err
 }
 
 func IsNodeConnected(ctx context.Context, nodeAPI api.FullNode) (bool, error) {
