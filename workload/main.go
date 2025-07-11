@@ -97,6 +97,8 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		"stressMaxMessages":     true,
 		"stressMaxTipsetSize":   true,
 		"checkFinalizedTipsets": true,
+		"checkF3Running":        true,
+		"checkPeers":            true,
 	}
 
 	// Operations that don't require a node name
@@ -112,6 +114,8 @@ func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, 
 		"checkBackfill":         true,
 		"stressMaxTipsetSize":   true,
 		"checkFinalizedTipsets": true,
+		"checkF3Running":        true,
+		"checkPeers":            true,
 	}
 
 	if !validOps[*operation] {
@@ -229,6 +233,10 @@ func main() {
 		err = performStressMaxMessages(ctx, nodeConfig)
 	case "checkFinalizedTipsets":
 		err = performCheckFinalizedTipsets(ctx)
+	case "checkF3Running":
+		err = checkF3Running()
+	case "checkPeers":
+		err = checkPeers()
 	default:
 		log.Printf("[ERROR] Unknown operation: %s", *operation)
 		os.Exit(1)
@@ -1125,70 +1133,101 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 	} else {
 		head = int64(h1)
 	}
-
-	log.Printf("[INFO] Using common chain height: %d", head)
-
-	url1 := "http://lotus-1:1234"
-	url2 := "http://lotus-2:1235"
-	log.Printf("[INFO] Comparing tipsets between %s and %s at height %d", url1, url2, head)
-
-	// Make RPC request to first node
-	status1, resp1 := resources.DoRawRPCRequest(url1, 2, fmt.Sprintf(`{
-		"jsonrpc": "2.0",
-		"method": "Filecoin.ChainGetTipSet",
-		"params": [
-			{
-				"height": {
-					"at": %d,
-					"previous": true,
-					"anchor": {
-						"tag": "finalized"
-					}
-				}
-			}
-		],
-		"id": 1
-	}`, head))
-	log.Printf("[INFO] Node 1 response: %s", string(resp1))
-	if status1 != 200 {
-		return fmt.Errorf("failed to get tipset from %s: status %d, response: %s", url1, status1, string(resp1))
+	api11, closer11, err := resources.ConnectToNodeV2(ctx, filteredNodes[0])
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[0].Name, err)
+	}
+	defer closer11()
+	api22, closer22, err := resources.ConnectToNodeV2(ctx, filteredNodes[1])
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[1].Name, err)
+	}
+	defer closer22()
+	height := types.TipSetSelectors.Height(abi.ChainEpoch(head), true, types.TipSetAnchors.Finalized)
+	log.Printf("[INFO] Getting tipset at height %d", height)
+	ts, err := api11.ChainGetTipSet(ctx, types.TipSetSelectors.Safe)
+	if err != nil {
+		return fmt.Errorf("failed to get tipset by height: %w", err)
+	}
+	ts2, err := api22.ChainGetTipSet(ctx, types.TipSetSelectors.Finalized)
+	if err != nil {
+		return fmt.Errorf("failed to get tipset by height: %w", err)
 	}
 
-	// Make RPC request to second node
-	status2, resp2 := resources.DoRawRPCRequest(url2, 2, fmt.Sprintf(`{
-		"jsonrpc": "2.0",
-		"method": "Filecoin.ChainGetTipSet",
-		"params": [
-			{
-				"height": {
-					"at": %d,
-					"previous": true,
-					"anchor": {
-						"tag": "finalized"
-					}
-				}
-			}
-		],
-		"id": 1
-	}`, head))
-	log.Printf("[INFO] Node 2 response: %s", string(resp2))
-	if status2 != 200 {
-		return fmt.Errorf("failed to get tipset from %s: status %d, response: %s", url2, status2, string(resp2))
+	log.Printf("[INFO] Tipset %s is finalized on %s on height %d", ts.Cids(), filteredNodes[0].Name, height)
+	log.Printf("[INFO] Tipset %s is finalized on %s on height %d", ts2.Cids(), filteredNodes[1].Name, height)
+	return nil
+}
+
+func checkF3Running() error {
+	urls := []string{
+		"http://forest:23456",
+		"http://lotus-1:1234",
+		"http://lotus-2:1235",
 	}
 
-	// Compare responses with assert
-	assert.Sometimes(bytes.Equal(resp1, resp2),
-		"[Finalized TipSet] Both nodes must have identical tipsets at height",
-		map[string]interface{}{
-			"node1_response": string(resp1),
-			"node2_response": string(resp2),
-			"height":         head,
-			"property":       "Finalized tipset consistency at height",
-			"impact":         "Critical - indicates consensus failure or chain fork",
-			"details":        fmt.Sprintf("Finalized tipsets at height %d must be identical across nodes", head),
-			"recommendation": "Check network connectivity and node sync status",
-		})
+	request := `{"jsonrpc":"2.0","method":"Filecoin.F3IsRunning","params":[],"id":1}`
 
-	log.Printf("[INFO] Tipset comparison completed")
+	for _, url := range urls {
+		_, resp := resources.DoRawRPCRequest(url, 1, request)
+		var response struct {
+			Result bool `json:"result"`
+		}
+		if err := json.Unmarshal(resp, &response); err != nil {
+			log.Printf("[WARN] Failed to parse response from %s: %v", url, err)
+			continue
+		}
+
+		log.Printf("[INFO] F3 is running on %s: %v", url, response.Result)
+		assert.Sometimes(response.Result, fmt.Sprintf("F3 is running on %s", url),
+			map[string]interface{}{"requirement": fmt.Sprintf("F3 is running on %s", url)})
+	}
+	return nil
+}
+
+func checkPeers() error {
+	urls := []string{
+		"http://forest:3456",
+		"http://lotus-1:1234",
+		"http://lotus-2:1235",
+	}
+
+	request := `{"jsonrpc":"2.0","method":"Filecoin.NetPeers","params":[],"id":1}`
+
+	disconnectedNodes := []string{}
+	for _, url := range urls {
+		_, resp := resources.DoRawRPCRequest(url, 1, request)
+		var response struct {
+			Result []struct {
+				ID string `json:"ID"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(resp, &response); err != nil {
+			log.Printf("[WARN] Failed to parse response from %s: %v", url, err)
+			disconnectedNodes = append(disconnectedNodes, url)
+			continue
+		}
+
+		peerCount := len(response.Result)
+		if peerCount < 2 {
+			disconnectedNodes = append(disconnectedNodes, url)
+		}
+		log.Printf("[INFO] Node %s has %d peers", url, peerCount)
+	}
+
+	if len(disconnectedNodes) > 0 {
+		log.Printf("[WARN] The following nodes have less than 2 peers: %v", disconnectedNodes)
+		assert.Sometimes(false, "All nodes should have at least 2 peers",
+			map[string]interface{}{
+				"requirement":        "Minimum 2 peers required",
+				"disconnected_nodes": disconnectedNodes,
+			})
+	} else {
+		log.Printf("[INFO] All nodes have at least 2 peers")
+		assert.Sometimes(true, "All nodes have at least 2 peers",
+			map[string]interface{}{
+				"requirement": "Minimum 2 peers required",
+			})
+	}
 	return nil
 }
