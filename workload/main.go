@@ -1088,7 +1088,7 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 	}
 
 	// Filter nodes to "Lotus1" and "Lotus2"
-	nodeNames := []string{"Lotus1", "Lotus2"}
+	nodeNames := []string{"Lotus1", "Lotus1-V2", "Lotus2", "Lotus2-V2"}
 	var filteredNodes []resources.NodeConfig
 	for _, node := range config.Nodes {
 		for _, name := range nodeNames {
@@ -1108,9 +1108,9 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 	}
 	defer closer1()
 
-	api2, closer2, err := resources.ConnectToNode(ctx, filteredNodes[1])
+	api2, closer2, err := resources.ConnectToNode(ctx, filteredNodes[2])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[1].Name, err)
+		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[2].Name, err)
 	}
 	defer closer2()
 
@@ -1121,7 +1121,7 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 
 	ch2, err := api2.ChainHead(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get chain head from %s: %w", filteredNodes[1].Name, err)
+		return fmt.Errorf("failed to get chain head from %s: %w", filteredNodes[2].Name, err)
 	}
 
 	h1 := ch1.Height()
@@ -1133,23 +1133,23 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 	} else {
 		head = int64(h1)
 	}
-	api11, closer11, err := resources.ConnectToNodeV2(ctx, filteredNodes[0])
-	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[0].Name, err)
-	}
-	defer closer11()
-	api22, closer22, err := resources.ConnectToNodeV2(ctx, filteredNodes[1])
+	api11, closer11, err := resources.ConnectToNodeV2(ctx, filteredNodes[1])
 	if err != nil {
 		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[1].Name, err)
+	}
+	defer closer11()
+	api22, closer22, err := resources.ConnectToNodeV2(ctx, filteredNodes[3])
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[3].Name, err)
 	}
 	defer closer22()
 	height := types.TipSetSelectors.Height(abi.ChainEpoch(head), true, types.TipSetAnchors.Finalized)
 	log.Printf("[INFO] Getting tipset at height %d", height)
-	ts, err := api11.ChainGetTipSet(ctx, types.TipSetSelectors.Safe)
+	ts, err := api11.ChainGetTipSet(ctx, height)
 	if err != nil {
 		return fmt.Errorf("failed to get tipset by height: %w", err)
 	}
-	ts2, err := api22.ChainGetTipSet(ctx, types.TipSetSelectors.Finalized)
+	ts2, err := api22.ChainGetTipSet(ctx, height)
 	if err != nil {
 		return fmt.Errorf("failed to get tipset by height: %w", err)
 	}
