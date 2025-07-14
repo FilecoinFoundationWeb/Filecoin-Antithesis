@@ -58,6 +58,14 @@ func NewConsensusChecker(ctx context.Context, nodes []NodeConfig) (*ConsensusChe
 		Name:   "Lotus2",
 		RPCURL: "http://lotus-2:1235/rpc/v1",
 	}
+	checker.nodes["Lotus1-V2"] = NodeInfo{
+		Name:   "Lotus1-V2",
+		RPCURL: "http://lotus-1:1234/rpc/v2",
+	}
+	checker.nodes["Lotus2-V2"] = NodeInfo{
+		Name:   "Lotus2-V2",
+		RPCURL: "http://lotus-2:1235/rpc/v2",
+	}
 
 	for name, node := range checker.nodes {
 		log.Printf("Added node to consensus checker: %s with URL: %s", name, node.RPCURL)
@@ -109,7 +117,13 @@ func (cc *ConsensusChecker) makeRPCRequest(ctx context.Context, nodeInfo NodeInf
 
 // getChainHead gets the current chain head for a node
 func (cc *ConsensusChecker) getChainHead(ctx context.Context, nodeInfo NodeInfo) (abi.ChainEpoch, error) {
-	resp, err := cc.makeRPCRequest(ctx, nodeInfo, "Filecoin.ChainHead", []interface{}{})
+	// Use different method names for V1 and V2 APIs
+	methodName := "Filecoin.ChainHead"
+	if strings.Contains(nodeInfo.RPCURL, "/rpc/v2") {
+		methodName = "Filecoin.ChainGetHead"
+	}
+
+	resp, err := cc.makeRPCRequest(ctx, nodeInfo, methodName, []interface{}{})
 	if err != nil {
 		return 0, err
 	}
@@ -125,6 +139,21 @@ func (cc *ConsensusChecker) getChainHead(ctx context.Context, nodeInfo NodeInfo)
 
 // getTipsetAtHeight gets the tipset at a specific height for a node
 func (cc *ConsensusChecker) getTipsetAtHeight(ctx context.Context, nodeInfo NodeInfo, height abi.ChainEpoch) (string, error) {
+	// For V2 nodes, use the finalized tipset selector
+	if strings.Contains(nodeInfo.RPCURL, "/rpc/v2") {
+		selector := types.TipSetSelectors.Height(height, true, types.TipSetAnchors.Finalized)
+		resp, err := cc.makeRPCRequest(ctx, nodeInfo, "Filecoin.ChainGetTipSet", []interface{}{selector})
+		if err != nil {
+			return "", err
+		}
+		var tipset types.TipSet
+		if err := json.Unmarshal(resp.Result, &tipset); err != nil {
+			return "", err
+		}
+		return tipset.Key().String(), nil
+	}
+
+	// For V1 nodes, use the old method
 	resp, err := cc.makeRPCRequest(ctx, nodeInfo, "Filecoin.ChainGetTipSetByHeight", []interface{}{height, types.EmptyTSK})
 	if err != nil {
 		return "", err
