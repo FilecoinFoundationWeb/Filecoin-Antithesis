@@ -1,6 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
+# Function to check if DRAND server is healthy
+check_drand_server() {
+  local response_code
+  response_code=$(curl -s -o /dev/null -w "%{http_code}" "$DRAND_SERVER/info")
+  
+  if [ "$response_code" != "200" ]; then
+    echo "Error: DRAND server is not ready (HTTP $response_code)"
+    return 1
+  fi
+  return 0
+}
+
 sleep 10
 
 FIRST_RUN_FLAG="${FOREST_DATA_DIR}/.initialized"
@@ -8,6 +20,13 @@ FIRST_RUN_FLAG="${FOREST_DATA_DIR}/.initialized"
 if [ ! -f "$FIRST_RUN_FLAG" ]; then
   echo "forest: first startup – performing one-time setup…"
   DRAND_SERVER="http://10.20.20.21"
+  
+  echo "Waiting for DRAND server to be ready..."
+  while ! check_drand_server; do
+    sleep 5
+  done
+  echo "DRAND server is ready"
+  
   json=$(curl -s "$DRAND_SERVER/info")
   formatted_json=$(jq --arg server "$DRAND_SERVER" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$json")
   echo "formatted_json: $formatted_json"
@@ -32,6 +51,13 @@ if [ ! -f "$FIRST_RUN_FLAG" ]; then
 else
   echo "forest: skipping one-time setup."
   DRAND_SERVER="http://10.20.20.21"
+  
+  echo "Waiting for DRAND server to be ready..."
+  while ! check_drand_server; do
+    sleep 5
+  done
+  echo "DRAND server is ready"
+  
   json=$(curl -s "$DRAND_SERVER/info")
   formatted_json=$(jq --arg server "$DRAND_SERVER" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$json")
   export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
@@ -47,7 +73,7 @@ else
          --p2p-listen-address /ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT} \
          --healthcheck-address ${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT} \
          --skip-load-actors &
-  sleep 10
+  sleep 5
 fi
 export TOKEN=$(cat ${FOREST_DATA_DIR}/jwt)
 export FULLNODE_API_INFO=$TOKEN:/ip4/${FOREST_IP}/tcp/${FOREST_RPC_PORT}/http
