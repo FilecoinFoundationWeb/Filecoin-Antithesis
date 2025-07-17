@@ -227,6 +227,17 @@ func DisconnectFromOtherNodes(ctx context.Context, nodeAPI api.FullNode) error {
 	return nil
 }
 
+// FilterLotusNodes returns a slice of NodeConfig containing only Lotus1 and Lotus2 nodes
+func FilterLotusNodes(nodes []NodeConfig) []NodeConfig {
+	var lotusNodes []NodeConfig
+	for _, node := range nodes {
+		if node.Name == "Lotus1" || node.Name == "Lotus2" {
+			lotusNodes = append(lotusNodes, node)
+		}
+	}
+	return lotusNodes
+}
+
 // ChainPredicate encapsulates a chain condition.
 type ChainPredicate func(set *types.TipSet) bool
 
@@ -250,4 +261,18 @@ func WaitTillChain(ctx context.Context, api api.FullNode, pred ChainPredicate) *
 		}
 	}
 	return nil
+}
+
+// FilterLotusNodesWithV2 returns both V1 and V2 Lotus nodes
+func FilterLotusNodesWithV2(nodes []NodeConfig) []NodeConfig {
+	nodeNames := []string{"Lotus1-V2", "Lotus2-V2"}
+	var filteredNodes []NodeConfig
+	for _, node := range nodes {
+		for _, name := range nodeNames {
+			if node.Name == name {
+				filteredNodes = append(filteredNodes, node)
+			}
+		}
+	}
+	return filteredNodes
 }

@@ -16,16 +16,7 @@ func CheckEthMethods(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	nodeNames := []string{"Lotus1", "Lotus2"}
-
-	var filteredNodes []NodeConfig
-	for _, node := range config.Nodes {
-		for _, name := range nodeNames {
-			if node.Name == name {
-				filteredNodes = append(filteredNodes, node)
-			}
-		}
-	}
+	filteredNodes := FilterLotusNodes(config.Nodes)
 
 	for _, node := range filteredNodes {
 		api, closer, err := ConnectToNode(ctx, node)

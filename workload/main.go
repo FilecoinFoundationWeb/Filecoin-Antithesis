@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"math/rand"
@@ -22,248 +21,417 @@ import (
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/chain/types/ethtypes"
+	"github.com/urfave/cli/v2"
 )
 
-// HOW TO ADD A NEW CLI COMMAND TO THIS TOOL
-// Follow these steps to add a new command-line operation:
-//
-// STEP 1: Add a new flag in the parseFlags() function
-//   - Define your flag using flag.* (e.g., flag.Bool, flag.String, etc.)
-//   - Update the operation list in the -operation flag description
-//   - Update the function signature and return statement if your flag needs to be returned
-//
-// STEP 2: Update the validateInputs() function
-//   - Add your operation to the validOps map (e.g., "myNewOperation": true)
-//   - If your operation doesn't require a node name, add it to noNodeNameRequired
-//   - Add any custom validation logic specific to your operation
-//
-// STEP 3: Add a case in the switch statement in main()
-//   - Add a case for your operation (e.g., case "myNewOperation":)
-//   - Call your operation's implementation function (e.g., err = performMyNewOperation(...))
-//
-// STEP 4: Implement your operation's function
-//   - Create a new function (e.g., func performMyNewOperation(ctx context.Context, ...) error {})
-//   - Add your operation's logic inside the function
-//   - Make sure to return nil for success or an error if something fails
-//   - Follow the pattern of other operation functions for consistency
-
-func parseFlags() (*string, *string, *string, *int, *string, *time.Duration, *time.Duration, *string, *time.Duration, *string, *int, *string, *int, *string, *int64) {
-	configFile := flag.String("config", "/opt/antithesis/resources/config.json", "Path to config JSON file")
-	operation := flag.String("operation", "", "Operation: 'create', 'delete', 'spam', 'connect', 'deploySimpleCoin', 'deployMCopy', 'chaos', 'mempoolFuzz', 'pingAttack', 'rpcBenchmark', 'eth_chainId', 'checkConsensus', 'deployContract', 'stateMismatch', 'sendConsensusFault', 'checkEthMethods', 'sendEthLegacy', 'checkSplitstore', 'incomingblock', 'blockfuzz', 'checkBackfill', 'stressMaxMessageSize', 'stressMaxMessages', 'stressMaxTipsetSize', 'checkFinalizedTipsets'")
-	nodeName := flag.String("node", "", "Node name from config.json (required for certain operations)")
-	numWallets := flag.Int("wallets", 1, "Number of wallets for the operation")
-	contractPath := flag.String("contract", "", "Path to the smart contract bytecode file")
-	minInterval := flag.Duration("min-interval", 5*time.Second, "Minimum interval between operations")
-	maxInterval := flag.Duration("max-interval", 30*time.Second, "Maximum interval between operations")
-	targetAddr := flag.String("target", "", "Target multiaddr for chaos operations")
-	duration := flag.Duration("duration", 60*time.Second, "Duration to run the attack")
-	targetAddr2 := flag.String("target2", "", "Second target multiaddr for chain sync operations")
-	count := flag.Int("count", 100, "Number of transactions/operations to perform")
-	pingAttackType := flag.String("ping-attack-type", "random", "Type of ping attack")
-	concurrency := flag.Int("concurrency", 5, "Number of concurrent operations")
-	rpcURL := flag.String("rpc-url", "", "RPC URL for eth_chainId operation")
-	height := flag.Int64("height", 0, "Chain height to check consensus at (0 for current height)")
-
-	flag.Parse()
-	return configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, rpcURL, height
-}
-
-func validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType *string) error {
-	validOps := map[string]bool{
-		"create":                true,
-		"delete":                true,
-		"spam":                  true,
-		"connect":               true,
-		"deploySimpleCoin":      true,
-		"deployMCopy":           true,
-		"deployTStore":          true,
-		"chaos":                 true,
-		"mempoolFuzz":           true,
-		"pingAttack":            true,
-		"createEthAccount":      true,
-		"rpc-benchmark":         true,
-		"deployValueSender":     true,
-		"checkConsensus":        true,
-		"deployContract":        true,
-		"stateMismatch":         true,
-		"sendConsensusFault":    true,
-		"checkEthMethods":       true,
-		"sendEthLegacy":         true,
-		"checkSplitstore":       true,
-		"incomingblock":         true,
-		"blockfuzz":             true,
-		"checkBackfill":         true,
-		"stressMaxMessageSize":  true,
-		"stressMaxMessages":     true,
-		"stressMaxTipsetSize":   true,
-		"checkFinalizedTipsets": true,
-		"checkF3Running":        true,
-		"checkPeers":            true,
-	}
-
-	// Operations that don't require a node name
-	noNodeNameRequired := map[string]bool{
-		"spam":                  true,
-		"chaos":                 true,
-		"pingAttack":            true,
-		"rpc-benchmark":         true,
-		"checkConsensus":        true,
-		"sendConsensusFault":    true,
-		"checkEthMethods":       true,
-		"checkSplitstore":       true,
-		"checkBackfill":         true,
-		"stressMaxTipsetSize":   true,
-		"checkFinalizedTipsets": true,
-		"checkF3Running":        true,
-		"checkPeers":            true,
-	}
-
-	if !validOps[*operation] {
-		return fmt.Errorf("invalid operation: %s", *operation)
-	}
-
-	if !noNodeNameRequired[*operation] && *nodeName == "" {
-		return fmt.Errorf("node name is required for the '%s' operation", *operation)
-	}
-
-	if (*operation == "chaos" || *operation == "pingAttack") && *targetAddr == "" {
-		return fmt.Errorf("target multiaddr is required for '%s' operations", *operation)
-	}
-
-	if (*operation == "deploySimpleCoin" || *operation == "deployMCopy" || *operation == "deployTStore") && *contractPath == "" {
-		return fmt.Errorf("contract path is required for the '%s' operation", *operation)
-	}
-
-	return nil
-}
-
-func loadConfig(configFile string) (*resources.Config, error) {
-	config, err := resources.LoadConfig(configFile)
-	if err != nil {
-		return nil, err
-	}
-	return config, nil
-}
+var config *resources.Config
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	log.Println("[INFO] Starting workload...")
 
-	// Parse command line flags
-	configFile, operation, nodeName, numWallets, contractPath, minInterval, maxInterval, targetAddr, duration, targetAddr2, count, pingAttackType, concurrency, rpcURL, height := parseFlags()
-
-	// Create context
-	ctx := context.Background()
-
-	// Validate inputs based on operation
-	if err := validateInputs(operation, nodeName, contractPath, targetAddr, targetAddr2, pingAttackType); err != nil {
-		log.Printf("[ERROR] Input validation failed: %v", err)
-		os.Exit(1)
-	}
-
-	// Load configuration
-	config, err := loadConfig(*configFile)
-	if err != nil {
-		log.Printf("[ERROR] Failed to load config: %v", err)
-		os.Exit(1)
-	}
-
-	// Get node config if needed
-	var nodeConfig *resources.NodeConfig
-	if *nodeName != "" {
-		for i := range config.Nodes {
-			if config.Nodes[i].Name == *nodeName {
-				nodeConfig = &config.Nodes[i]
-				break
+	app := &cli.App{
+		Name:  "workload",
+		Usage: "Filecoin testing workload",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "config",
+				Value:   "/opt/antithesis/resources/config.json",
+				Usage:   "Path to config JSON file",
+				EnvVars: []string{"WORKLOAD_CONFIG"},
+			},
+		},
+		Before: func(c *cli.Context) error {
+			// Load configuration
+			var err error
+			config, err = resources.LoadConfig(c.String("config"))
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
 			}
-		}
-		if nodeConfig == nil && *operation != "spam" && *operation != "chaos" {
-			log.Printf("[ERROR] Node '%s' not found in config", *nodeName)
-			os.Exit(1)
-		}
+			return nil
+		},
+		Commands: []*cli.Command{
+			walletCommands(),
+			networkCommands(),
+			contractCommands(),
+			mempoolCommands(),
+			consensusCommands(),
+			monitoringCommands(),
+		},
 	}
 
-	// Execute the requested operation
-	switch *operation {
-	case "create":
-		err = performCreateOperation(ctx, nodeConfig, numWallets, abi.NewTokenAmount(1000000000000000))
-	case "delete":
-		err = performDeleteOperation(ctx, nodeConfig)
-	case "spam":
-		err = performSpamOperation(ctx, config)
-	case "connect":
-		err = performConnectDisconnectOperation(ctx, nodeConfig, config)
-	case "deploySimpleCoin":
-		err = performDeploySimpleCoin(ctx, nodeConfig, *contractPath)
-	case "deployMCopy":
-		err = performDeployMCopy(ctx, nodeConfig, *contractPath)
-	case "deployTStore":
-		err = performDeployTStore(ctx, nodeConfig, *contractPath)
-	case "chaos":
-		err = performChaosOperations(ctx, *targetAddr, *minInterval, *maxInterval, *duration)
-	case "mempoolFuzz":
-		err = performMempoolFuzz(ctx, nodeConfig, *count, *concurrency)
-	case "pingAttack":
-		attackType := p2pfuzz.AttackTypeFromString(*pingAttackType)
-		err = performPingAttack(ctx, *targetAddr, attackType, *concurrency, *minInterval, *maxInterval, *duration)
-	case "rpc-benchmark":
-		callV2API(*rpcURL)
-	case "checkConsensus":
-		err = performConsensusCheck(ctx, config, *height)
-	case "deployContract":
-		if *contractPath == "" {
-			*contractPath = "workload/resources/smart-contracts/SimpleCoin.hex"
-		}
-		err = deploySmartContract(ctx, nodeConfig, *contractPath)
-	case "stateMismatch":
-		err = performStateMismatch(ctx, nodeConfig)
-	case "sendConsensusFault":
-		err = performSendConsensusFault(ctx)
-	case "checkEthMethods":
-		err = performEthMethodsCheck(ctx)
-	case "sendEthLegacy":
-		err = sendEthLegacyTransaction(ctx, nodeConfig)
-	case "blockfuzz":
-		err = performBlockFuzzing(ctx, nodeConfig)
-	case "checkBackfill":
-		err = performCheckBackfill(ctx, config)
-	case "stressMaxMessageSize":
-		err = performStressMaxMessageSize(ctx, nodeConfig)
-	case "stressMaxMessages":
-		err = performStressMaxMessages(ctx, nodeConfig)
-	case "checkFinalizedTipsets":
-		err = performCheckFinalizedTipsets(ctx)
-	case "checkF3Running":
-		err = checkF3Running()
-	case "checkPeers":
-		err = checkPeers()
-	default:
-		log.Printf("[ERROR] Unknown operation: %s", *operation)
+	if err := app.Run(os.Args); err != nil {
+		log.Printf("[ERROR] %v", err)
 		os.Exit(1)
 	}
+}
 
-	if err != nil {
-		log.Printf("[ERROR] Operation '%s' failed: %v", *operation, err)
-		os.Exit(1)
+func getNodeConfig(c *cli.Context) (*resources.NodeConfig, error) {
+	nodeName := c.String("node")
+	if nodeName == "" {
+		return nil, fmt.Errorf("node name is required")
 	}
 
-	log.Printf("[INFO] Operation '%s' completed successfully", *operation)
+	for i := range config.Nodes {
+		if config.Nodes[i].Name == nodeName {
+			return &config.Nodes[i], nil
+		}
+	}
+	return nil, fmt.Errorf("node '%s' not found in config", nodeName)
 }
 
-// STEP 4: Define a new function for your operation.
-// This function will contain the logic for your new CLI command.
-// For example:
-/*
-func performMyNewOperation(ctx context.Context, nodeConfig *resources.NodeConfig) error {
-	log.Println("[INFO] Starting myNewOperation...")
-	// Add your operation's logic here
-	log.Println("[INFO] myNewOperation completed.")
-	return nil
-}
-*/
+func walletCommands() *cli.Command {
+	nodeFlag := &cli.StringFlag{
+		Name:     "node",
+		Usage:    "node name from config.json (Lotus1 or Lotus2)",
+		Required: true,
+	}
 
-func performCreateOperation(ctx context.Context, nodeConfig *resources.NodeConfig, numWallets *int, tokenAmount abi.TokenAmount) error {
-	log.Printf("Creating %d wallets on node '%s'...", *numWallets, nodeConfig.Name)
+	return &cli.Command{
+		Name:  "wallet",
+		Usage: "Wallet management operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "create",
+				Usage: "Create new wallets",
+				Flags: []cli.Flag{
+					nodeFlag,
+					&cli.IntFlag{
+						Name:  "count",
+						Value: 1,
+						Usage: "Number of wallets to create",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return performCreateOperation(c.Context, nodeConfig, c.Int("count"), abi.NewTokenAmount(1000000000000000))
+				},
+			},
+			{
+				Name:  "delete",
+				Usage: "Delete wallets",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return performDeleteOperation(c.Context, nodeConfig)
+				},
+			},
+		},
+	}
+}
+
+func networkCommands() *cli.Command {
+	nodeFlag := &cli.StringFlag{
+		Name:     "node",
+		Usage:    "node name from config.json (Lotus1 or Lotus2)",
+		Required: true,
+	}
+
+	return &cli.Command{
+		Name:  "network",
+		Usage: "Network testing operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "chaos",
+				Usage: "Run network chaos operations",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "target",
+						Usage:    "Target multiaddr for chaos operations",
+						Required: true,
+					},
+					&cli.DurationFlag{
+						Name:  "min-interval",
+						Value: 5 * time.Second,
+						Usage: "Minimum interval between operations",
+					},
+					&cli.DurationFlag{
+						Name:  "max-interval",
+						Value: 30 * time.Second,
+						Usage: "Maximum interval between operations",
+					},
+					&cli.DurationFlag{
+						Name:  "duration",
+						Value: 60 * time.Second,
+						Usage: "Duration to run the attack",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					return performChaosOperations(
+						c.Context,
+						c.String("target"),
+						c.Duration("min-interval"),
+						c.Duration("max-interval"),
+						c.Duration("duration"),
+					)
+				},
+			},
+			{
+				Name:  "ping",
+				Usage: "Run ping attacks",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "target",
+						Usage:    "Target multiaddr for ping operations",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:  "type",
+						Value: "random",
+						Usage: "Type of ping attack",
+					},
+					&cli.IntFlag{
+						Name:  "concurrency",
+						Value: 5,
+						Usage: "Number of concurrent operations",
+					},
+					&cli.DurationFlag{
+						Name:  "duration",
+						Value: 60 * time.Second,
+						Usage: "Duration to run the attack",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					attackType := p2pfuzz.AttackTypeFromString(c.String("type"))
+					return performPingAttack(
+						c.Context,
+						c.String("target"),
+						attackType,
+						c.Int("concurrency"),
+						c.Duration("min-interval"),
+						c.Duration("max-interval"),
+						c.Duration("duration"),
+					)
+				},
+			},
+			{
+				Name:  "connect",
+				Usage: "Connect node to other nodes",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					log.Printf("Connecting node '%s' to other nodes...", nodeConfig.Name)
+					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+					if err != nil {
+						return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+					}
+					defer closer()
+
+					lotusNodes := resources.FilterLotusNodes(config.Nodes)
+					if err := resources.ConnectToOtherNodes(c.Context, api, *nodeConfig, lotusNodes); err != nil {
+						return fmt.Errorf("failed to connect node '%s' to other nodes: %w", nodeConfig.Name, err)
+					}
+					log.Printf("Node '%s' connected successfully", nodeConfig.Name)
+					return nil
+				},
+			},
+			{
+				Name:  "disconnect",
+				Usage: "Disconnect node from other nodes",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					log.Printf("Disconnecting node '%s' from other nodes...", nodeConfig.Name)
+					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+					if err != nil {
+						return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+					}
+					defer closer()
+
+					if err := resources.DisconnectFromOtherNodes(c.Context, api); err != nil {
+						return fmt.Errorf("failed to disconnect node '%s' from other nodes: %w", nodeConfig.Name, err)
+					}
+					log.Printf("Node '%s' disconnected successfully", nodeConfig.Name)
+					return nil
+				},
+			},
+		},
+	}
+}
+
+func mempoolCommands() *cli.Command {
+	nodeFlag := &cli.StringFlag{
+		Name:     "node",
+		Usage:    "node name from config.json (Lotus1 or Lotus2)",
+		Required: true,
+	}
+
+	return &cli.Command{
+		Name:  "mempool",
+		Usage: "Mempool testing operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "fuzz",
+				Usage: "Run mempool fuzzing",
+				Flags: []cli.Flag{
+					nodeFlag,
+					&cli.IntFlag{
+						Name:  "count",
+						Value: 100,
+						Usage: "Number of transactions to perform",
+					},
+					&cli.IntFlag{
+						Name:  "concurrency",
+						Value: 5,
+						Usage: "Number of concurrent operations",
+					},
+					&cli.StringFlag{
+						Name:  "strategy",
+						Value: "standard",
+						Usage: "Fuzzing strategy (standard, chained, burst)",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return performMempoolFuzz(
+						c.Context,
+						nodeConfig,
+						c.Int("count"),
+						c.Int("concurrency"),
+						c.String("strategy"),
+					)
+				},
+			},
+		},
+	}
+}
+
+func contractCommands() *cli.Command {
+	nodeFlag := &cli.StringFlag{
+		Name:     "node",
+		Usage:    "node name from config.json (Lotus1 or Lotus2)",
+		Required: true,
+	}
+
+	return &cli.Command{
+		Name:  "contracts",
+		Usage: "Smart contract operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "deploy-simple-coin",
+				Usage: "Deploy SimpleCoin contract",
+				Flags: []cli.Flag{
+					nodeFlag,
+					&cli.StringFlag{
+						Name:     "contract",
+						Usage:    "Path to the contract bytecode file",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return performDeploySimpleCoin(c.Context, nodeConfig, c.String("contract"))
+				},
+			},
+			{
+				Name:  "deploy-mcopy",
+				Usage: "Deploy MCopy contract",
+				Flags: []cli.Flag{
+					nodeFlag,
+					&cli.StringFlag{
+						Name:     "contract",
+						Usage:    "Path to the contract bytecode file",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return performDeployMCopy(c.Context, nodeConfig, c.String("contract"))
+				},
+			},
+		},
+	}
+}
+
+func consensusCommands() *cli.Command {
+	return &cli.Command{
+		Name:  "consensus",
+		Usage: "Consensus testing operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "check",
+				Usage: "Check consensus between nodes",
+				Flags: []cli.Flag{
+					&cli.Int64Flag{
+						Name:  "height",
+						Value: 0,
+						Usage: "Chain height to check consensus at (0 for current height)",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					return performConsensusCheck(c.Context, config, c.Int64("height"))
+				},
+			},
+			{
+				Name:  "fault",
+				Usage: "Send consensus fault",
+				Action: func(c *cli.Context) error {
+					return performSendConsensusFault(c.Context)
+				},
+			},
+			{
+				Name:  "finalized",
+				Usage: "Check finalized tipsets",
+				Action: func(c *cli.Context) error {
+					return performCheckFinalizedTipsets(c.Context)
+				},
+			},
+		},
+	}
+}
+
+func monitoringCommands() *cli.Command {
+	return &cli.Command{
+		Name:  "monitor",
+		Usage: "Monitoring operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "peers",
+				Usage: "Check peer connections",
+				Action: func(c *cli.Context) error {
+					return checkPeers()
+				},
+			},
+			{
+				Name:  "f3",
+				Usage: "Check F3 service status",
+				Action: func(c *cli.Context) error {
+					return checkF3Running()
+				},
+			},
+		},
+	}
+}
+
+func performCreateOperation(ctx context.Context, nodeConfig *resources.NodeConfig, numWallets int, tokenAmount abi.TokenAmount) error {
+	log.Printf("Creating %d wallets on node '%s'...", numWallets, nodeConfig.Name)
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
@@ -272,7 +440,7 @@ func performCreateOperation(ctx context.Context, nodeConfig *resources.NodeConfi
 	}
 	defer closer()
 
-	err = resources.InitializeWallets(ctx, api, *numWallets, tokenAmount)
+	err = resources.InitializeWallets(ctx, api, numWallets, tokenAmount)
 	if err != nil {
 		log.Printf("Warning: Error occurred during wallet initialization: %v", err)
 	} else {
@@ -324,12 +492,7 @@ func performSpamOperation(ctx context.Context, config *resources.Config) error {
 	}()
 
 	// Filter nodes for operation
-	filteredNodes := []resources.NodeConfig{}
-	for _, node := range config.Nodes {
-		if node.Name == "Lotus1" || node.Name == "Lotus2" {
-			filteredNodes = append(filteredNodes, node)
-		}
-	}
+	filteredNodes := resources.FilterLotusNodes(config.Nodes)
 	log.Printf("[INFO] Filtered nodes for spam operation: %+v", filteredNodes)
 
 	// Connect to each node and retrieve wallets
@@ -623,8 +786,8 @@ func performPingAttack(ctx context.Context, targetAddr string, attackType p2pfuz
 	return nil
 }
 
-func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, count, concurrency int) error {
-	log.Printf("[INFO] Starting mempool fuzzing on node '%s' with %d transactions...", nodeConfig.Name, count)
+func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, count, concurrency int, strategy string) error {
+	log.Printf("[INFO] Starting mempool fuzzing on node '%s' with %d transactions using strategy '%s'...", nodeConfig.Name, count, strategy)
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
@@ -642,7 +805,7 @@ func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, c
 	if len(wallets) < 2 {
 		log.Printf("[WARN] Not enough wallets (found %d). Creating more wallets.", len(wallets))
 		numWallets := 2
-		if err := performCreateOperation(ctx, nodeConfig, &numWallets, types.FromFil(100)); err != nil {
+		if err := performCreateOperation(ctx, nodeConfig, numWallets, types.FromFil(100)); err != nil {
 			log.Printf("Create operation failed: %v", err)
 		}
 
@@ -653,57 +816,10 @@ func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, c
 	}
 
 	from := wallets[0]
-	errCount := 0
+	to := wallets[1]
 
-	// Log initial balance
-	balance, err := api.WalletBalance(ctx, from)
-	if err != nil {
-		log.Printf("[WARN] Failed to get sender balance: %v", err)
-	} else {
-		log.Printf("[INFO] Sender %s initial balance: %s", from, types.FIL(balance))
-	}
-
-	for i := 0; i < count; i++ {
-		to, err := mpoolfuzz.GenerateRandomAddress()
-		if err != nil {
-			log.Printf("[WARN] Failed to generate random address: %v", err)
-			continue
-		}
-
-		msg := mpoolfuzz.CreateBaseMessage(from, to, 0)
-		log.Printf("[DEBUG] Pushing message %d: From=%s To=%s Value=%s GasLimit=%d",
-			i, msg.From, msg.To, types.FIL(msg.Value), msg.GasLimit)
-
-		signedMsg, err := api.MpoolPushMessage(ctx, msg, nil)
-		if err != nil {
-			errCount++
-			log.Printf("[WARN] Failed to push message %d: %v", i, err)
-			continue
-		}
-
-		log.Printf("[INFO] Message %d sent successfully: CID=%s", i, signedMsg.Cid())
-
-		// Get mempool pending count
-		pending, err := api.MpoolPending(ctx, types.EmptyTSK)
-		if err != nil {
-			log.Printf("[WARN] Failed to get pending messages: %v", err)
-		} else {
-			log.Printf("[DEBUG] Current mempool pending count: %d", len(pending))
-		}
-
-		time.Sleep(100 * time.Millisecond) // Small delay to avoid overwhelming the node
-	}
-
-	// Log final balance
-	balance, err = api.WalletBalance(ctx, from)
-	if err != nil {
-		log.Printf("[WARN] Failed to get sender final balance: %v", err)
-	} else {
-		log.Printf("[INFO] Sender %s final balance: %s", from, types.FIL(balance))
-	}
-
-	log.Printf("[INFO] Mempool fuzzing completed. %d messages sent, %d errors", count, errCount)
-	return nil
+	// Call the appropriate fuzzing strategy
+	return mpoolfuzz.FuzzMempoolWithStrategy(ctx, api, from, to, strategy, count)
 }
 
 func callV2API(endpoint string) {
@@ -941,22 +1057,6 @@ func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeCon
 	return nil
 }
 
-func performStateMismatch(ctx context.Context, nodeConfig *resources.NodeConfig) error {
-	log.Printf("[INFO] Starting state mismatch check on node '%s'...", nodeConfig.Name)
-
-	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
-	}
-	defer closer()
-	err = resources.StateMismatch(ctx, api)
-	if err != nil {
-		return fmt.Errorf("state mismatch check failed: %w", err)
-	}
-
-	return nil
-}
-
 func performSendConsensusFault(ctx context.Context) error {
 	log.Println("[INFO] Attempting to send a consensus fault...")
 	err := resources.SendConsensusFault(ctx)
@@ -1000,18 +1100,10 @@ func performCheckBackfill(ctx context.Context, config *resources.Config) error {
 	log.Println("[INFO] Starting chain index backfill check...")
 
 	// Filter nodes to "Lotus1" and "Lotus2"
-	nodeNames := []string{"Lotus1", "Lotus2"}
-	var filteredNodes []resources.NodeConfig
-	for _, node := range config.Nodes {
-		for _, name := range nodeNames {
-			if node.Name == name {
-				filteredNodes = append(filteredNodes, node)
-			}
-		}
-	}
+	filteredNodes := resources.FilterLotusNodes(config.Nodes)
 
 	if len(filteredNodes) == 0 {
-		return fmt.Errorf("no nodes matching '%s' or '%s' found in config", nodeNames[0], nodeNames[1])
+		return fmt.Errorf("no Lotus nodes found in config")
 	}
 
 	err := resources.CheckChainBackfill(ctx, filteredNodes)
@@ -1041,43 +1133,6 @@ func performStressMaxMessageSize(ctx context.Context, nodeConfig *resources.Node
 	return nil
 }
 
-func performStressMaxMessages(ctx context.Context, nodeConfig *resources.NodeConfig) error {
-	log.Printf("[INFO] Starting max messages in block stress test on node '%s'...", nodeConfig.Name)
-
-	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
-	}
-	defer closer()
-
-	err = resources.SendMaxMessages(ctx, api)
-	if err != nil {
-		return fmt.Errorf("max messages in block stress test failed: %w", err)
-	}
-
-	log.Printf("[INFO] Max messages in block stress test completed successfully")
-	return nil
-}
-
-func performStressMaxTipsetSize(config *resources.Config) error {
-	log.Printf("[INFO] Starting max tipset size stress test...")
-
-	nodeNames := []string{"Lotus1", "Lotus2"}
-	var filteredNodes []resources.NodeConfig
-	for _, node := range config.Nodes {
-		for _, name := range nodeNames {
-			if node.Name == name {
-				filteredNodes = append(filteredNodes, node)
-			}
-		}
-	}
-
-	if len(filteredNodes) < 2 {
-		return fmt.Errorf("need at least two Lotus nodes for this test, found %d", len(filteredNodes))
-	}
-	return nil
-}
-
 func performCheckFinalizedTipsets(ctx context.Context) error {
 	log.Printf("[INFO] Starting finalized tipset comparison...")
 
@@ -1087,16 +1142,8 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Filter nodes to "Lotus1" and "Lotus2"
-	nodeNames := []string{"Lotus1", "Lotus1-V2", "Lotus2", "Lotus2-V2"}
-	var filteredNodes []resources.NodeConfig
-	for _, node := range config.Nodes {
-		for _, name := range nodeNames {
-			if node.Name == name {
-				filteredNodes = append(filteredNodes, node)
-			}
-		}
-	}
+	// Filter nodes to include both V1 and V2 nodes
+	filteredNodes := resources.FilterLotusNodesWithV2(config.Nodes)
 
 	if len(filteredNodes) < 2 {
 		return fmt.Errorf("need at least two Lotus nodes for this test, found %d", len(filteredNodes))
