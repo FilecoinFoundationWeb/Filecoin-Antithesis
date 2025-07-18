@@ -44,6 +44,8 @@ const (
 	settlingPeriod = 10 * time.Second
 )
 
+// NewConsensusChecker creates a new consensus checker instance for Lotus nodes
+// It initializes connections to both V1 and V2 API endpoints
 func NewConsensusChecker(ctx context.Context, nodes []NodeConfig) (*ConsensusChecker, error) {
 	checker := &ConsensusChecker{
 		nodes: make(map[string]NodeInfo),
@@ -78,6 +80,7 @@ func NewConsensusChecker(ctx context.Context, nodes []NodeConfig) (*ConsensusChe
 	return checker, nil
 }
 
+// makeRPCRequest performs a JSON-RPC request to a node with the specified method and parameters
 func (cc *ConsensusChecker) makeRPCRequest(ctx context.Context, nodeInfo NodeInfo, method string, params interface{}) (*RPCResponse, error) {
 	reqBody, err := json.Marshal(map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -116,6 +119,7 @@ func (cc *ConsensusChecker) makeRPCRequest(ctx context.Context, nodeInfo NodeInf
 }
 
 // getChainHead gets the current chain head for a node
+// It handles both V1 and V2 API versions
 func (cc *ConsensusChecker) getChainHead(ctx context.Context, nodeInfo NodeInfo) (abi.ChainEpoch, error) {
 	// Use different method names for V1 and V2 APIs
 	methodName := "Filecoin.ChainHead"
@@ -138,6 +142,7 @@ func (cc *ConsensusChecker) getChainHead(ctx context.Context, nodeInfo NodeInfo)
 }
 
 // getTipsetAtHeight gets the tipset at a specific height for a node
+// For V2 nodes, it uses the finalized tipset selector
 func (cc *ConsensusChecker) getTipsetAtHeight(ctx context.Context, nodeInfo NodeInfo, height abi.ChainEpoch) (string, error) {
 	// For V2 nodes, use the finalized tipset selector
 	if strings.Contains(nodeInfo.RPCURL, "/rpc/v2") {
@@ -217,6 +222,8 @@ func (cc *ConsensusChecker) checkTipsetConsensus(ctx context.Context, height abi
 	return len(tipsetKeys) == 1, tipsetKeys, nil
 }
 
+// CheckConsensus verifies that all nodes have consensus on tipsets for a range of heights
+// If no height is specified (height = 0), it chooses a random height between genesis and minHead-20
 func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.ChainEpoch) error {
 	log.Printf("Starting consensus check between nodes")
 

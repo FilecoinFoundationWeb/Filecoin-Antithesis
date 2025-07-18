@@ -11,6 +11,9 @@ import (
 	"github.com/filecoin-project/lotus/api"
 )
 
+// StateMismatch verifies state computation consistency by checking if computed state
+// matches parent state at a random height. It walks back through the chain from the
+// selected height to genesis, verifying state computation at each step.
 func StateMismatch(ctx context.Context, api api.FullNode) error {
 	checkTs, err := api.ChainHead(ctx)
 	if err != nil {

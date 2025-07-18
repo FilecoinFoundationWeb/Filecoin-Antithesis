@@ -2,4 +2,4 @@
 
 echo "Asserting finalized tipsets are the same between two nodes"
 
-/opt/antithesis/app --operation checkFinalizedTipsets
+/opt/antithesis/app consensus finalized

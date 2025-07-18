@@ -13,6 +13,10 @@ import (
 	"github.com/filecoin-project/lotus/chain/types"
 )
 
+// SendConsensusFault attempts to create and report a consensus fault by modifying a block's
+// fork signaling and submitting it to the network. It tries with two different miners,
+// falling back to the second if the first attempt fails. This is used to test the network's
+// response to malicious behavior.
 func SendConsensusFault(ctx context.Context) error {
 	config, err := LoadConfig("/opt/antithesis/resources/config.json")
 	if err != nil {

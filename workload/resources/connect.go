@@ -36,6 +36,7 @@ const (
 	minRecoveryTime   = 30 * time.Second // Minimum time to wait for node recovery
 )
 
+// LoadConfig reads and parses a JSON configuration file containing node information
 func LoadConfig(filename string) (*Config, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -46,6 +47,8 @@ func LoadConfig(filename string) (*Config, error) {
 	return &config, err
 }
 
+// ConnectToNode establishes a connection to a Filecoin node with retry logic
+// It will attempt to connect maxRetries times with increasing delay between attempts
 func ConnectToNode(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(), error) {
 	var (
 		api    api.FullNode
@@ -82,7 +85,7 @@ func ConnectToNode(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, fu
 	return nil, nil, fmt.Errorf("failed to connect to node %s after %d attempts: %v", nodeConfig.Name, maxRetries, err)
 }
 
-// tryConnect attempts a single connection to the node
+// tryConnect attempts a single connection to the node using the V1 RPC API
 func tryConnect(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(), error) {
 	authToken, err := ioutil.ReadFile(nodeConfig.AuthTokenPath)
 	if err != nil {
@@ -97,6 +100,7 @@ func tryConnect(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(
 	return api, closer, err
 }
 
+// ConnectToNodeV2 establishes a connection to a Filecoin node using the V2 RPC API
 func ConnectToNodeV2(ctx context.Context, nodeConfig NodeConfig) (v2api.FullNode, func(), error) {
 	authToken, err := ioutil.ReadFile(nodeConfig.AuthTokenPath)
 	if err != nil {
@@ -120,6 +124,7 @@ func NewFullNodeRPCV2(ctx context.Context, addr string, requestHeader http.Heade
 	return &res, closer, err
 }
 
+// IsNodeConnected checks if a node has any active peer connections
 func IsNodeConnected(ctx context.Context, nodeAPI api.FullNode) (bool, error) {
 	peers, err := nodeAPI.NetPeers(ctx)
 	if err != nil {
@@ -128,6 +133,7 @@ func IsNodeConnected(ctx context.Context, nodeAPI api.FullNode) (bool, error) {
 	return len(peers) > 0, nil
 }
 
+// EnsureNodesConnected verifies that a node is connected to peers and attempts to establish connections if not
 func EnsureNodesConnected(ctx context.Context, currentNodeAPI api.FullNode, currentNodeConfig NodeConfig, allNodes []NodeConfig) (bool, error) {
 	connected, err := IsNodeConnected(ctx, currentNodeAPI)
 	if err != nil {
@@ -146,7 +152,7 @@ func EnsureNodesConnected(ctx context.Context, currentNodeAPI api.FullNode, curr
 	return IsNodeConnected(ctx, currentNodeAPI)
 }
 
-// ConnectToOtherNodes connects the current node to all other nodes in the config with retries.
+// ConnectToOtherNodes connects the current node to all other nodes in the config with retries
 func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, currentNodeConfig NodeConfig, allNodes []NodeConfig) error {
 	for _, nodeConfig := range allNodes {
 		if nodeConfig.Name == currentNodeConfig.Name {
@@ -212,7 +218,7 @@ func tryConnectToNode(ctx context.Context, currentNodeAPI api.FullNode, currentN
 	return err
 }
 
-// DisconnectFromOtherNodes disconnects the current node from all connected peers.
+// DisconnectFromOtherNodes disconnects the current node from all connected peers
 func DisconnectFromOtherNodes(ctx context.Context, nodeAPI api.FullNode) error {
 	peers, err := nodeAPI.NetPeers(ctx)
 	if err != nil {
@@ -238,9 +244,33 @@ func FilterLotusNodes(nodes []NodeConfig) []NodeConfig {
 	return lotusNodes
 }
 
+// FilterLotusNodesV1 returns only V1 Lotus nodes (Lotus1 and Lotus2)
+func FilterLotusNodesV1(nodes []NodeConfig) []NodeConfig {
+	var filteredNodes []NodeConfig
+	for _, node := range nodes {
+		if node.Name == "Lotus1" || node.Name == "Lotus2" {
+			filteredNodes = append(filteredNodes, node)
+		}
+	}
+	return filteredNodes
+}
+
+// FilterLotusNodesWithV2 returns only V2 Lotus nodes (Lotus1-V2 and Lotus2-V2)
+func FilterLotusNodesWithV2(nodes []NodeConfig) []NodeConfig {
+	var filteredNodes []NodeConfig
+	for _, node := range nodes {
+		if node.Name == "Lotus1-V2" || node.Name == "Lotus2-V2" {
+			filteredNodes = append(filteredNodes, node)
+		}
+	}
+	return filteredNodes
+}
+
 // ChainPredicate encapsulates a chain condition.
 type ChainPredicate func(set *types.TipSet) bool
 
+// WaitTillChain waits for a chain condition specified by the predicate to be met
+// It monitors chain notifications and returns the tipset that satisfies the condition
 func WaitTillChain(ctx context.Context, api api.FullNode, pred ChainPredicate) *types.TipSet {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -261,18 +291,4 @@ func WaitTillChain(ctx context.Context, api api.FullNode, pred ChainPredicate) *
 		}
 	}
 	return nil
-}
-
-// FilterLotusNodesWithV2 returns both V1 and V2 Lotus nodes
-func FilterLotusNodesWithV2(nodes []NodeConfig) []NodeConfig {
-	nodeNames := []string{"Lotus1-V2", "Lotus2-V2"}
-	var filteredNodes []NodeConfig
-	for _, node := range nodes {
-		for _, name := range nodeNames {
-			if node.Name == name {
-				filteredNodes = append(filteredNodes, node)
-			}
-		}
-	}
-	return filteredNodes
 }

@@ -2,4 +2,4 @@
 
 echo "Print peer info for all 3 nodes"
 
-/opt/antithesis/app -operation checkPeers
+/opt/antithesis/app monitor peers

@@ -16,4 +16,4 @@ SELECTED_NODE=$(get_random_node)
 echo "Selected node for state mismatch check: $SELECTED_NODE"
 
 # Run state mismatch check
-/opt/antithesis/app -operation stateMismatch -node "$SELECTED_NODE"
+/opt/antithesis/app state check --node "$SELECTED_NODE"

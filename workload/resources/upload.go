@@ -28,6 +28,8 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
+// DeployContractWithValue deploys a smart contract with a specified value transfer
+// It handles contract initialization, message creation, and deployment confirmation
 func DeployContractWithValue(ctx context.Context, api api.FullNode, sender address.Address, bytecode []byte, value big.Int) eam.CreateReturn {
 	var result eam.CreateReturn
 
@@ -76,10 +78,14 @@ func DeployContractWithValue(ctx context.Context, api api.FullNode, sender addre
 	return result
 }
 
+// DeployContract deploys a smart contract with zero value transfer
+// It's a convenience wrapper around DeployContractWithValue
 func DeployContract(ctx context.Context, api api.FullNode, sender address.Address, bytecode []byte) eam.CreateReturn {
 	return DeployContractWithValue(ctx, api, sender, bytecode, big.Zero())
 }
 
+// DeployContractFromFilenameWithValue deploys a contract from a file containing hex-encoded bytecode
+// with a specified value transfer. Returns the sender and contract addresses
 func DeployContractFromFilenameWithValue(ctx context.Context, api api.FullNode, binFilename string, value big.Int) (address.Address, address.Address) {
 	// Check if file exists
 	if _, err := os.Stat(binFilename); os.IsNotExist(err) {
@@ -141,16 +147,22 @@ func DeployContractFromFilenameWithValue(ctx context.Context, api api.FullNode, 
 	return fromAddr, idAddr
 }
 
+// DeployContractFromFilename deploys a contract from a file containing hex-encoded bytecode
+// with zero value transfer. Returns the sender and contract addresses
 func DeployContractFromFilename(ctx context.Context, api api.FullNode, binFilename string) (address.Address, address.Address) {
 	fromAddr, contractAddr := DeployContractFromFilenameWithValue(ctx, api, binFilename, big.Zero())
 
 	return fromAddr, contractAddr
 }
 
+// InvokeSolidity calls a Solidity contract function with zero value transfer
+// It's a convenience wrapper around InvokeSolidityWithValue
 func InvokeSolidity(ctx context.Context, api api.FullNode, sender address.Address, target address.Address, selector []byte, inputData []byte) (*api.MsgLookup, error) {
 	return InvokeSolidityWithValue(ctx, api, sender, target, selector, inputData, big.Zero())
 }
 
+// InvokeContractByFuncName calls a contract function using its function signature
+// Returns the function's return data and message lookup information
 func InvokeContractByFuncName(ctx context.Context, api api.FullNode, fromAddr address.Address, idAddr address.Address, funcSignature string, inputData []byte) ([]byte, *api.MsgLookup, error) {
 	entryPoint := CalcFuncSignature(funcSignature)
 
@@ -176,6 +188,8 @@ func InvokeContractByFuncName(ctx context.Context, api api.FullNode, fromAddr ad
 	return result, wait, err
 }
 
+// InvokeSolidityWithValue calls a Solidity contract function with a specified value transfer
+// It handles parameter encoding, message creation, and execution confirmation
 func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender address.Address, target address.Address, selector []byte, inputData []byte, value big.Int) (*api.MsgLookup, error) {
 	params := append(selector, inputData...)
 	var buffer bytes.Buffer
@@ -222,12 +236,16 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 	return wait, nil
 }
 
+// CalcFuncSignature calculates the 4-byte function selector for a Solidity function signature
+// using Keccak-256 hashing according to the Solidity ABI specification
 func CalcFuncSignature(funcName string) []byte {
 	hasher := sha3.NewLegacyKeccak256()
 	hasher.Write([]byte(funcName))
 	return hasher.Sum(nil)[:4]
 }
 
+// InputDataFromFrom converts a Filecoin address to its Ethereum format for use as input data
+// Returns a 32-byte array with the Ethereum address right-aligned
 func InputDataFromFrom(ctx context.Context, api api.FullNode, from address.Address) []byte {
 	if from.Empty() {
 		log.Printf("[ERROR] Cannot process empty 'from' address")
@@ -251,6 +269,7 @@ func InputDataFromFrom(ctx context.Context, api api.FullNode, from address.Addre
 	return inputData
 }
 
+// SignTransaction signs an Ethereum 1559-style transaction with the provided private key
 func SignTransaction(tx *ethtypes.Eth1559TxArgs, privKey []byte) {
 	preimage, err := tx.ToRlpUnsignedMsg()
 	if err != nil {
@@ -269,6 +288,8 @@ func SignTransaction(tx *ethtypes.Eth1559TxArgs, privKey []byte) {
 	}
 }
 
+// SubmitTransaction submits a signed Ethereum transaction to the network
+// Returns the transaction hash
 func SubmitTransaction(ctx context.Context, api api.FullNode, tx ethtypes.EthTransaction) ethtypes.EthHash {
 	signed, err := tx.ToRlpSignedMsg()
 	if err != nil {
@@ -283,6 +304,8 @@ func SubmitTransaction(ctx context.Context, api api.FullNode, tx ethtypes.EthTra
 	return txHash
 }
 
+// NewAccount creates a new Ethereum-compatible account
+// Returns the private key, Ethereum address, and Filecoin address
 func NewAccount() (*key.Key, ethtypes.EthAddress, address.Address) {
 	// Generate a secp256k1 key; this will back the Ethereum identity.
 	key, err := key.GenerateKey(types.KTSecp256k1)
@@ -311,6 +334,8 @@ func NewAccount() (*key.Key, ethtypes.EthAddress, address.Address) {
 	return key, *(*ethtypes.EthAddress)(ethAddr), addr
 }
 
+// SignLegacyHomesteadTransaction signs an Ethereum legacy (pre-1559) transaction
+// with the provided private key
 func SignLegacyHomesteadTransaction(tx *ethtypes.EthLegacyHomesteadTxArgs, privKey []byte) {
 	preimage, err := tx.ToRlpUnsignedMsg()
 	if err != nil {

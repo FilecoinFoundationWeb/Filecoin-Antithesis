@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+// delete is a command-line tool that deletes a random number of wallets from a specified node
+// It loads the node configuration from a config file, connects to the node, and deletes
+// a random selection of non-genesis wallets
 func delete() {
 	ctx := context.Background()
 

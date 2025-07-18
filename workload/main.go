@@ -13,7 +13,6 @@ import (
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
 	mpoolfuzz "github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/mpool-fuzz"
-	p2pfuzz "github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/p2p-fuzz"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -57,6 +56,11 @@ func main() {
 			mempoolCommands(),
 			consensusCommands(),
 			monitoringCommands(),
+			chainCommands(),
+			stateCommands(),
+			stressCommands(),
+			rpcCommands(),
+			ethCommands(),
 		},
 	}
 
@@ -139,79 +143,6 @@ func networkCommands() *cli.Command {
 		Name:  "network",
 		Usage: "Network testing operations",
 		Subcommands: []*cli.Command{
-			{
-				Name:  "chaos",
-				Usage: "Run network chaos operations",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "target",
-						Usage:    "Target multiaddr for chaos operations",
-						Required: true,
-					},
-					&cli.DurationFlag{
-						Name:  "min-interval",
-						Value: 5 * time.Second,
-						Usage: "Minimum interval between operations",
-					},
-					&cli.DurationFlag{
-						Name:  "max-interval",
-						Value: 30 * time.Second,
-						Usage: "Maximum interval between operations",
-					},
-					&cli.DurationFlag{
-						Name:  "duration",
-						Value: 60 * time.Second,
-						Usage: "Duration to run the attack",
-					},
-				},
-				Action: func(c *cli.Context) error {
-					return performChaosOperations(
-						c.Context,
-						c.String("target"),
-						c.Duration("min-interval"),
-						c.Duration("max-interval"),
-						c.Duration("duration"),
-					)
-				},
-			},
-			{
-				Name:  "ping",
-				Usage: "Run ping attacks",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "target",
-						Usage:    "Target multiaddr for ping operations",
-						Required: true,
-					},
-					&cli.StringFlag{
-						Name:  "type",
-						Value: "random",
-						Usage: "Type of ping attack",
-					},
-					&cli.IntFlag{
-						Name:  "concurrency",
-						Value: 5,
-						Usage: "Number of concurrent operations",
-					},
-					&cli.DurationFlag{
-						Name:  "duration",
-						Value: 60 * time.Second,
-						Usage: "Duration to run the attack",
-					},
-				},
-				Action: func(c *cli.Context) error {
-					attackType := p2pfuzz.AttackTypeFromString(c.String("type"))
-					return performPingAttack(
-						c.Context,
-						c.String("target"),
-						attackType,
-						c.Int("concurrency"),
-						c.Duration("min-interval"),
-						c.Duration("max-interval"),
-						c.Duration("duration"),
-					)
-				},
-			},
 			{
 				Name:  "connect",
 				Usage: "Connect node to other nodes",
@@ -324,6 +255,12 @@ func contractCommands() *cli.Command {
 		Required: true,
 	}
 
+	const (
+		simpleCoinPath = "/opt/antithesis/resources/smart-contracts/SimpleCoin.hex"
+		mcopyPath      = "/opt/antithesis/resources/smart-contracts/MCopy.hex"
+		tstoragePath   = "/opt/antithesis/resources/smart-contracts/TransientStorage.hex"
+	)
+
 	return &cli.Command{
 		Name:  "contracts",
 		Usage: "Smart contract operations",
@@ -333,18 +270,13 @@ func contractCommands() *cli.Command {
 				Usage: "Deploy SimpleCoin contract",
 				Flags: []cli.Flag{
 					nodeFlag,
-					&cli.StringFlag{
-						Name:     "contract",
-						Usage:    "Path to the contract bytecode file",
-						Required: true,
-					},
 				},
 				Action: func(c *cli.Context) error {
 					nodeConfig, err := getNodeConfig(c)
 					if err != nil {
 						return err
 					}
-					return performDeploySimpleCoin(c.Context, nodeConfig, c.String("contract"))
+					return performDeploySimpleCoin(c.Context, nodeConfig, simpleCoinPath)
 				},
 			},
 			{
@@ -352,18 +284,27 @@ func contractCommands() *cli.Command {
 				Usage: "Deploy MCopy contract",
 				Flags: []cli.Flag{
 					nodeFlag,
-					&cli.StringFlag{
-						Name:     "contract",
-						Usage:    "Path to the contract bytecode file",
-						Required: true,
-					},
 				},
 				Action: func(c *cli.Context) error {
 					nodeConfig, err := getNodeConfig(c)
 					if err != nil {
 						return err
 					}
-					return performDeployMCopy(c.Context, nodeConfig, c.String("contract"))
+					return performDeployMCopy(c.Context, nodeConfig, mcopyPath)
+				},
+			},
+			{
+				Name:  "deploy-tstorage",
+				Usage: "Deploy Transient Storage contract",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return performDeployTStore(c.Context, nodeConfig, tstoragePath)
 				},
 			},
 		},
@@ -424,6 +365,145 @@ func monitoringCommands() *cli.Command {
 				Usage: "Check F3 service status",
 				Action: func(c *cli.Context) error {
 					return checkF3Running()
+				},
+			},
+		},
+	}
+}
+
+func chainCommands() *cli.Command {
+	return &cli.Command{
+		Name:  "chain",
+		Usage: "Chain operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "backfill",
+				Usage: "Check chain index backfill",
+				Action: func(c *cli.Context) error {
+					return performCheckBackfill(c.Context, config)
+				},
+			},
+		},
+	}
+}
+
+func stateCommands() *cli.Command {
+	nodeFlag := &cli.StringFlag{
+		Name:     "node",
+		Usage:    "node name from config.json (Lotus1 or Lotus2)",
+		Required: true,
+	}
+
+	return &cli.Command{
+		Name:  "state",
+		Usage: "State operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "check",
+				Usage: "Check state consistency",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+					if err != nil {
+						return err
+					}
+					defer closer()
+					return resources.StateMismatch(c.Context, api)
+				},
+			},
+		},
+	}
+}
+
+func stressCommands() *cli.Command {
+	nodeFlag := &cli.StringFlag{
+		Name:     "node",
+		Usage:    "node name from config.json (Lotus1 or Lotus2)",
+		Required: true,
+	}
+
+	return &cli.Command{
+		Name:  "stress",
+		Usage: "Stress test operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "messages",
+				Usage: "Stress test with max size messages",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return performStressMaxMessageSize(c.Context, nodeConfig)
+				},
+			},
+		},
+	}
+}
+
+func rpcCommands() *cli.Command {
+	return &cli.Command{
+		Name:  "rpc",
+		Usage: "RPC operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "benchmark",
+				Usage: "Run RPC benchmark tests",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "url",
+						Usage:    "RPC endpoint URL",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					callV2API(c.String("url"))
+					return nil
+				},
+			},
+		},
+	}
+}
+
+func ethCommands() *cli.Command {
+	nodeFlag := &cli.StringFlag{
+		Name:     "node",
+		Usage:    "node name from config.json (Lotus1 or Lotus2)",
+		Required: true,
+	}
+
+	return &cli.Command{
+		Name:  "eth",
+		Usage: "Ethereum compatibility operations",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "check",
+				Usage: "Check ETH methods consistency",
+				Action: func(c *cli.Context) error {
+					return performEthMethodsCheck(c.Context)
+				},
+			},
+			{
+				Name:  "legacy-tx",
+				Usage: "Send legacy Ethereum transaction",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return sendEthLegacyTransaction(c.Context, nodeConfig)
 				},
 			},
 		},
@@ -704,7 +784,7 @@ func performDeployMCopy(ctx context.Context, nodeConfig *resources.NodeConfig, c
 	if err != nil {
 		log.Fatalf("Failed to invoke MCopy contract: %v", err)
 	}
-	if bytes.Compare(result, inputArgument) == 0 {
+	if bytes.Equal(result, inputArgument) {
 		log.Printf("MCopy invocation result matches the input argument. No change in the output.")
 	} else {
 		log.Printf("MCopy invocation result: %x\n", result)
@@ -750,39 +830,6 @@ func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	fmt.Printf("InvokeContractByFuncName Error: %s", err)
 
 	log.Printf("TStore contract successfully deployed and tested on node '%s'.", nodeConfig.Name)
-	return nil
-}
-
-func performChaosOperations(ctx context.Context, targetAddr string, minInterval, maxInterval, duration time.Duration) error {
-	log.Printf("Starting network chaos operations targeting %s...", targetAddr)
-
-	chaos, err := p2pfuzz.NewNetworkChaos(ctx, targetAddr)
-	if err != nil {
-		return fmt.Errorf("failed to initialize network chaos: %w", err)
-	}
-
-	chaos.Start(minInterval, maxInterval)
-
-	log.Printf("Network chaos operations will run for %s...", duration)
-	time.Sleep(duration)
-	log.Println("Stopping network chaos operations...")
-	chaos.Stop()
-
-	return nil
-}
-
-func performPingAttack(ctx context.Context, targetAddr string, attackType p2pfuzz.PingAttackType, concurrency int, minInterval, maxInterval, duration time.Duration) error {
-	log.Printf("[INFO] Starting ping attack against %s with attack type: %s", targetAddr, attackType)
-	pinger, err := p2pfuzz.NewMaliciousPinger(ctx, targetAddr)
-	if err != nil {
-		return fmt.Errorf("failed to create malicious pinger: %w", err)
-	}
-	pinger.Start(attackType, concurrency, minInterval, maxInterval)
-	runCtx, cancel := context.WithTimeout(ctx, duration)
-	defer cancel()
-	<-runCtx.Done()
-	pinger.Stop()
-	log.Printf("[INFO] Ping attack completed")
 	return nil
 }
 
@@ -1142,91 +1189,112 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Filter nodes to include both V1 and V2 nodes
-	filteredNodes := resources.FilterLotusNodesWithV2(config.Nodes)
+	// Filter nodes to get V1 and V2 nodes separately
+	v1Nodes := resources.FilterLotusNodesV1(config.Nodes)
+	v2Nodes := resources.FilterLotusNodesWithV2(config.Nodes)
 
-	if len(filteredNodes) < 2 {
-		return fmt.Errorf("need at least two Lotus nodes for this test, found %d", len(filteredNodes))
+	if len(v1Nodes) < 2 {
+		return fmt.Errorf("need at least two Lotus V1 nodes for this test, found %d", len(v1Nodes))
+	}
+	if len(v2Nodes) < 2 {
+		return fmt.Errorf("need at least two Lotus V2 nodes for this test, found %d", len(v2Nodes))
 	}
 
-	// Connect to V1 nodes to get chain head
-	api1, closer1, err := resources.ConnectToNode(ctx, filteredNodes[0])
+	// Connect to V1 nodes to get chain heads and find common height range
+	api1, closer1, err := resources.ConnectToNode(ctx, v1Nodes[0])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[0].Name, err)
+		return fmt.Errorf("failed to connect to %s: %w", v1Nodes[0].Name, err)
 	}
 	defer closer1()
 
-	api2, closer2, err := resources.ConnectToNode(ctx, filteredNodes[2])
+	api2, closer2, err := resources.ConnectToNode(ctx, v1Nodes[1])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[2].Name, err)
+		return fmt.Errorf("failed to connect to %s: %w", v1Nodes[1].Name, err)
 	}
 	defer closer2()
 
 	ch1, err := api1.ChainHead(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get chain head from %s: %w", filteredNodes[0].Name, err)
+		return fmt.Errorf("failed to get chain head from %s: %w", v1Nodes[0].Name, err)
 	}
 
 	ch2, err := api2.ChainHead(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get chain head from %s: %w", filteredNodes[2].Name, err)
+		return fmt.Errorf("failed to get chain head from %s: %w", v1Nodes[1].Name, err)
 	}
 
 	h1 := ch1.Height()
 	h2 := ch2.Height()
 
-	// Get the minimum height between the two nodes and subtract some blocks to ensure we're looking
-	// at a finalized part of the chain
-	var head int64
-	if h1 > h2 {
-		head = int64(h2)
+	log.Printf("[INFO] Current height %d for node %s", h1, v1Nodes[0].Name)
+	log.Printf("[INFO] Current height %d for node %s", h2, v1Nodes[1].Name)
+
+	// Find the minimum height between nodes (similar to eth_methods.go logic)
+	var minHeight int64
+	if h1 < h2 {
+		minHeight = int64(h1)
 	} else {
-		head = int64(h1)
+		minHeight = int64(h2)
 	}
 
-	// Ensure we're looking at a height that's at least 20 blocks behind the head
-	// to avoid any potential reorgs and ensure the tipset is finalized
-	if head < 20 {
-		return fmt.Errorf("chain height too low for finalized tipset check, current height: %d", head)
+	// Ensure we have enough history (at least 20 blocks)
+	if minHeight < 20 {
+		log.Printf("[WARN] chain height too low for finalized tipset comparison (min: %d, required: 20)", minHeight)
+		return nil
 	}
-	head = head - 20
 
-	// Connect to V2 nodes
-	api11, closer11, err := resources.ConnectToNodeV2(ctx, filteredNodes[1])
+	// Define the range for checking finalized tipsets (similar to eth_methods.go 30-block range)
+	// Use a range between height 20 and the minimum height
+	startHeight := int64(20)
+	endHeight := minHeight
+
+	// Select a random height within this range (similar to eth_methods.go random selection)
+	rand.Seed(time.Now().UnixNano())
+	randomHeight := startHeight + rand.Int63n(endHeight-startHeight+1)
+
+	log.Printf("[INFO] Selected random height %d for finalized tipset comparison (range: %d-%d)", randomHeight, startHeight, endHeight)
+
+	// Connect to V2 nodes for finalized tipset comparison
+	api11, closer11, err := resources.ConnectToNodeV2(ctx, v2Nodes[0])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[1].Name, err)
+		return fmt.Errorf("failed to connect to %s: %w", v2Nodes[0].Name, err)
 	}
 	defer closer11()
 
-	api22, closer22, err := resources.ConnectToNodeV2(ctx, filteredNodes[3])
+	api22, closer22, err := resources.ConnectToNodeV2(ctx, v2Nodes[1])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[3].Name, err)
+		return fmt.Errorf("failed to connect to %s: %w", v2Nodes[1].Name, err)
 	}
 	defer closer22()
 
-	// Get the finalized tipset at the calculated height
-	height := types.TipSetSelectors.Height(abi.ChainEpoch(head), true, types.TipSetAnchors.Finalized)
-	log.Printf("[INFO] Getting tipset at height %d", head)
+	// Chain walk: Check 10 tipsets down from the selected height
+	log.Printf("[INFO] Starting chain walk from height %d down to %d", randomHeight, randomHeight-9)
 
-	ts, err := api11.ChainGetTipSet(ctx, height)
-	if err != nil {
-		return fmt.Errorf("failed to get tipset by height from %s: %w", filteredNodes[1].Name, err)
+	for i := randomHeight; i >= randomHeight-9; i-- {
+		log.Printf("[INFO] Checking finalized tipset at height %d", i)
+		heightSelector := types.TipSetSelectors.Height(abi.ChainEpoch(i), true, types.TipSetAnchors.Finalized)
+
+		ts1, err := api11.ChainGetTipSet(ctx, heightSelector)
+		if err != nil {
+			return fmt.Errorf("failed to get finalized tipset by height from %s: %w", v2Nodes[0].Name, err)
+		}
+		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts1.Cids(), v2Nodes[0].Name, i)
+
+		ts2, err := api22.ChainGetTipSet(ctx, heightSelector)
+		if err != nil {
+			return fmt.Errorf("failed to get finalized tipset by height from %s: %w", v2Nodes[1].Name, err)
+		}
+		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts2.Cids(), v2Nodes[1].Name, i)
+
+		// Assert that finalized tipsets are identical at each height
+		if !ts1.Equals(ts2) {
+			return fmt.Errorf("finalized tipsets do not match between nodes at height %d", i)
+		}
+
+		log.Printf("[INFO] Finalized tipsets match successfully at height %d", i)
 	}
 
-	ts2, err := api22.ChainGetTipSet(ctx, height)
-	if err != nil {
-		return fmt.Errorf("failed to get tipset by height from %s: %w", filteredNodes[3].Name, err)
-	}
-
-	log.Printf("[INFO] Tipset %s is finalized on %s at height %d", ts.Cids(), filteredNodes[1].Name, head)
-	log.Printf("[INFO] Tipset %s is finalized on %s at height %d", ts2.Cids(), filteredNodes[3].Name, head)
-
-	// Compare the tipsets
-	if !ts.Equals(ts2) {
-		return fmt.Errorf("finalized tipsets do not match between nodes at height %d", head)
-	}
-
-	log.Printf("[INFO] Finalized tipsets match between nodes at height %d", head)
+	log.Printf("[INFO] Chain walk completed successfully - all 10 finalized tipsets match between nodes")
 	return nil
 }
 

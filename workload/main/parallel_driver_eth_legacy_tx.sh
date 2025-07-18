@@ -6,7 +6,7 @@ run_eth_legacy_tx() {
     echo "Running ETH legacy transaction test on node: $node"
     
     # Run the test and capture output and exit status
-    output=$(/opt/antithesis/app -operation sendEthLegacy -node "$node" 2>&1)
+    output=$(/opt/antithesis/app eth legacy-tx --node "$node" 2>&1)
     status=$?
     
     if [ $status -eq 0 ]; then

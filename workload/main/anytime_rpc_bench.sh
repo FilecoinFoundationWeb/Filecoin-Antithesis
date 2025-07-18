@@ -10,4 +10,4 @@ NODE_URLS=(
 RANDOM_NODE_URL=${NODE_URLS[$RANDOM % ${#NODE_URLS[@]}]}
 
 echo "Testing RPC endpoint: $RANDOM_NODE_URL"
-/opt/antithesis/app -operation rpc-benchmark -rpc-url "$RANDOM_NODE_URL" 
+/opt/antithesis/app rpc benchmark --url "$RANDOM_NODE_URL" 

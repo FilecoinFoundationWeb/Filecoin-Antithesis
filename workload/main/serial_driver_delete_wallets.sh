@@ -2,7 +2,6 @@
 
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-OPERATION="delete"
 NODE_NAMES=("Lotus1" "Lotus2")
 
 if [ ! -f "$APP_BINARY" ]; then
@@ -23,5 +22,5 @@ select_random_node() {
 random_node=$(select_random_node)
 
 echo "Deleting wallets on $random_node"
-$APP_BINARY -config=$CONFIG_FILE -operation=$OPERATION -node=$random_node
+$APP_BINARY wallet delete --node "$random_node"
 

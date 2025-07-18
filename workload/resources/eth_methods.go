@@ -10,6 +10,9 @@ import (
 	"github.com/filecoin-project/lotus/chain/types"
 )
 
+// CheckEthMethods verifies consistency between Ethereum API methods by comparing blocks
+// retrieved via eth_getBlockByNumber and eth_getBlockByHash. It checks multiple block
+// properties including hashes, numbers, timestamps, and parent hashes for the last 30 blocks.
 func CheckEthMethods(ctx context.Context) error {
 	config, err := LoadConfig("/opt/antithesis/resources/config.json")
 	if err != nil {
