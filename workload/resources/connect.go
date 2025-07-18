@@ -251,3 +251,25 @@ func WaitTillChain(ctx context.Context, api api.FullNode, pred ChainPredicate) *
 	}
 	return nil
 }
+
+// FilterLotusNodesV1 returns only V1 Lotus nodes (Lotus1 and Lotus2)
+func FilterLotusNodesV1(nodes []NodeConfig) []NodeConfig {
+	var filteredNodes []NodeConfig
+	for _, node := range nodes {
+		if node.Name == "Lotus1" || node.Name == "Lotus2" {
+			filteredNodes = append(filteredNodes, node)
+		}
+	}
+	return filteredNodes
+}
+
+// FilterLotusNodesWithV2 returns only V2 Lotus nodes (Lotus1-V2 and Lotus2-V2)
+func FilterLotusNodesWithV2(nodes []NodeConfig) []NodeConfig {
+	var filteredNodes []NodeConfig
+	for _, node := range nodes {
+		if node.Name == "Lotus1-V2" || node.Name == "Lotus2-V2" {
+			filteredNodes = append(filteredNodes, node)
+		}
+	}
+	return filteredNodes
+}

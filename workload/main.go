@@ -1087,99 +1087,109 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Filter nodes to "Lotus1" and "Lotus2"
-	nodeNames := []string{"Lotus1", "Lotus1-V2", "Lotus2", "Lotus2-V2"}
-	var filteredNodes []resources.NodeConfig
-	for _, node := range config.Nodes {
-		for _, name := range nodeNames {
-			if node.Name == name {
-				filteredNodes = append(filteredNodes, node)
-			}
-		}
+	// Filter nodes to get V1 and V2 nodes separately
+	v1Nodes := resources.FilterLotusNodesV1(config.Nodes)
+	v2Nodes := resources.FilterLotusNodesWithV2(config.Nodes)
+
+	if len(v1Nodes) < 2 {
+		return fmt.Errorf("need at least two Lotus V1 nodes for this test, found %d", len(v1Nodes))
+	}
+	if len(v2Nodes) < 2 {
+		return fmt.Errorf("need at least two Lotus V2 nodes for this test, found %d", len(v2Nodes))
 	}
 
-	if len(filteredNodes) < 2 {
-		return fmt.Errorf("need at least two Lotus nodes for this test, found %d", len(filteredNodes))
-	}
-
-	// Connect to V1 nodes to get chain head
-	api1, closer1, err := resources.ConnectToNode(ctx, filteredNodes[0])
+	// Connect to V1 nodes to get chain heads and find common height range
+	api1, closer1, err := resources.ConnectToNode(ctx, v1Nodes[0])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[0].Name, err)
+		return fmt.Errorf("failed to connect to %s: %w", v1Nodes[0].Name, err)
 	}
 	defer closer1()
 
-	api2, closer2, err := resources.ConnectToNode(ctx, filteredNodes[2])
+	api2, closer2, err := resources.ConnectToNode(ctx, v1Nodes[1])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[2].Name, err)
+		return fmt.Errorf("failed to connect to %s: %w", v1Nodes[1].Name, err)
 	}
 	defer closer2()
 
 	ch1, err := api1.ChainHead(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get chain head from %s: %w", filteredNodes[0].Name, err)
+		return fmt.Errorf("failed to get chain head from %s: %w", v1Nodes[0].Name, err)
 	}
 
 	ch2, err := api2.ChainHead(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get chain head from %s: %w", filteredNodes[2].Name, err)
+		return fmt.Errorf("failed to get chain head from %s: %w", v1Nodes[1].Name, err)
 	}
 
 	h1 := ch1.Height()
 	h2 := ch2.Height()
 
-	// Get the minimum height between the two nodes and subtract some blocks to ensure we're looking
-	// at a finalized part of the chain
-	var head int64
-	if h1 > h2 {
-		head = int64(h2)
+	log.Printf("[INFO] Current height %d for node %s", h1, v1Nodes[0].Name)
+	log.Printf("[INFO] Current height %d for node %s", h2, v1Nodes[1].Name)
+
+	var minHeight int64
+	if h1 < h2 {
+		minHeight = int64(h1)
 	} else {
-		head = int64(h1)
+		minHeight = int64(h2)
 	}
 
-	// Ensure we're looking at a height that's at least 20 blocks behind the head
-	// to avoid any potential reorgs and ensure the tipset is finalized
-	if head < 20 {
-		return fmt.Errorf("chain height too low for finalized tipset check, current height: %d", head)
+	// Ensure we have enough history (at least 20 blocks)
+	if minHeight < 20 {
+		log.Printf("[WARN] chain height too low for finalized tipset comparison (min: %d, required: 20)", minHeight)
+		return nil
 	}
-	head = head - 20
 
-	// Connect to V2 nodes
-	api11, closer11, err := resources.ConnectToNodeV2(ctx, filteredNodes[1])
+	startHeight := int64(20)
+	endHeight := minHeight
+
+	// Select a random height within this range (similar to eth_methods.go random selection)
+	rand.Seed(time.Now().UnixNano())
+	randomHeight := startHeight + rand.Int63n(endHeight-startHeight+1)
+
+	log.Printf("[INFO] Selected random height %d for finalized tipset comparison (range: %d-%d)", randomHeight, startHeight, endHeight)
+
+	// Connect to V2 nodes for finalized tipset comparison
+	api11, closer11, err := resources.ConnectToNodeV2(ctx, v2Nodes[0])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[1].Name, err)
+		return fmt.Errorf("failed to connect to %s: %w", v2Nodes[0].Name, err)
 	}
 	defer closer11()
 
-	api22, closer22, err := resources.ConnectToNodeV2(ctx, filteredNodes[3])
+	api22, closer22, err := resources.ConnectToNodeV2(ctx, v2Nodes[1])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", filteredNodes[3].Name, err)
+		return fmt.Errorf("failed to connect to %s: %w", v2Nodes[1].Name, err)
 	}
 	defer closer22()
 
-	// Get the finalized tipset at the calculated height
-	height := types.TipSetSelectors.Height(abi.ChainEpoch(head), true, types.TipSetAnchors.Finalized)
-	log.Printf("[INFO] Getting tipset at height %d", head)
+	// Chain walk: Check 10 tipsets down from the selected height
+	log.Printf("[INFO] Starting chain walk from height %d down to %d", randomHeight, randomHeight-9)
 
-	ts, err := api11.ChainGetTipSet(ctx, height)
-	if err != nil {
-		return fmt.Errorf("failed to get tipset by height from %s: %w", filteredNodes[1].Name, err)
+	for i := randomHeight; i >= randomHeight-9; i-- {
+		log.Printf("[INFO] Checking finalized tipset at height %d", i)
+		heightSelector := types.TipSetSelectors.Height(abi.ChainEpoch(i), true, types.TipSetAnchors.Finalized)
+
+		ts1, err := api11.ChainGetTipSet(ctx, heightSelector)
+		if err != nil {
+			return fmt.Errorf("failed to get finalized tipset by height from %s: %w", v2Nodes[0].Name, err)
+		}
+		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts1.Cids(), v2Nodes[0].Name, i)
+
+		ts2, err := api22.ChainGetTipSet(ctx, heightSelector)
+		if err != nil {
+			return fmt.Errorf("failed to get finalized tipset by height from %s: %w", v2Nodes[1].Name, err)
+		}
+		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts2.Cids(), v2Nodes[1].Name, i)
+
+		// Assert that finalized tipsets are identical at each height
+		if !ts1.Equals(ts2) {
+			return fmt.Errorf("finalized tipsets do not match between nodes at height %d", i)
+		}
+
+		log.Printf("[INFO] Finalized tipsets %s match successfully at height %d", ts1.Cids(), i)
 	}
 
-	ts2, err := api22.ChainGetTipSet(ctx, height)
-	if err != nil {
-		return fmt.Errorf("failed to get tipset by height from %s: %w", filteredNodes[3].Name, err)
-	}
-
-	log.Printf("[INFO] Tipset %s is finalized on %s at height %d", ts.Cids(), filteredNodes[1].Name, head)
-	log.Printf("[INFO] Tipset %s is finalized on %s at height %d", ts2.Cids(), filteredNodes[3].Name, head)
-
-	// Compare the tipsets
-	if !ts.Equals(ts2) {
-		return fmt.Errorf("finalized tipsets do not match between nodes at height %d", head)
-	}
-
-	log.Printf("[INFO] Finalized tipsets match between nodes at height %d", head)
+	log.Printf("[INFO] Chain walk completed successfully - all 10 finalized tipsets match between nodes")
 	return nil
 }
 
