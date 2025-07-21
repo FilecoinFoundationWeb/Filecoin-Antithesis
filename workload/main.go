@@ -1181,10 +1181,12 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 		}
 		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts2.Cids(), v2Nodes[1].Name, i)
 
-		// Assert that finalized tipsets are identical at each height
-		if !ts1.Equals(ts2) {
-			return fmt.Errorf("finalized tipsets do not match between nodes at height %d", i)
-		}
+		assert.Always(ts1.Equals(ts2), "Chain synchronization test: Finalized tipset should always match",
+			map[string]interface{}{
+				"requirement": "Chain synchronization",
+				"ts1":         ts1.Cids(),
+				"ts2":         ts2.Cids(),
+			})
 
 		log.Printf("[INFO] Finalized tipsets %s match successfully at height %d", ts1.Cids(), i)
 	}
