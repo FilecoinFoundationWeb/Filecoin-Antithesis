@@ -1,3 +1,0 @@
-# problem instrumenting this
-lib/harmony/harmonydb
-extern
