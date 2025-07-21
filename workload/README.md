@@ -9,6 +9,31 @@ This directory contains the workload implementation for testing Filecoin nodes u
 - `resources/`: Helper functions and utilities
 - `entrypoint/`: Entry point scripts for workload execution
 
+## Smart Contract Tooling
+
+This environment provides several powerful tools for developing, compiling, deploying, and testing smart contracts on Filecoin-compatible networks. Below are the main tools available for smart contract workflows:
+
+- **Foundry**: A fast, portable, and modular toolkit for Ethereum application development written in Rust. Foundry includes:
+  - **forge**: Compile, deploy, and test EVM-compatible smart contracts. Example: `forge build` to compile contracts, `forge test` to run Solidity tests, and `forge create` to deploy contracts.
+  - **cast**: Interact with deployed contracts and send transactions. Example: `cast call` to query contract state, `cast send` to invoke contract methods.
+  - **anvil**: Local Ethereum node for rapid testing and development. Example: `anvil` to start a local testnet for contract deployment and interaction.
+
+- **PDP (Proof of Data Possession)**: A set of smart contracts and cryptographic tools (from [FilOzone/pdp](https://github.com/FilOzone/pdp)) for testing data possession proofs and related contract logic. Example: Build and deploy PDP contracts for Filecoin storage proofs.
+
+- **Payments Service**: A suite of smart contracts and utilities (from [FilOzone/filecoin-services-payments](https://github.com/FilOzone/filecoin-services-payments)) for payment flows and settlement on Filecoin. Example: Use `forge build` and `forge create` to deploy payment contracts.
+
+- **Node.js & npm**: Useful for running JavaScript/TypeScript-based smart contract tools, scripts, or frameworks (e.g., Hardhat, Truffle, or custom deployment scripts). Example: Install and use Hardhat for advanced contract deployment scenarios.
+
+- **Rust**: Required for building Foundry and may be used for advanced contract development or integration with Rust-based Filecoin clients (e.g., Forest).
+
+These tools are pre-installed and ready to use in the container. You can:
+- Compile and deploy EVM-compatible contracts (SimpleCoin, MCopy, TransientStorage, etc.)
+- Run Solidity tests and interact with contracts using Foundry
+- Use PDP and payments contracts for Filecoin-specific workflows
+- Leverage Node.js for scripting or integrating with other Ethereum tooling
+
+Refer to the documentation of each tool for advanced usage and integration with the Filecoin test environment.
+
 ## Writing New Workloads
 
 There are several ways to add new workloads to test Filecoin nodes:
