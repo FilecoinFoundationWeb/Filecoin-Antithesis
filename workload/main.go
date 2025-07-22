@@ -1243,7 +1243,7 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 	}
 
 	startHeight := int64(20)
-	endHeight := minHeight
+	endHeight := minHeight - 20
 
 	// Select a random height within this range (similar to eth_methods.go random selection)
 	rand.Seed(time.Now().UnixNano())
