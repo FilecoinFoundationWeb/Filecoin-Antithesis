@@ -485,6 +485,20 @@ func stressCommands() *cli.Command {
 					return resources.RunP2PBomb(c.Context, 100)
 				},
 			},
+			{
+				Name:  "block-fuzz",
+				Usage: "Run block fuzzing",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return performBlockFuzzing(c.Context, nodeConfig)
+				},
+			},
 		},
 	}
 }
