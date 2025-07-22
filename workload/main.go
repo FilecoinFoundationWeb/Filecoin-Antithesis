@@ -244,6 +244,35 @@ func mempoolCommands() *cli.Command {
 					)
 				},
 			},
+			{
+				Name:  "track",
+				Usage: "Track mempool size over time",
+				Flags: []cli.Flag{
+					nodeFlag,
+					&cli.DurationFlag{
+						Name:  "duration",
+						Value: 5 * time.Minute,
+						Usage: "Duration to track mempool (e.g., 5m, 10m, 1h)",
+					},
+					&cli.DurationFlag{
+						Name:  "interval",
+						Value: 5 * time.Second,
+						Usage: "Interval between measurements (e.g., 1s, 5s, 30s)",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return performMempoolTracking(
+						c.Context,
+						nodeConfig,
+						c.Duration("duration"),
+						c.Duration("interval"),
+					)
+				},
+			},
 		},
 	}
 }
@@ -444,6 +473,16 @@ func stressCommands() *cli.Command {
 						return err
 					}
 					return performStressMaxMessageSize(c.Context, nodeConfig)
+				},
+			},
+			{
+				Name:  "p2p-bomb",
+				Usage: "Run P2P bomb",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					return resources.RunP2PBomb(c.Context, 100)
 				},
 			},
 		},
@@ -867,6 +906,41 @@ func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, c
 
 	// Call the appropriate fuzzing strategy
 	return mpoolfuzz.FuzzMempoolWithStrategy(ctx, api, from, to, strategy, count)
+}
+
+func performMempoolTracking(ctx context.Context, nodeConfig *resources.NodeConfig, duration, interval time.Duration) error {
+	log.Printf("[INFO] Starting mempool tracking on node '%s' for %v with %v intervals...", nodeConfig.Name, duration, interval)
+
+	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return err
+	}
+	defer closer()
+
+	// Create tracker with custom interval
+	tracker := resources.NewMempoolTracker(api, interval)
+	tracker.Start()
+
+	// Wait for the specified duration
+	select {
+	case <-ctx.Done():
+		tracker.Stop()
+		return ctx.Err()
+	case <-time.After(duration):
+		tracker.Stop()
+	}
+
+	// Get final statistics
+	stats := tracker.GetStats()
+	log.Printf("[INFO] Mempool tracking completed on node '%s':", nodeConfig.Name)
+	log.Printf("[INFO]   Total measurements: %v", stats["count"])
+	log.Printf("[INFO]   Average size: %.2f", stats["average_size"])
+	log.Printf("[INFO]   Min size: %v", stats["min_size"])
+	log.Printf("[INFO]   Max size: %v", stats["max_size"])
+	log.Printf("[INFO]   Data points: %v", stats["data_points"])
+
+	return nil
 }
 
 func callV2API(endpoint string) {
