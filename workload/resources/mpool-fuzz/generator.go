@@ -3,7 +3,6 @@ package mpoolfuzz
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	"log"
 	"math/big"
 	"time"
@@ -45,16 +44,9 @@ func GenerateRandomAddress() (address.Address, error) {
 // checkStateWait verifies that our mutated transactions never get mined
 // It returns an error if any of the transactions are found on chain
 func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid, mutationDescriptions []string) error {
-	// Get current head for searching
-	head, err := api.ChainHead(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get chain head: %w", err)
-	}
-
 	// Give some time for messages to potentially get mined
-	time.Sleep(30 * time.Second)
+	time.Sleep(60 * time.Second)
 
-	// Check each message CID
 	foundOnChain := false
 	for i, msgCid := range msgCids {
 		description := "unknown mutation"
@@ -62,16 +54,9 @@ func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid, mu
 			description = mutationDescriptions[i]
 		}
 
-		lookup, _ := api.StateSearchMsg(ctx, head.Key(), msgCid, 20, false)
-
-		if lookup != nil {
-			log.Printf("[VIOLATION] Message %d (CID: %s) [%s] was unexpectedly mined!", i, msgCid, description)
-			foundOnChain = true
-		}
-
-		// Double check with StateWaitMsg with a short timeout
+		// Check with StateWaitMsg with a short timeout
 		waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		lookup, _ = api.StateWaitMsg(waitCtx, msgCid, 1, 5, false)
+		lookup, _ := api.StateWaitMsg(waitCtx, msgCid, 1, 5, false)
 		cancel()
 
 		if lookup != nil {
