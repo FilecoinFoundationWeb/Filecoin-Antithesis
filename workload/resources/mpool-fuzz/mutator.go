@@ -1,8 +1,6 @@
 package mpoolfuzz
 
 import (
-	"math"
-	"math/big"
 	"math/rand"
 
 	"github.com/filecoin-project/go-address"
@@ -35,22 +33,23 @@ func Apply(msg *types.Message, mutationType MutationType, r *rand.Rand) string {
 	switch mutationType {
 	// Standard mutations
 	case MutationGasPremiumFeeCap:
-		msg.GasPremium = abi.NewTokenAmount(100)
-		msg.GasFeeCap = abi.NewTokenAmount(1)
-		return "GasPremium > GasFeeCap"
+		// Realistic gas values but premium > fee cap
+		msg.GasPremium = abi.NewTokenAmount(5000000000) // 5 nanoFIL
+		msg.GasFeeCap = abi.NewTokenAmount(1000000000)  // 1 nanoFIL
+		return "GasPremium > GasFeeCap (realistic values)"
 
 	case MutationNegativeGasLimit:
-		msg.GasLimit = -1000
+		msg.GasLimit = -50000
 		return "Negative gas limit"
 
 	case MutationMaxValue:
-		raw := new(big.Int).SetUint64(^uint64(0))
-		msg.Value = abi.TokenAmount{Int: raw}
-		return "Maximum uint64 value"
+		// Use a more realistic but still excessive value
+		msg.Value = abi.NewTokenAmount(1000000000000000000) // 1000 FIL (in attoFIL)
+		return "Excessive value (1000 FIL)"
 
 	case MutationGarbageParams:
 		msg.Method = 99
-		msg.Params = RandomBytes(128)
+		msg.Params = RandomBytes(256) // More realistic garbage size
 		return "Garbage params for method 99"
 
 	case MutationReservedAddress:
@@ -59,16 +58,16 @@ func Apply(msg *types.Message, mutationType MutationType, r *rand.Rand) string {
 		return "Reserved ID address 0"
 
 	case MutationOversizedParams:
-		msg.Params = RandomBytes(2048)
-		return "Oversized params (2KB)"
+		msg.Params = RandomBytes(8192) // 8KB - more realistic oversized
+		return "Oversized params (8KB)"
 
 	case MutationUnsupportedVersion:
 		msg.Version = 2
 		return "Unsupported message version"
 
 	case MutationHighGasLimit:
-		msg.GasLimit = 1 << 60
-		return "Unrealistically high gas limit"
+		msg.GasLimit = 1000000000 // 1 billion - realistic but excessive
+		return "Excessively high gas limit (1B)"
 
 	case MutationEmptyParams:
 		msg.Method = 5
@@ -76,7 +75,7 @@ func Apply(msg *types.Message, mutationType MutationType, r *rand.Rand) string {
 		return "Empty params with non-zero method"
 
 	case MutationUnicodeParams:
-		msg.Params = []byte("☢️💥🔥")
+		msg.Params = []byte("☢️💥🔥🚀💎")
 		return "Unicode params"
 
 	case MutationSelfReference:
@@ -85,15 +84,16 @@ func Apply(msg *types.Message, mutationType MutationType, r *rand.Rand) string {
 		return "Self-referential actor call"
 
 	case MutationIntegerOverflow:
-		msg.GasFeeCap = abi.NewTokenAmount(math.MaxInt64)
-		msg.GasPremium = abi.NewTokenAmount(math.MaxInt64)
+		// Use more realistic but still problematic values
+		msg.GasFeeCap = abi.NewTokenAmount(9223372036854775807)  // Max int64
+		msg.GasPremium = abi.NewTokenAmount(9223372036854775807) // Max int64
 		return "Integer overflow gas parameters"
 
 	case MutationMinimalGas:
-		msg.GasFeeCap = abi.NewTokenAmount(1)
-		msg.GasPremium = abi.NewTokenAmount(1)
-		msg.GasLimit = 1
-		return "Minimal gas values"
+		msg.GasFeeCap = abi.NewTokenAmount(100) // Too low
+		msg.GasPremium = abi.NewTokenAmount(50) // Too low
+		msg.GasLimit = 100                      // Too low
+		return "Insufficient gas values"
 	}
 
 	return "Unknown mutation"

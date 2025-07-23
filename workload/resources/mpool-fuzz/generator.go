@@ -55,57 +55,36 @@ func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid, mu
 	time.Sleep(30 * time.Second)
 
 	// Check each message CID
+	foundOnChain := false
 	for i, msgCid := range msgCids {
 		description := "unknown mutation"
 		if i < len(mutationDescriptions) {
 			description = mutationDescriptions[i]
 		}
 
-		lookup, err := api.StateSearchMsg(ctx, head.Key(), msgCid, 10, false)
-
-		assert.Sometimes(err != nil || lookup == nil,
-			fmt.Sprintf("Message %d (CID: %s) [%s] should not be found on chain via StateSearchMsg", i, msgCid, description),
-			map[string]interface{}{
-				"message_cid":   msgCid.String(),
-				"message_index": i,
-				"error":         err,
-				"lookup_found":  lookup != nil,
-				"mutation_type": description,
-			})
+		lookup, _ := api.StateSearchMsg(ctx, head.Key(), msgCid, 20, false)
 
 		if lookup != nil {
 			log.Printf("[VIOLATION] Message %d (CID: %s) [%s] was unexpectedly mined!", i, msgCid, description)
+			foundOnChain = true
 		}
 
 		// Double check with StateWaitMsg with a short timeout
 		waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-
-		lookup, err = api.StateWaitMsg(waitCtx, msgCid, 1, 5, false)
-
-		assert.Sometimes(err != nil || lookup == nil,
-			fmt.Sprintf("Message %d (CID: %s) [%s] should not be found on chain via StateWaitMsg", i, msgCid, description),
-			map[string]interface{}{
-				"message_cid":   msgCid.String(),
-				"message_index": i,
-				"error":         err,
-				"lookup_found":  lookup != nil,
-				"mutation_type": description,
-			})
+		lookup, _ = api.StateWaitMsg(waitCtx, msgCid, 1, 5, false)
+		cancel()
 
 		if lookup != nil {
 			log.Printf("[VIOLATION] Message %d (CID: %s) [%s] was unexpectedly found via StateWaitMsg!", i, msgCid, description)
+			foundOnChain = true
 		}
 	}
 
-	// Final assertion that summarizes the check
-	assert.Sometimes(true,
-		fmt.Sprintf("All %d mutated messages remained in mempool and were not mined", len(msgCids)),
-		map[string]interface{}{
-			"total_messages": len(msgCids),
-			"requirement":    "Invalid messages should never be mined",
-		})
+	assert.Sometimes(!foundOnChain, "No mutated messages should be found on chain", map[string]interface{}{
+		"total_messages": len(msgCids),
+		"requirement":    "Invalid messages should never be mined",
+	})
 
-	log.Printf("[SUCCESS] None of the %d mutated messages were mined (as expected)", len(msgCids))
+	log.Printf("[SUCCESS] Checked %d mutated messages", len(msgCids))
 	return nil
 }
