@@ -10,22 +10,16 @@ import (
 	"github.com/filecoin-project/lotus/chain/types"
 )
 
+// CheckEthMethods verifies consistency between Ethereum API methods by comparing blocks
+// retrieved via eth_getBlockByNumber and eth_getBlockByHash. It checks multiple block
+// properties including hashes, numbers, timestamps, and parent hashes for the last 30 blocks.
 func CheckEthMethods(ctx context.Context) error {
 	config, err := LoadConfig("/opt/antithesis/resources/config.json")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	nodeNames := []string{"Lotus1", "Lotus2"}
-
-	var filteredNodes []NodeConfig
-	for _, node := range config.Nodes {
-		for _, name := range nodeNames {
-			if node.Name == name {
-				filteredNodes = append(filteredNodes, node)
-			}
-		}
-	}
+	filteredNodes := FilterLotusNodes(config.Nodes)
 
 	for _, node := range filteredNodes {
 		api, closer, err := ConnectToNode(ctx, node)

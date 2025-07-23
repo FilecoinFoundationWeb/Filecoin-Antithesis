@@ -13,6 +13,6 @@ fi
 log_info "Running block fuzzing on ${NODE}"
 
 # Run block fuzzing
-/opt/antithesis/app -operation blockfuzz -node "${NODE}"
+/opt/antithesis/app stress block-fuzz --node ${NODE}
 
 echo "Parallel block fuzzing completed" 

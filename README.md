@@ -6,7 +6,7 @@ This README serves as a guide for both prospective and active contributers. We w
 
 ## Setup
 
-There are 10 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 lotus nodes (`lotus-1`, `lotus-2`), 2 forest nodes (`forest`, `forest-connector`), 2 lotus miners (`lotus-miner-1`, `lotus-miner-2`), and 1 `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
+There are 9 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 lotus nodes (`lotus-1`, `lotus-2`), 1 forest node (`forest`), 2 lotus miners (`lotus-miner-1`, `lotus-miner-2`), and 1 `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
 
 The `workload` container has the [test commands](https://antithesis.com/docs/test_templates/first_test/#test-commands) where endpoints are called, smart contracts deployed, transactions requested, etc... There are also validations to assert correctness and guarantees also occur in this container using the [Antithesis SDK](https://antithesis.com/docs/using_antithesis/sdk/). We explain more on the SDK in a later section.
 
@@ -94,24 +94,89 @@ Contributions to the project can include iterating on test templates, improving 
     -   Initialize wallets using `first_check.sh`.
     -   Run tests such as `anytime_node_height_progression.sh` or `parallel_driver_spammer.py`.
 
+## Testing Overview
+
+Our Filecoin testing framework comprehensively validates the entire Filecoin ecosystem through multiple testing categories and operations. Here's what we're testing:
+
+### Test Categories
+
+| Category | Purpose | Test Operations | Next Steps |
+|----------|---------|-----------------|------------|
+| **Wallet Management** | Validate wallet creation, funding, and deletion across nodes | • Create wallets with random counts (1-15) on random nodes<br>• Delete random number of wallets<br>• Initialize wallets with funding<br>• Verify wallet operations across Lotus1/Lotus2 | |
+| **Smart Contract Deployment** | Test EVM-compatible smart contract deployment and interaction | • Deploy SimpleCoin contract (ERC-20 token)<br>• Deploy MCopy contract (memory operations)<br>• Deploy TStorage contract (transient storage)<br>• Invoke contract methods and verify results | |
+| **Transaction Processing** | Validate mempool operations and transaction handling | • Spam transactions between wallets<br>• Mempool fuzzing with different strategies<br>• ETH legacy transaction testing<br>• Random transaction parameter generation | |
+| **Consensus & Finality** | Ensure consensus mechanisms work correctly | • Check F3 consensus running status<br>• Validate finalized tipsets match across nodes<br>• Chain walk validation (10 tipsets)<br>• Consensus fault injection testing | |
+| **Network Operations** | Test P2P networking and peer management | • Check peer connections across nodes<br>• Monitor network connectivity<br>• Validate node synchronization status<br>• Test network partition resilience | |
+| **State Consistency** | Verify blockchain state integrity | • State mismatch detection<br>• Chain index backfill validation<br>• Block height progression monitoring<br>• State consistency across nodes | |
+| **Ethereum Compatibility** | Test ETH API compatibility layer | • ETH methods consistency validation<br>• Block retrieval by number vs hash<br>• ETH RPC method testing<br>• Legacy transaction support | |
+| **Node Health & Monitoring** | Monitor node health and performance | • Forest node health checks<br>• Node synchronization status<br>• Block height progression timing<br>• System quiescence validation | |
+| **Stress Testing** | Validate system under load | • Maximum message size stress tests<br>• Concurrent transaction processing<br>• Memory and resource usage under load<br>• Performance degradation detection | |
+| **RPC & API Testing** | Validate API endpoints and responses | • RPC benchmark testing<br>• API response validation<br>• Method parameter testing<br>• Error handling validation | |
+
+### Test Execution Patterns
+
+**Parallel Drivers**: Execute operations concurrently across multiple nodes
+- `parallel_driver_*.sh` - Concurrent operations for load testing
+- `parallel_driver_*.py` - Python-based parallel operations
+
+**Anytime Tests**: Can run at any time during test execution
+- `anytime_*.sh` - Continuous monitoring and validation
+- `anytime_*.py` - Python-based anytime operations
+
+**Eventually Tests**: Validate eventual consistency properties
+- `eventually_*.py` - Long-running consistency checks
+
+**Serial Drivers**: Sequential operations for setup and cleanup
+- `serial_driver_*.sh` - Sequential operations
+- `serial_driver_*.py` - Python-based sequential operations
+
+**First Checks**: Initial setup and validation
+- `first_check.sh` - System initialization and wallet setup
+
+### Key Testing Features
+
+1. **Deterministic Testing**: All tests run in a fully deterministic environment without internet access
+2. **Fault Injection**: Antithesis automatically injects faults (crashes, network partitions, thread pausing)
+3. **Cross-Implementation Validation**: Tests both Lotus (Go) and Forest (Rust) implementations
+4. **Comprehensive Coverage**: Tests wallet, contract, consensus, networking, and API layers
+5. **Performance Monitoring**: Validates timing constraints and performance degradation
+6. **State Consistency**: Ensures blockchain state remains consistent across nodes
+7. **Ethereum Compatibility**: Validates ETH API compatibility layer functionality
+
+### Assertion Framework
+
+We use the Antithesis SDK to define test properties and assertions:
+- **Always Assertions**: Properties that must always hold true
+- **Sometimes Assertions**: Properties that should hold true in most cases
+- **Unreachable Assertions**: States that should never be reached
+- **Timing Assertions**: Performance and timing constraints
+
 ## Todo
 
 ### Completed Tasks
 
--   Implement basic workloads (e.g., Transaction Spammer).
--   Define and implement initial test properties.
--   Integrate code coverage instrumentation.
--   Create CI jobs for build, push, and testing automation.
--   Initialize and manage wallets (create, fund, and delete).
--   Perform randomized transactions between wallets.
--   Upload and invoke smart contracts.
--   Manage node connectivity (connect/disconnect).
+-   Implement comprehensive wallet management (create, fund, delete)
+-   Deploy and test multiple smart contract types
+-   Implement transaction spam and mempool fuzzing
+-   Validate consensus mechanisms (F3, finalized tipsets)
+-   Test network operations and peer management
+-   Implement state consistency checks
+-   Validate Ethereum compatibility layer
+-   Create node health monitoring
+-   Implement stress testing capabilities
+-   Set up RPC and API testing framework
+-   Integrate code coverage instrumentation
+-   Create CI jobs for build, push, and testing automation
 
 ### Longer-Term Goals
 
--   Integrate Curio for enhanced testing.
--   Implement fuzz testing for bad inputs.
--   Expand Ethereum-based workloads.
+-   Integrate Curio for enhanced testing
+-   Implement fuzz testing for bad inputs
+-   Expand Ethereum-based workloads
+-   Add more sophisticated consensus testing
+-   Implement cross-chain validation
+-   Add performance benchmarking
+-   Expand smart contract testing scenarios
 
 ## A Concrete Example
 

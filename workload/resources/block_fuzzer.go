@@ -19,7 +19,7 @@ import (
 	"github.com/ipfs/go-cid"
 )
 
-// Helper functions for generating random data
+// generateRandomBytes generates a random byte slice of length between min and max
 func generateRandomBytes(min, max int) []byte {
 	n := mathrand.Intn(max-min) + min
 	b := make([]byte, n)
@@ -27,6 +27,8 @@ func generateRandomBytes(min, max int) []byte {
 	return b
 }
 
+// generateRandomString generates a random string of length between min and max
+// using a mix of alphanumeric and special characters
 func generateRandomString(min, max int) string {
 	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?"
 	length := mathrand.Intn(max-min) + min
@@ -37,10 +39,13 @@ func generateRandomString(min, max int) string {
 	return string(result)
 }
 
+// generateRandomBase64 generates a random base64-encoded string from random bytes
+// of length between min and max
 func generateRandomBase64(min, max int) string {
 	return base64.StdEncoding.EncodeToString(generateRandomBytes(min, max))
 }
 
+// generateRandomCID generates either a valid or invalid CID with 50% probability
 func generateRandomCID() cid.Cid {
 	// Generate either valid or invalid CID
 	if mathrand.Float32() < 0.5 {
@@ -59,6 +64,8 @@ func generateRandomCID() cid.Cid {
 	return c
 }
 
+// generateRandomAddress generates either an undefined address (30% probability)
+// or a random ID address (70% probability)
 func generateRandomAddress() address.Address {
 	if mathrand.Float32() < 0.3 {
 		return address.Undef
@@ -67,7 +74,8 @@ func generateRandomAddress() address.Address {
 	return addr
 }
 
-// FuzzBlockSubmission generates and submits malformed blocks
+// FuzzBlockSubmission generates and submits various types of malformed blocks
+// to test the node's block validation and error handling capabilities
 func FuzzBlockSubmission(ctx context.Context, api api.FullNode) error {
 	mathrand.Seed(time.Now().UnixNano())
 

@@ -35,12 +35,6 @@ func FuzzMempoolWithStrategy(ctx context.Context, api api.FullNode, from, to add
 		err = SendStandardMutations(ctx, api, from, to, count, r)
 	case "chained":
 		err = SendChainedTransactions(ctx, api, from, to, count, r)
-	case "burst":
-		err = SendConcurrentBurst(ctx, api, from, to, count, r, config.Concurrenct)
-	case "subtle":
-		err = SendSubtleAttacks(ctx, api, from, to, count, r)
-	case "edge":
-		err = SendEdgeCases(ctx, api, from, to, count, r)
 	default:
 		// Default to standard mutations
 		err = SendStandardMutations(ctx, api, from, to, count, r)
@@ -54,8 +48,5 @@ func GetAvailableStrategies() []string {
 	return []string{
 		"standard",
 		"chained",
-		"burst",
-		"subtle",
-		"edge",
 	}
 }

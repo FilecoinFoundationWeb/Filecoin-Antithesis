@@ -30,6 +30,7 @@ type RPCMethod struct {
 	start       time.Time
 }
 
+// buildRequest creates a JSON-RPC request with the specified method and parameters
 func (rpc *RPCMethod) buildRequest() (*http.Request, error) {
 	jreq, err := json.Marshal(struct {
 		Jsonrpc string          `json:"jsonrpc"`
@@ -54,12 +55,15 @@ func (rpc *RPCMethod) buildRequest() (*http.Request, error) {
 	return req, nil
 }
 
+// Stop signals all goroutines to stop processing requests
 func (rpc *RPCMethod) Stop() {
 	for i := 0; i < rpc.concurrency; i++ {
 		rpc.stopCh <- struct{}{}
 	}
 }
 
+// RunAndLog executes RPC requests with specified concurrency and QPS limits
+// It tracks and logs metrics like latency, request count, and errors
 func (rpc *RPCMethod) RunAndLog() error {
 	client := &http.Client{Timeout: 0}
 	var wg sync.WaitGroup
@@ -138,6 +142,8 @@ func (rpc *RPCMethod) RunAndLog() error {
 	return nil
 }
 
+// RunBenchmark executes multiple RPC methods concurrently for a specified duration
+// Each method can have its own concurrency and QPS settings
 func RunBenchmark(endpoint string, duration time.Duration, methods []MethodConfig) {
 	var rpcMethods []*RPCMethod
 	for _, mc := range methods {
@@ -173,6 +179,8 @@ func RunBenchmark(endpoint string, duration time.Duration, methods []MethodConfi
 	wg.Wait()
 }
 
+// DoRawRPCRequest performs a single JSON-RPC request to the specified endpoint
+// Returns the HTTP status code and response body
 func DoRawRPCRequest(endpoint string, version int, body string) (int, []byte) {
 	endpoint = fmt.Sprintf("%s/rpc/v%d", endpoint, version)
 	request, err := http.NewRequest("POST", endpoint, bytes.NewReader([]byte(body)))

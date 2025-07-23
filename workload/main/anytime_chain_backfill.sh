@@ -1,4 +1,4 @@
 #!/bin/bash
 
 echo "Running Workload: Chain Backfill"
-/opt/antithesis/app -operation checkBackfill 
+/opt/antithesis/app chain backfill 

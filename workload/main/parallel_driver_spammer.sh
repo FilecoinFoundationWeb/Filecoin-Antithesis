@@ -2,7 +2,6 @@
 
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-OPERATION="spam"
 NODE_NAMES=("Lotus1" "Lotus2")
 
 if [ ! -f "$APP_BINARY" ]; then
@@ -17,7 +16,7 @@ fi
 
 # First try running spam without creating new wallets
 echo "Attempting to spam transactions with existing wallets..."
-$APP_BINARY -operation "$OPERATION" -config "$CONFIG_FILE"
+$APP_BINARY mempool spam
 
 # If spam failed, create wallets with higher funding
 if [ $? -ne 0 ]; then
@@ -27,7 +26,7 @@ if [ $? -ne 0 ]; then
     # The exact amount needed is hard to predict, but 1B should be plenty
     for node in "${NODE_NAMES[@]}"; do
         echo "Creating well-funded wallets on $node..."
-        $APP_BINARY -operation "create" -node "$node" -wallets 2 -config "$CONFIG_FILE"
+        $APP_BINARY wallet create --node "$node" --count 2
         
         # Allow some time for wallet creation to complete
         sleep 5
@@ -38,6 +37,6 @@ if [ $? -ne 0 ]; then
     sleep 10
     
     echo "Retrying spam operation with new wallets..."
-    $APP_BINARY -operation "$OPERATION" -config "$CONFIG_FILE"
+    $APP_BINARY mempool spam
 fi
 

@@ -78,7 +78,7 @@ func V2APIMethods() []V2APIMethod {
 	}
 }
 
-// RunV2APITests executes tests for all V2 API methods
+// RunV2APITests executes tests for all V2 API methods with default concurrency and QPS settings
 func RunV2APITests(endpoint string, duration time.Duration) {
 	methods := V2APIMethods()
 	var methodConfigs []MethodConfig
@@ -102,7 +102,8 @@ func RunV2APITests(endpoint string, duration time.Duration) {
 	RunBenchmark(endpoint, duration, methodConfigs)
 }
 
-// RunV2APILoadTest executes load testing for V2 API methods
+// RunV2APILoadTest executes load testing for V2 API methods with specified concurrency and QPS
+// It skips error cases and focuses on valid API calls to measure performance under load
 func RunV2APILoadTest(endpoint string, duration time.Duration, concurrency int, qps int) {
 	methods := V2APIMethods()
 	var methodConfigs []MethodConfig
@@ -131,7 +132,8 @@ func RunV2APILoadTest(endpoint string, duration time.Duration, concurrency int, 
 	RunBenchmark(endpoint, duration, methodConfigs)
 }
 
-// RunV2APIEdgeCases tests edge cases and error conditions
+// RunV2APIEdgeCases tests edge cases and error conditions for V2 API methods
+// It includes tests for large numbers, negative values, malformed input, and invalid parameters
 func RunV2APIEdgeCases(endpoint string) {
 	// Large block number test
 	bigBlockNum := new(big.Int)
@@ -190,7 +192,8 @@ func RunV2APIEdgeCases(endpoint string) {
 	RunBenchmark(endpoint, 5*time.Second, methodConfigs)
 }
 
-// RunV2APIBatchTest tests batch requests
+// RunV2APIBatchTest tests batch request functionality for V2 API methods
+// It combines multiple valid API calls into a single batch request
 func RunV2APIBatchTest(endpoint string) {
 	methods := V2APIMethods()
 	var batchRequests []map[string]interface{}

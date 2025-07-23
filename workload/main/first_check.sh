@@ -5,7 +5,7 @@ set -e
 echo "Workload [main][first.sh]: initializing wallets..."
 
 python3 -u /opt/antithesis/resources/initialize_wallets.py "forest"
-/opt/antithesis/app -node=Lotus1 -config=/opt/antithesis/resources/config.json -wallets=5 -operation=create
-/opt/antithesis/app -node=Lotus2 -config=/opt/antithesis/resources/config.json -wallets=5 -operation=create
+/opt/antithesis/app wallet create --node Lotus1 --count 5
+/opt/antithesis/app wallet create --node Lotus2 --count 5
 
 echo "Workload [main][first.sh]: completed workload setup."

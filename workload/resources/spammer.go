@@ -12,6 +12,9 @@ import (
 	"github.com/filecoin-project/lotus/api"
 )
 
+// SpamTransactions generates and sends random transactions between wallets across different nodes
+// It randomly selects transaction amounts, cooldown periods, and source/destination wallets
+// to simulate various transaction patterns and test network behavior under load
 func SpamTransactions(ctx context.Context, apis []api.FullNode, wallets [][]address.Address, numTransactions int) error {
 	if len(wallets) < 2 || len(wallets[0]) < 1 || len(wallets[1]) < 1 {
 		fmt.Printf("not enough wallets to spam transactions; need wallets on both nodes")

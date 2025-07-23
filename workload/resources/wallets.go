@@ -65,6 +65,8 @@ func CreateWallet(ctx context.Context, api api.FullNode, walletType types.KeyTyp
 	return wallet, nil
 }
 
+// SendFunds sends funds from one address to another, waiting for the transaction to be confirmed
+// It includes balance checks, message pushing to mempool, and transaction confirmation
 func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, amount abi.TokenAmount) error {
 	msg := &types.Message{
 		From:  from,
@@ -134,7 +136,8 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 	return nil
 }
 
-// GetGenesisWallet retrieves the default (genesis) wallet address.
+// GetGenesisWallet retrieves the default (genesis) wallet address
+// If no default wallet is set, it falls back to the first wallet in the list
 func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, error) {
 	// Attempt to get the default wallet
 	genesisWallet, err := api.WalletDefaultAddress(ctx)
@@ -229,6 +232,7 @@ func DeleteWallets(ctx context.Context, api api.FullNode, walletsToDelete []addr
 }
 
 // SendFundsToEthAddress sends funds from a Filecoin address to an ETH address
+// It handles address conversion and transaction creation
 func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.Address, ethAddr string) error {
 	// Remove 0x prefix if present
 	ea, err := ethtypes.ParseEthAddress(ethAddr)

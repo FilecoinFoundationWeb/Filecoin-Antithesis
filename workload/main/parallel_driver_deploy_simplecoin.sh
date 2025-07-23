@@ -2,7 +2,6 @@
 
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-OPERATION="deploySimpleCoin"
 NODE_NAMES=("Lotus1" "Lotus2")
 CONTRACT_FILE="/opt/antithesis/resources/smart-contracts/SimpleCoin.hex"
 
@@ -36,14 +35,14 @@ echo "Deploying smart contract $CONTRACT_FILE on node $random_node"
 
 # First ensure we have wallets available
 echo "Creating wallets on $random_node if needed..."
-$APP_BINARY -operation "create" -node "$random_node" -wallets 1 -config "$CONFIG_FILE"
+$APP_BINARY wallet create --node "$random_node" --count 1
 
 # Allow some time for wallet creation to complete
 sleep 5
 
 # Now execute the deployment operation
 echo "Now deploying contract..."
-$APP_BINARY -operation "$OPERATION" -node "$random_node" -contract "$CONTRACT_FILE" -config "$CONFIG_FILE"
+$APP_BINARY contracts deploy-simple-coin --node "$random_node"
 if [ $? -ne 0 ]; then
     echo "Error: Deployment failed."
     exit 1
