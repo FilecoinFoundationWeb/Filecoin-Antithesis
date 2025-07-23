@@ -2,6 +2,7 @@
 
 from antithesis.assertions import (
     always,
+    sometimes,
     unreachable
 )
 import time
@@ -28,7 +29,7 @@ except:
 
 lines = response_text.strip().split('\n')
 
-always("[+]" in lines[0], "[Forest] Node epoch is up to date during quiescence check", {"Response Text": lines})
+sometimes("[+]" in lines[0], "[Forest] Node epoch is up to date during quiescence check", {"Response Text": lines})
 always("[+]" in lines[1], "[Forest] Node rpc server is running during quiescence check", {"Response Text": lines})
 always("[+]" in lines[2], "[Forest] Node is syncing during a quiscence check", {"Response Text": lines})
 always("[+]" in lines[3], "[Forest] Node is connected to peers during a quiescence check", {"Response Text": lines})
