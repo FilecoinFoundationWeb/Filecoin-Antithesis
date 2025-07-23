@@ -170,12 +170,11 @@ We use the Antithesis SDK to define test properties and assertions:
 
 ### Longer-Term Goals
 
--   Integrate Curio for enhanced testing
+-   Integrate Curio for enhanced testing e2e deals
+-   Filecoin Services (PDP, FS)
 -   Implement fuzz testing for bad inputs
 -   Expand Ethereum-based workloads
 -   Add more sophisticated consensus testing
--   Implement cross-chain validation
--   Add performance benchmarking
 -   Expand smart contract testing scenarios
 
 ## A Concrete Example
