@@ -16,6 +16,7 @@ import (
 
 func SendStandardMutations(ctx context.Context, api api.FullNode, from, to address.Address, count int, r *rand.Rand) error {
 	var acceptedCids []cid.Cid
+	var mutationDescriptions []string
 
 	for i := 0; i < count; i++ {
 		// Create base message
@@ -40,6 +41,7 @@ func SendStandardMutations(ctx context.Context, api api.FullNode, from, to addre
 			msgCid := smsg.Cid()
 			log.Printf("[ACCEPTED] tx %d was accepted: %s", i, msgCid)
 			acceptedCids = append(acceptedCids, msgCid)
+			mutationDescriptions = append(mutationDescriptions, description)
 		}
 
 		delay := time.Millisecond * time.Duration(50+r.Intn(200))
@@ -48,7 +50,7 @@ func SendStandardMutations(ctx context.Context, api api.FullNode, from, to addre
 
 	// Verify none of our mutated messages got mined
 	if len(acceptedCids) > 0 {
-		if err := checkStateWait(ctx, api, acceptedCids); err != nil {
+		if err := checkStateWait(ctx, api, acceptedCids, mutationDescriptions); err != nil {
 			log.Printf("[ERROR] Message verification failed: %v", err)
 			return err
 		}
@@ -60,6 +62,7 @@ func SendStandardMutations(ctx context.Context, api api.FullNode, from, to addre
 // SendChainedTransactions implements chained transaction attacks
 func SendChainedTransactions(ctx context.Context, api api.FullNode, from, to address.Address, count int, r *rand.Rand) error {
 	var acceptedCids []cid.Cid
+	var mutationDescriptions []string
 
 	nonce, err := api.MpoolGetNonce(ctx, from)
 	if err != nil {
@@ -78,6 +81,7 @@ func SendChainedTransactions(ctx context.Context, api api.FullNode, from, to add
 
 	log.Printf("[INFO] Sent initial valid message with CID: %s", validSigned.Cid())
 	acceptedCids = append(acceptedCids, validSigned.Cid())
+	mutationDescriptions = append(mutationDescriptions, "initial valid message")
 
 	time.Sleep(time.Millisecond * 500)
 
@@ -98,7 +102,7 @@ func SendChainedTransactions(ctx context.Context, api api.FullNode, from, to add
 			msg.Params = []byte{0x01}
 			description = "Normal looking with random params"
 		case 1:
-			msg.GasLimit = 10000000000
+			msg.GasLimit = 1000000000000000000
 			description = "Extremely high gas limit"
 		case 2:
 			msg.Method = 99
@@ -122,6 +126,7 @@ func SendChainedTransactions(ctx context.Context, api api.FullNode, from, to add
 			msgCid := smsg.Cid()
 			log.Printf("[ACCEPTED] Chain tx %d was accepted: %s", i, msgCid)
 			acceptedCids = append(acceptedCids, msgCid)
+			mutationDescriptions = append(mutationDescriptions, description)
 		}
 
 		delay := time.Millisecond * time.Duration(100+r.Intn(400))
@@ -130,7 +135,7 @@ func SendChainedTransactions(ctx context.Context, api api.FullNode, from, to add
 
 	// Verify none of our mutated messages got mined
 	if len(acceptedCids) > 0 {
-		if err := checkStateWait(ctx, api, acceptedCids); err != nil {
+		if err := checkStateWait(ctx, api, acceptedCids, mutationDescriptions); err != nil {
 			log.Printf("[ERROR] Message verification failed: %v", err)
 			return err
 		}
@@ -143,6 +148,7 @@ func SendChainedTransactions(ctx context.Context, api api.FullNode, from, to add
 func SendConcurrentBurst(ctx context.Context, api api.FullNode, from, to address.Address, count int, r *rand.Rand, concurrency int) error {
 	// Generate messages
 	messages := make([]*types.Message, count)
+	mutationDescriptions := make([]string, count)
 	for i := 0; i < count; i++ {
 		nonce, err := api.MpoolGetNonce(ctx, from)
 		if err != nil {
@@ -154,14 +160,19 @@ func SendConcurrentBurst(ctx context.Context, api api.FullNode, from, to address
 		// Apply some mutations
 		if i%3 == 0 {
 			msg.GasLimit = -1
+			mutationDescriptions[i] = "Negative gas limit"
 		} else if i%7 == 0 {
 			msg.GasPremium = abi.NewTokenAmount(1e18)
+			mutationDescriptions[i] = "Very high gas premium"
+		} else {
+			mutationDescriptions[i] = "No mutation"
 		}
 
 		messages[i] = msg
 	}
 
 	var acceptedCids []cid.Cid
+	var acceptedDescriptions []string
 	var cidsMutex sync.Mutex
 
 	// Set up result channel
@@ -187,6 +198,7 @@ func SendConcurrentBurst(ctx context.Context, api api.FullNode, from, to address
 				log.Printf("[BURST %d/%d] Accepted: %s", accepted, count, res.cid)
 				cidsMutex.Lock()
 				acceptedCids = append(acceptedCids, res.cid)
+				acceptedDescriptions = append(acceptedDescriptions, mutationDescriptions[res.index])
 				cidsMutex.Unlock()
 			}
 		}
@@ -233,7 +245,7 @@ func SendConcurrentBurst(ctx context.Context, api api.FullNode, from, to address
 
 	// Verify none of our mutated messages got mined
 	if len(acceptedCids) > 0 {
-		if err := checkStateWait(ctx, api, acceptedCids); err != nil {
+		if err := checkStateWait(ctx, api, acceptedCids, acceptedDescriptions); err != nil {
 			log.Printf("[ERROR] Message verification failed: %v", err)
 			return err
 		}

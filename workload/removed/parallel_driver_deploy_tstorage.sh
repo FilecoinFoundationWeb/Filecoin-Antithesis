@@ -2,8 +2,7 @@
 
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-OPERATION="deployTStore"
-NODE_NAMES=("Lotus1" "Lotus2")  # Ensure no extra commas here
+NODE_NAMES=("Lotus1" "Lotus2")
 CONTRACT_FILE="/opt/antithesis/resources/smart-contracts/TransientStorage.hex"
 
 # Ensure the application binary exists
@@ -33,13 +32,21 @@ select_random_node() {
 # Select and sanitize the node name
 random_node=$(select_random_node | tr -d '[:space:]')
 
-echo "Deploying smart contract $CONTRACT_FILE on node $random_node"
+echo "Selected node for TStorage contract deployment: $random_node"
 
-# Execute the deployment operation
-$APP_BINARY --operation "$OPERATION" --node "$random_node" --contract "$CONTRACT_FILE" --config "$CONFIG_FILE"
+# First ensure we have wallets available
+echo "Creating wallets on $random_node if needed..."
+$APP_BINARY wallet create --node "$random_node" --count 1
+
+# Allow some time for wallet creation to complete
+sleep 5
+
+# Now execute the deployment operation
+echo "Now deploying TStorage contract..."
+$APP_BINARY contracts deploy-tstorage --node "$random_node"
 if [ $? -ne 0 ]; then
-    echo "Error: Deployment failed."
+    echo "Error: TStorage deployment failed."
     exit 1
 fi
 
-echo "Smart contract $CONTRACT_FILE successfully deployed on node $random_node."
+echo "TStorage contracts $CONTRACT_FILE successfully deployed on node $random_node." 

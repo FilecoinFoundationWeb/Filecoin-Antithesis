@@ -227,7 +227,7 @@ func mempoolCommands() *cli.Command {
 					&cli.StringFlag{
 						Name:  "strategy",
 						Value: "standard",
-						Usage: "Fuzzing strategy (standard, chained, burst)",
+						Usage: "Fuzzing strategy (standard, chained)",
 					},
 				},
 				Action: func(c *cli.Context) error {
@@ -241,6 +241,36 @@ func mempoolCommands() *cli.Command {
 						c.Int("count"),
 						c.Int("concurrency"),
 						c.String("strategy"),
+					)
+				},
+			},
+			{
+				Name:  "chained",
+				Usage: "Run chained transaction mempool fuzzing",
+				Flags: []cli.Flag{
+					nodeFlag,
+					&cli.IntFlag{
+						Name:  "count",
+						Value: 100,
+						Usage: "Number of transactions to perform",
+					},
+					&cli.IntFlag{
+						Name:  "concurrency",
+						Value: 5,
+						Usage: "Number of concurrent operations",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return performMempoolFuzz(
+						c.Context,
+						nodeConfig,
+						c.Int("count"),
+						c.Int("concurrency"),
+						"chained",
 					)
 				},
 			},
@@ -271,6 +301,13 @@ func mempoolCommands() *cli.Command {
 						c.Duration("duration"),
 						c.Duration("interval"),
 					)
+				},
+			},
+			{
+				Name:  "spam",
+				Usage: "Send valid spam transactions between wallets on all nodes",
+				Action: func(c *cli.Context) error {
+					return performSpamOperation(c.Context, config)
 				},
 			},
 		},
@@ -1324,14 +1361,14 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 		minHeight = int64(h2)
 	}
 
-	// Ensure we have enough history (at least 20 blocks)
-	if minHeight < 20 {
-		log.Printf("[WARN] chain height too low for finalized tipset comparison (min: %d, required: 20)", minHeight)
+	// Ensure we have enough history (at least 50 blocks)
+	if minHeight < 50 {
+		log.Printf("[WARN] chain height too low for finalized tipset comparison (min: %d, required: 50)", minHeight)
 		return nil
 	}
 
-	startHeight := int64(20)
-	endHeight := minHeight - 20
+	startHeight := int64(50)
+	endHeight := minHeight - 50
 
 	// Select a random height within this range (similar to eth_methods.go random selection)
 	rand.Seed(time.Now().UnixNano())

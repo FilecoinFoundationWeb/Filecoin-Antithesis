@@ -44,7 +44,7 @@ func GenerateRandomAddress() (address.Address, error) {
 
 // checkStateWait verifies that our mutated transactions never get mined
 // It returns an error if any of the transactions are found on chain
-func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid) error {
+func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid, mutationDescriptions []string) error {
 	// Get current head for searching
 	head, err := api.ChainHead(ctx)
 	if err != nil {
@@ -56,19 +56,25 @@ func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid) er
 
 	// Check each message CID
 	for i, msgCid := range msgCids {
+		description := "unknown mutation"
+		if i < len(mutationDescriptions) {
+			description = mutationDescriptions[i]
+		}
+
 		lookup, err := api.StateSearchMsg(ctx, head.Key(), msgCid, 10, false)
 
 		assert.Sometimes(err != nil || lookup == nil,
-			fmt.Sprintf("Message %d (CID: %s) should not be found on chain via StateSearchMsg", i, msgCid),
+			fmt.Sprintf("Message %d (CID: %s) [%s] should not be found on chain via StateSearchMsg", i, msgCid, description),
 			map[string]interface{}{
 				"message_cid":   msgCid.String(),
 				"message_index": i,
 				"error":         err,
 				"lookup_found":  lookup != nil,
+				"mutation_type": description,
 			})
 
 		if lookup != nil {
-			log.Printf("[VIOLATION] Message %d (CID: %s) was unexpectedly mined!", i, msgCid)
+			log.Printf("[VIOLATION] Message %d (CID: %s) [%s] was unexpectedly mined!", i, msgCid, description)
 		}
 
 		// Double check with StateWaitMsg with a short timeout
@@ -78,16 +84,17 @@ func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid) er
 		lookup, err = api.StateWaitMsg(waitCtx, msgCid, 1, 5, false)
 
 		assert.Sometimes(err != nil || lookup == nil,
-			fmt.Sprintf("Message %d (CID: %s) should not be found on chain via StateWaitMsg", i, msgCid),
+			fmt.Sprintf("Message %d (CID: %s) [%s] should not be found on chain via StateWaitMsg", i, msgCid, description),
 			map[string]interface{}{
 				"message_cid":   msgCid.String(),
 				"message_index": i,
 				"error":         err,
 				"lookup_found":  lookup != nil,
+				"mutation_type": description,
 			})
 
 		if lookup != nil {
-			log.Printf("[VIOLATION] Message %d (CID: %s) was unexpectedly found via StateWaitMsg!", i, msgCid)
+			log.Printf("[VIOLATION] Message %d (CID: %s) [%s] was unexpectedly found via StateWaitMsg!", i, msgCid, description)
 		}
 	}
 

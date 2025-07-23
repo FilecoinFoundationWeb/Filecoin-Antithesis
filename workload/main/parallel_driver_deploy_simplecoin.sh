@@ -42,7 +42,7 @@ sleep 5
 
 # Now execute the deployment operation
 echo "Now deploying contract..."
-$APP_BINARY contracts deploy-simplecoin --node "$random_node"
+$APP_BINARY contracts deploy-simple-coin --node "$random_node"
 if [ $? -ne 0 ]; then
     echo "Error: Deployment failed."
     exit 1
