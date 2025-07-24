@@ -194,6 +194,47 @@ func networkCommands() *cli.Command {
 					return nil
 				},
 			},
+			{
+				Name:  "reorg",
+				Usage: "Simulate a reorg by disconnecting, waiting, and reconnecting",
+				Flags: []cli.Flag{
+					nodeFlag,
+					&cli.BoolFlag{
+						Name:  "check-consensus",
+						Usage: "Check for running consensus scripts and exit early if detected",
+						Value: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					// Check for running consensus scripts if the flag is enabled
+					if c.Bool("check-consensus") {
+						isRunning, err := resources.IsConsensusOrEthScriptRunning()
+						if err != nil {
+							log.Printf("[WARN] Failed to check for consensus/eth scripts: %v", err)
+						} else if isRunning {
+							log.Printf("[INFO] Consensus/ETH scripts detected running. Exiting reorg simulation early to avoid interference.")
+							return nil
+						}
+					}
+
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					log.Printf("Simulating reorg for node '%s'...", nodeConfig.Name)
+					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+					if err != nil {
+						return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+					}
+					defer closer()
+
+					if err := resources.SimulateReorg(c.Context, api); err != nil {
+						return fmt.Errorf("failed to simulate reorg for node '%s': %w", nodeConfig.Name, err)
+					}
+					log.Printf("Reorg simulation completed successfully for node '%s'", nodeConfig.Name)
+					return nil
+				},
+			},
 		},
 	}
 }

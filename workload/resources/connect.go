@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/filecoin-project/lotus/api/client"
 	"github.com/filecoin-project/lotus/api/v2api"
 	"github.com/filecoin-project/lotus/chain/types"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 )
 
 type NodeConfig struct {
@@ -233,6 +236,60 @@ func DisconnectFromOtherNodes(ctx context.Context, nodeAPI api.FullNode) error {
 	return nil
 }
 
+// SimulateReorg disconnects the current node from all connected peers,
+// saves their multiaddrs, waits for a few minutes, and then reconnects
+func SimulateReorg(ctx context.Context, nodeAPI api.FullNode) error {
+	peers, err := nodeAPI.NetPeers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get peer list: %w", err)
+	}
+
+	// Map to store peer IDs and their multiaddrs
+	peerMultiaddrs := make(map[peer.ID][]multiaddr.Multiaddr)
+
+	// Save multiaddrs for each peer before disconnecting
+	for _, peer := range peers {
+		log.Printf("[INFO] Saving multiaddrs for peer: %s", peer.ID.String())
+		peerMultiaddrs[peer.ID] = peer.Addrs
+
+		// Disconnect from the peer
+		if err := nodeAPI.NetDisconnect(ctx, peer.ID); err != nil {
+			log.Printf("[WARN] Failed to disconnect from peer %s: %v", peer.ID.String(), err)
+		} else {
+			log.Printf("[INFO] Successfully disconnected from peer: %s", peer.ID.String())
+		}
+	}
+
+	// Wait for a few minutes before reconnecting
+	reconnectDelay := 2 * time.Minute
+	log.Printf("[INFO] Waiting %v before reconnecting to peers...", reconnectDelay)
+
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled while waiting to reconnect: %w", ctx.Err())
+	case <-time.After(reconnectDelay):
+	}
+
+	// Reconnect to all peers using their saved multiaddrs
+	log.Printf("[INFO] Reconnecting to %d peers...", len(peerMultiaddrs))
+	for peerID, addrs := range peerMultiaddrs {
+		// Create AddrInfo for the peer
+		addrInfo := peer.AddrInfo{
+			ID:    peerID,
+			Addrs: addrs,
+		}
+
+		// Connect to the peer
+		if err := nodeAPI.NetConnect(ctx, addrInfo); err != nil {
+			log.Printf("[WARN] Failed to reconnect to peer %s: %v", peerID.String(), err)
+		} else {
+			log.Printf("[INFO] Successfully reconnected to peer: %s", peerID.String())
+		}
+	}
+
+	return nil
+}
+
 // FilterLotusNodes returns a slice of NodeConfig containing only Lotus1 and Lotus2 nodes
 func FilterLotusNodes(nodes []NodeConfig) []NodeConfig {
 	var lotusNodes []NodeConfig
@@ -291,4 +348,44 @@ func FilterLotusNodesWithV2(nodes []NodeConfig) []NodeConfig {
 		}
 	}
 	return filteredNodes
+}
+
+// IsConsensusOrEthScriptRunning checks if any consensus or ETH-related scripts are currently running
+// that require nodes to be connected for proper operation
+func IsConsensusOrEthScriptRunning() (bool, error) {
+	// List of consensus and ETH-related script patterns to check for
+	consensusPatterns := []string{
+		"consensus check",
+		"consensus finalized",
+		"monitor peers",
+		"monitor f3",
+		"chain backfill",
+		"state check",
+		"eth check",
+		"anytime_f3_finalized_tipsets",
+		"anytime_f3_running",
+		"anytime_print_peer_info",
+		"anytime_chain_backfill",
+		"anytime_state_checks",
+		"anytime_eth_methods_check",
+		"parallel_driver_eth_legacy_tx",
+	}
+
+	// Check for running processes
+	cmd := exec.Command("ps", "aux")
+	output, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("failed to check running processes: %w", err)
+	}
+
+	outputStr := strings.ToLower(string(output))
+
+	for _, pattern := range consensusPatterns {
+		if strings.Contains(outputStr, strings.ToLower(pattern)) {
+			log.Printf("[WARN] Detected running consensus/eth script: %s", pattern)
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
