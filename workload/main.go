@@ -1395,33 +1395,34 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 	log.Printf("[INFO] Current height %d for node %s", h1, v1Nodes[0].Name)
 	log.Printf("[INFO] Current height %d for node %s", h2, v1Nodes[1].Name)
 
-	var minHeight int64
+	// Find the common height between both nodes
+	var commonHeight int64
 	if h1 < h2 {
-		minHeight = int64(h1)
+		commonHeight = int64(h1)
 	} else {
-		minHeight = int64(h2)
+		commonHeight = int64(h2)
 	}
 
-	// Ensure we have enough history (at least 50 blocks)
-	if minHeight < 50 {
-		log.Printf("[WARN] chain height too low for finalized tipset comparison (min: %d, required: 50)", minHeight)
+	// Ensure we have enough history for F3 finalized tipset comparison
+	// F3 starts from epoch 20, so we need at least 30 epochs to have a meaningful range
+	if commonHeight < 30 {
+		log.Printf("[WARN] chain height too low for finalized tipset comparison (common: %d, required: 30 for F3 range)", commonHeight)
 		return nil
 	}
 
-	startHeight := int64(50)
-	endHeight := minHeight - 50
-
-	// Ensure we have a valid range for random selection
-	if endHeight <= startHeight {
-		log.Printf("[WARN] Invalid height range for finalized tipset comparison (start: %d, end: %d)", startHeight, endHeight)
-		return nil
-	}
-
-	// Select a random height within this range (similar to eth_methods.go random selection)
+	// Select a random height within the F3 range
+	// F3 starts from epoch 20, and we leave 10 epochs buffer from the tip
 	rand.Seed(time.Now().UnixNano())
-	randomHeight := startHeight + rand.Int63n(endHeight-startHeight+1)
+	maxHeight := commonHeight - 10 // Leave 10 epochs buffer from tip
+	minHeight := int64(20)         // F3 starts from epoch 20
 
-	log.Printf("[INFO] Selected random height %d for finalized tipset comparison (range: %d-%d)", randomHeight, startHeight, endHeight)
+	if maxHeight <= minHeight {
+		log.Printf("[WARN] Not enough height range for finalized tipset comparison (min: %d, max: %d)", minHeight, maxHeight)
+		return nil
+	}
+
+	randomHeight := minHeight + rand.Int63n(maxHeight-minHeight+1)
+	log.Printf("[INFO] Selected height %d for finalized tipset comparison (range: %d-%d)", randomHeight, minHeight, maxHeight)
 
 	// Connect to V2 nodes for finalized tipset comparison
 	api11, closer11, err := resources.ConnectToNodeV2(ctx, v2Nodes[0])
