@@ -1411,6 +1411,12 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 	startHeight := int64(50)
 	endHeight := minHeight - 50
 
+	// Ensure we have a valid range for random selection
+	if endHeight <= startHeight {
+		log.Printf("[WARN] Invalid height range for finalized tipset comparison (start: %d, end: %d)", startHeight, endHeight)
+		return nil
+	}
+
 	// Select a random height within this range (similar to eth_methods.go random selection)
 	rand.Seed(time.Now().UnixNano())
 	randomHeight := startHeight + rand.Int63n(endHeight-startHeight+1)
