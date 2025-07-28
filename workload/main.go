@@ -229,7 +229,8 @@ func networkCommands() *cli.Command {
 					defer closer()
 
 					if err := resources.SimulateReorg(c.Context, api); err != nil {
-						return fmt.Errorf("failed to simulate reorg for node '%s': %w", nodeConfig.Name, err)
+						log.Printf("failed to simulate reorg for node '%s': %w", nodeConfig.Name, err)
+						return nil
 					}
 					log.Printf("Reorg simulation completed successfully for node '%s'", nodeConfig.Name)
 					return nil
