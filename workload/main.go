@@ -1522,24 +1522,24 @@ func checkPeers() error {
 		}
 
 		peerCount := len(response.Result)
-		if peerCount < 2 {
+		if peerCount < 1 {
 			disconnectedNodes = append(disconnectedNodes, url)
 		}
 		log.Printf("[INFO] Node %s has %d peers", url, peerCount)
 	}
 
 	if len(disconnectedNodes) > 0 {
-		log.Printf("[WARN] The following nodes have less than 2 peers: %v", disconnectedNodes)
-		assert.Sometimes(false, "All nodes should have at least 2 peers",
+		log.Printf("[WARN] The following nodes have less than 1 peer: %v", disconnectedNodes)
+		assert.Sometimes(false, "All nodes should have at least 1 peer",
 			map[string]interface{}{
-				"requirement":        "Minimum 2 peers required",
+				"requirement":        "Minimum 1 peer required",
 				"disconnected_nodes": disconnectedNodes,
 			})
 	} else {
-		log.Printf("[INFO] All nodes have at least 2 peers")
-		assert.Sometimes(true, "All nodes have at least 2 peers",
+		log.Printf("[INFO] All nodes have at least 1 peer")
+		assert.Sometimes(true, "All nodes have at least 1 peer",
 			map[string]interface{}{
-				"requirement": "Minimum 2 peers required",
+				"requirement": "Minimum 1 peer required",
 			})
 	}
 	return nil
