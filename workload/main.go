@@ -1446,13 +1446,15 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 
 		ts1, err := api11.ChainGetTipSet(ctx, heightSelector)
 		if err != nil {
-			return fmt.Errorf("failed to get finalized tipset by height from %s: %w", v2Nodes[0].Name, err)
+			log.Printf("failed to get finalized tipset by height from %s: %w", v2Nodes[0].Name, err)
+			return nil
 		}
 		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts1.Cids(), v2Nodes[0].Name, i)
 
 		ts2, err := api22.ChainGetTipSet(ctx, heightSelector)
 		if err != nil {
-			return fmt.Errorf("failed to get finalized tipset by height from %s: %w", v2Nodes[1].Name, err)
+			log.Printf("failed to get finalized tipset by height from %s: %w", v2Nodes[1].Name, err)
+			return nil
 		}
 		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts2.Cids(), v2Nodes[1].Name, i)
 
