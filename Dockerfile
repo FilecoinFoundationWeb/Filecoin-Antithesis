@@ -7,6 +7,5 @@ COPY ./docker-compose-mal.yml /docker-compose-mal.yml
 COPY ./data /data
 COPY ./drand /drand
 COPY ./lotus /lotus
-COPY ./lotus-secondary /lotus-secondary
 COPY ./forest /forest
 COPY ./.env /.env
