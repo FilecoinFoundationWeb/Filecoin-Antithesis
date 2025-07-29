@@ -1,7 +1,7 @@
 # STAGE 1: Use the pre-built lotus image as a source for its binaries
 # This avoids rebuilding lotus and uses the same version as the rest of your environment.
 ARG LOTUS_TAG=latest
-FROM lotus:${LOTUS_TAG} as lotus-builder
+FROM us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/lotus:${LOTUS_TAG} as lotus-builder
 
 # STAGE 2: Build Curio using the base image you specified
 FROM docker.io/golang:latest
