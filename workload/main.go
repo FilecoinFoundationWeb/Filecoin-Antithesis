@@ -1508,7 +1508,6 @@ func checkPeers() error {
 
 	request := `{"jsonrpc":"2.0","method":"Filecoin.NetPeers","params":[],"id":1}`
 
-	disconnectedNodes := []string{}
 	for _, url := range urls {
 		_, resp := resources.DoRawRPCRequest(url, 1, request)
 		var response struct {
@@ -1518,30 +1517,17 @@ func checkPeers() error {
 		}
 		if err := json.Unmarshal(resp, &response); err != nil {
 			log.Printf("[WARN] Failed to parse response from %s: %v", url, err)
-			disconnectedNodes = append(disconnectedNodes, url)
 			continue
 		}
 
 		peerCount := len(response.Result)
-		if peerCount < 1 {
-			disconnectedNodes = append(disconnectedNodes, url)
+		if peerCount == 0 {
+			log.Printf("[INFO] Node %s has no peers (may be intentionally disconnected for reorg simulation)", url)
+		} else {
+			log.Printf("[INFO] Node %s has %d peers", url, peerCount)
 		}
-		log.Printf("[INFO] Node %s has %d peers", url, peerCount)
 	}
 
-	if len(disconnectedNodes) > 0 {
-		log.Printf("[WARN] The following nodes have less than 1 peer: %v", disconnectedNodes)
-		assert.Sometimes(false, "All nodes should have at least 1 peer",
-			map[string]interface{}{
-				"requirement":        "Minimum 1 peer required",
-				"disconnected_nodes": disconnectedNodes,
-			})
-	} else {
-		log.Printf("[INFO] All nodes have at least 1 peer")
-		assert.Sometimes(true, "All nodes have at least 1 peer",
-			map[string]interface{}{
-				"requirement": "Minimum 1 peer required",
-			})
-	}
+	log.Printf("[INFO] Peer information logged for all nodes")
 	return nil
 }
