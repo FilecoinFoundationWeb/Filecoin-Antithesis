@@ -1,0 +1,67 @@
+name: Build & Push Curio
+
+on: 
+  schedule:
+    # 6 PM EST, Mon & Thurs
+    - cron: '0 22 * * 1' 
+  workflow_dispatch:
+    inputs:
+      curio_tag:
+        type: string
+        required: true
+        default: '42d68a5'
+        description: A commit hash that can be found from (https://github.com/filecoin-project/curio)
+
+jobs:
+  antithesis:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Antithesis Google Artifact Registry
+      uses: docker/login-action@v3
+      with:
+        # These secrets would need to be populated in your repo and named
+        # this way if you want to copy-and-paste this configuration.
+        registry: us-central1-docker.pkg.dev
+        username: _json_key
+        password: ${{ secrets.ANTITHESIS_GAR_KEY }}
+
+    # scheduled Monday nights 6pm est
+    - name: Get latest curio commit hash
+      if: github.event_name == 'schedule'
+      id: latest-curio-commit
+      run: echo "commit-hash=$(git ls-remote https://github.com/filecoin-project/curio.git HEAD | cut -f1)" >> $GITHUB_OUTPUT
+
+    # There is a lot of copy-and-paste in these sections.
+    # This could be streamlined by using a matrix configuration, which would
+    # parameterize the extract and build stages. However, it would run both the
+    # setup and teardown sections N times, once for each of the N containers we
+    # are going to build and deploy.
+    - name: Extract metadata (tags) for Docker curio
+      id: meta-curio
+      uses: docker/metadata-action@v5
+      with:
+        images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/curio
+        tags: |
+          type=sha
+          ${{ github.event.inputs.curio_tag || steps.latest-curio-commit.outputs.commit-hash }}
+          latest
+    - name: Build and push curio
+      uses: docker/build-push-action@v5
+      with:
+        build-args: |
+          GIT_BRANCH=${{ github.event.inputs.curio_tag || steps.latest-curio-commit.outputs.commit-hash }}
+        context: ./curio
+        file: ./curio/Dockerfile
+        push: true
+        tags: ${{ steps.meta-curio.outputs.tags }}
+        labels: ${{ steps.meta-curio.outputs.labels }}
