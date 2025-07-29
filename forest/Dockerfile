@@ -27,7 +27,11 @@ COPY ./forest_config.toml.tpl .
 # COPY ./forest.patch ./forest.patch
 # RUN git apply ./forest.patch
 
-# Step 5: make install + Rust instrumentation for code coverage 
+# Step 5: build forest binaries + Rust instrumentation on main forest binary for code coverage 
+RUN cargo build --release --bin forest-cli
+RUN cargo build --release --bin forest-tool
+RUN cp /forest/target/release/forest-cli /usr/local/cargo/bin/forest-cli
+RUN cp /forest/target/release/forest-tool /usr/local/cargo/bin/forest-tool
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
 ENV LD_LIBRARY_PATH=/usr/local/lib
 ENV RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 \ 
@@ -38,9 +42,6 @@ WORKDIR /forest
 RUN sed -i 's/strip = true/strip = false/' Cargo.toml
 # change cargo.toml profile for instrumentation
 RUN cargo build --release --bin forest
-RUN cargo build --release --bin forest-cli
-RUN cargo build --release --bin forest-tool
-
 RUN cp /forest/target/release/forest /usr/local/cargo/bin/forest
 # Overwrite the forest binary from the make install
 WORKDIR /
