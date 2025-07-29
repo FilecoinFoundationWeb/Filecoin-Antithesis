@@ -52,13 +52,11 @@ CMD ["./lotus","--version"]
 
 # Fetch parameters
 RUN ./lotus fetch-params 2048
-RUN ./lotus-shed keyinfo new bls > rootkey-1
-RUN ./lotus-shed keyinfo new bls > rootkey-2
 
 # Pre-seal for the first miner
-RUN ./lotus-seed --sector-dir=/root/.genesis-sector-1 pre-seal --sector-size 2KiB --num-sectors 2 --miner-addr t01000 --signers rootkey-1 --signers rootkey-2
+RUN ./lotus-seed --sector-dir=/root/.genesis-sector-1 pre-seal --sector-size 2KiB --num-sectors 2 --miner-addr t01000 
 #Pre-seal for the second miner
-RUN ./lotus-seed --sector-dir=/root/.genesis-sector-2 pre-seal --sector-size 2KiB --num-sectors 3 --miner-addr t01001 --signers rootkey-1 --signers rootkey-2
+RUN ./lotus-seed --sector-dir=/root/.genesis-sector-2 pre-seal --sector-size 2KiB --num-sectors 3 --miner-addr t01001 
 # Create genesis template for first miner
 RUN ./lotus-seed genesis new --network-name="2k" localnet-1.json
 # Create genesis template for second miner 
@@ -68,6 +66,7 @@ RUN ./lotus-seed aggregate-manifests "/root/.genesis-sector-1/pre-seal-t01000.js
 RUN ./lotus-seed genesis add-miner localnet-1.json manifest.json
 # Add the second miner to the genesis template
 RUN ./lotus-seed genesis add-miner localnet-2.json manifest.json
+RUN install -C lotus-shed /usr/local/bin/lotus-shed
 
 RUN make install
 

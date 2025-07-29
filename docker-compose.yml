@@ -260,7 +260,6 @@ services:
       - ./data/lotus-2:${LOTUS_2_DATA_DIR}
       - ./data/forest:${FOREST_DATA_DIR}
       - ./curio/start_scripts/curio-init.sh:${CURIO_DATA_DIR}/curio-init.sh
-      - ./data/contracts:/root/devgen/contracts
     env_file:
       - .env
     environment:
@@ -280,31 +279,6 @@ services:
         condition: service_healthy
       yugabyte:
         condition: service_started
-
-  # Piece server service
-  piece-server:
-    container_name: piece-server
-    image: piece-server:latest
-    init: true
-    ports:
-      - "12320:12320" # piece-server
-    environment:
-      - CURIO_MK12_CLIENT_REPO=/var/lib/curio-client
-    restart: unless-stopped
-    logging: *default-logging
-    volumes:
-      - ./data/piece-server:/var/lib/curio-client:rw
-      - ./data/curio:/var/lib/curio:ro
-      - ./data/lotus:/var/lib/lotus:ro
-      - ./data/lotus-miner:/var/lib/lotus-miner:ro
-      - ${FIL_PROOFS_PARAMETER_CACHE}:/var/tmp/filecoin-proof-parameters:rw
-    networks:
-      antithesis-net:
-        ipv4_address: ${PIECE_SERVER_IP}
-    depends_on:
-      curio:
-        condition: service_started
-
 
   #Workload service
   workload:
