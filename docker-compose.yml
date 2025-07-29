@@ -250,35 +250,35 @@ services:
       retries: 10
       start_period: 30s
 
-  # Curio service
-  curio:
-    image: curio:latest
-    container_name: curio
-    volumes:
-      - ./data/curio:/var/lib/curio:rw
-      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
-      - ./data/lotus-2:${LOTUS_2_DATA_DIR}
-      - ./data/forest:${FOREST_DATA_DIR}
-      - ./curio/start_scripts/curio-init.sh:${CURIO_DATA_DIR}/curio-init.sh
-    env_file:
-      - .env
-    environment:
-      - CURIO_IP=${CURIO_IP}
-    ports:
-      - "443:443"
-      - "80:80"
-      - "12300:12300"
-      - "4701:4701"
-      - "32100:32100"
-    entrypoint: ["${CURIO_DATA_DIR}/curio-init.sh"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${CURIO_IP}
-    depends_on:
-      lotus-1:
-        condition: service_healthy
-      yugabyte:
-        condition: service_started
+  # # Curio service
+  # curio:
+  #   image: curio:latest
+  #   container_name: curio
+  #   volumes:
+  #     - ./data/curio:/var/lib/curio:rw
+  #     - ./data/lotus-1:${LOTUS_1_DATA_DIR}
+  #     - ./data/lotus-2:${LOTUS_2_DATA_DIR}
+  #     - ./data/forest:${FOREST_DATA_DIR}
+  #     - ./curio/start_scripts/curio-init.sh:${CURIO_DATA_DIR}/curio-init.sh
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - CURIO_IP=${CURIO_IP}
+  #   ports:
+  #     - "443:443"
+  #     - "80:80"
+  #     - "12300:12300"
+  #     - "4701:4701"
+  #     - "32100:32100"
+  #   entrypoint: ["${CURIO_DATA_DIR}/curio-init.sh"]
+  #   networks:
+  #     antithesis-net:
+  #       ipv4_address: ${CURIO_IP}
+  #   depends_on:
+  #     lotus-1:
+  #       condition: service_healthy
+  #     yugabyte:
+  #       condition: service_started
 
   #Workload service
   workload:
@@ -296,25 +296,25 @@ services:
     depends_on:
       lotus-2:
         condition: service_healthy
-  # Yugabyte Database Service
-  yugabyte:
-    image: yugabytedb/yugabyte:latest
-    container_name: yugabyte
-    init: true
-    command: [ "bin/yugabyted", "start", "--base_dir=/home/yugabyte/yb_data", "--background=false" ]
-    ports:
-      - "5433:5433"
-      - "9042:9042"
-      - "15433:15433"
-    environment:
-      - TINI_SUBREAPER=true
-    env_file:
-      - .env
-    volumes:
-      - ./data/yugabyte:/home/yugabyte/yb_data
-    networks:
-      antithesis-net:
-        ipv4_address: ${YUGABYTE_IP}
+  # # Yugabyte Database Service
+  # yugabyte:
+  #   image: yugabytedb/yugabyte:latest
+  #   container_name: yugabyte
+  #   init: true
+  #   command: [ "bin/yugabyted", "start", "--base_dir=/home/yugabyte/yb_data", "--background=false" ]
+  #   ports:
+  #     - "5433:5433"
+  #     - "9042:9042"
+  #     - "15433:15433"
+  #   environment:
+  #     - TINI_SUBREAPER=true
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./data/yugabyte:/home/yugabyte/yb_data
+  #   networks:
+  #     antithesis-net:
+  #       ipv4_address: ${YUGABYTE_IP}
 
 networks:
   antithesis-net:
