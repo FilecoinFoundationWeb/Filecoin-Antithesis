@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+sleep 10
 
 # Function to check if DRAND server is healthy
 check_drand_server() {
