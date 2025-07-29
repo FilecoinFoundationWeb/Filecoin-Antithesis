@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-sleep 10
+sleep 3
 
 # Function to check if DRAND server is healthy
 check_drand_server() {
@@ -87,6 +87,6 @@ forest-cli net connect "$(cat ${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr)"
 forest-wallet --remote-wallet import ${LOTUS_1_DATA_DIR}/key 
 forest-wallet --remote-wallet import ${LOTUS_2_DATA_DIR}/key
 
-forest-cli sync wait
+forest-cli sync wait &
 echo "forest: ready."
 sleep infinity
