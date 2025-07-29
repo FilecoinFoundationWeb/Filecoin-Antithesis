@@ -8,5 +8,3 @@ COPY ./drand /drand
 COPY ./lotus /lotus
 COPY ./forest /forest
 COPY ./.env /.env
-COPY ./curio /curio
-COPY ./yugabyte /yugabyte
