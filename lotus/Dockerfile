@@ -54,7 +54,7 @@ CMD ["./lotus","--version"]
 RUN ./lotus fetch-params 2048
 
 # Pre-seal for the first miner
-RUN ./lotus-seed --sector-dir=/root/.genesis-sector-1 pre-seal --sector-size 2KiB --num-sectors 2 --miner-addr t01000
+RUN ./lotus-seed --sector-dir=/root/.genesis-sector-1 pre-seal --sector-size 2KiB --num-sectors 2 --miner-addr t01000 
 #Pre-seal for the second miner
 RUN ./lotus-seed --sector-dir=/root/.genesis-sector-2 pre-seal --sector-size 2KiB --num-sectors 3 --miner-addr t01001 
 # Create genesis template for first miner
@@ -66,7 +66,10 @@ RUN ./lotus-seed aggregate-manifests "/root/.genesis-sector-1/pre-seal-t01000.js
 RUN ./lotus-seed genesis add-miner localnet-1.json manifest.json
 # Add the second miner to the genesis template
 RUN ./lotus-seed genesis add-miner localnet-2.json manifest.json
+RUN install -C lotus-shed /usr/local/bin/lotus-shed
 
 RUN make install
+
+
 
 ENTRYPOINT ["sleep", "infinity"]
