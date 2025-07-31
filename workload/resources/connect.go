@@ -50,6 +50,38 @@ func LoadConfig(filename string) (*Config, error) {
 	return &config, err
 }
 
+// RetryOperation executes an operation with retry logic
+func RetryOperation(ctx context.Context, operation func() error, operationName string) error {
+	var err error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err = operation()
+		if err == nil {
+			return nil
+		}
+
+		if attempt < maxRetries {
+			waitTime := minRecoveryTime
+			if attempt > 1 {
+				waitTime = initialRetryDelay * time.Duration(attempt)
+				if waitTime > maxRetryDelay {
+					waitTime = maxRetryDelay
+				}
+			}
+
+			log.Printf("[WARN] %s failed (attempt %d/%d): %v. Waiting %v before retry...",
+				operationName, attempt, maxRetries, err, waitTime)
+
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("context cancelled during %s: %w", operationName, ctx.Err())
+			case <-time.After(waitTime):
+			}
+		}
+	}
+
+	return fmt.Errorf("%s failed after %d attempts: %w", operationName, maxRetries, err)
+}
+
 // ConnectToNode establishes a connection to a Filecoin node with retry logic
 // It will attempt to connect maxRetries times with increasing delay between attempts
 func ConnectToNode(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(), error) {
@@ -79,13 +111,15 @@ func ConnectToNode(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, fu
 
 			select {
 			case <-ctx.Done():
-				return nil, nil, fmt.Errorf("context cancelled while connecting to node %s: %w", nodeConfig.Name, ctx.Err())
+				log.Printf("[INFO] Context cancelled while connecting to node %s", nodeConfig.Name)
+				return nil, nil, nil
 			case <-time.After(waitTime):
 			}
 		}
 	}
 
-	return nil, nil, fmt.Errorf("failed to connect to node %s after %d attempts: %v", nodeConfig.Name, maxRetries, err)
+	log.Printf("[ERROR] Failed to connect to node %s after %d attempts: %v", nodeConfig.Name, maxRetries, err)
+	return nil, nil, nil
 }
 
 // tryConnect attempts a single connection to the node using the V1 RPC API

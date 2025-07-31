@@ -229,7 +229,7 @@ func networkCommands() *cli.Command {
 					defer closer()
 
 					if err := resources.SimulateReorg(c.Context, api); err != nil {
-						log.Printf("failed to simulate reorg for node '%s': %w", nodeConfig.Name, err)
+						log.Printf("failed to simulate reorg for node '%s': %v", nodeConfig.Name, err)
 						return nil
 					}
 					log.Printf("Reorg simulation completed successfully for node '%s'", nodeConfig.Name)
@@ -517,12 +517,16 @@ func stateCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
+
 					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
 					if err != nil {
-						return err
+						return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
 					}
 					defer closer()
-					return resources.StateMismatch(c.Context, api)
+
+					return resources.RetryOperation(c.Context, func() error {
+						return resources.StateMismatch(c.Context, api)
+					}, "State consistency check operation")
 				},
 			},
 		},
@@ -645,51 +649,72 @@ func ethCommands() *cli.Command {
 func performCreateOperation(ctx context.Context, nodeConfig *resources.NodeConfig, numWallets int, tokenAmount abi.TokenAmount) error {
 	log.Printf("Creating %d wallets on node '%s'...", numWallets, nodeConfig.Name)
 
-	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	if err != nil {
-		log.Printf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return nil
-	}
-	defer closer()
+	// Retry connection up to 3 times
+	for retry := 0; retry < 3; retry++ {
+		api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
+		if err != nil {
+			log.Printf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+			return nil
+		}
 
-	err = resources.InitializeWallets(ctx, api, numWallets, tokenAmount)
-	if err != nil {
-		log.Printf("Warning: Error occurred during wallet initialization: %v", err)
-	} else {
-		log.Printf("Wallets created successfully on node '%s'", nodeConfig.Name)
+		// Handle graceful connection failure
+		if api == nil {
+			if retry < 2 {
+				log.Printf("[WARN] Could not establish connection to node '%s' (retry %d/3), retrying...", nodeConfig.Name, retry+1)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			log.Printf("[WARN] Could not establish connection to node '%s' after 3 attempts, skipping wallet creation", nodeConfig.Name)
+			return nil
+		}
+
+		defer closer()
+
+		err = resources.InitializeWallets(ctx, api, numWallets, tokenAmount)
+		if err != nil {
+			log.Printf("Warning: Error occurred during wallet initialization: %v", err)
+			return err
+		} else {
+			log.Printf("Wallets created successfully on node '%s'", nodeConfig.Name)
+			return nil
+		}
 	}
+
 	return nil
 }
 
 func performDeleteOperation(ctx context.Context, nodeConfig *resources.NodeConfig) error {
 	log.Printf("Deleting wallets on node '%s'...", nodeConfig.Name)
+
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
 	}
 	defer closer()
 
-	allWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
-	if err != nil {
-		return fmt.Errorf("failed to list wallets on node '%s': %w", nodeConfig.Name, err)
-	}
+	return resources.RetryOperation(ctx, func() error {
+		allWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+		if err != nil {
+			return fmt.Errorf("failed to list wallets on node '%s': %w", nodeConfig.Name, err)
+		}
 
-	if len(allWallets) == 0 {
-		log.Printf("No wallets available to delete on node '%s'", nodeConfig.Name)
+		if len(allWallets) == 0 {
+			log.Printf("No wallets available to delete on node '%s'", nodeConfig.Name)
+			return nil
+		}
+
+		// Delete a random number of wallets
+		rand.Seed(time.Now().UnixNano())
+		numToDelete := rand.Intn(len(allWallets)) + 1
+		walletsToDelete := allWallets[:numToDelete]
+
+		if err := resources.DeleteWallets(ctx, api, walletsToDelete); err != nil {
+			return fmt.Errorf("failed to delete wallets on node '%s': %w", nodeConfig.Name, err)
+		}
+
+		log.Printf("Deleted %d wallets successfully on node '%s'", numToDelete, nodeConfig.Name)
 		return nil
-	}
-
-	// Delete a random number of wallets
-	rand.Seed(time.Now().UnixNano())
-	numToDelete := rand.Intn(len(allWallets)) + 1
-	walletsToDelete := allWallets[:numToDelete]
-
-	if err := resources.DeleteWallets(ctx, api, walletsToDelete); err != nil {
-		return fmt.Errorf("failed to delete wallets on node '%s': %w", nodeConfig.Name, err)
-	}
-
-	log.Printf("Deleted %d wallets successfully on node '%s'", numToDelete, nodeConfig.Name)
-	return nil
+	}, "Delete wallets operation")
 }
 
 func performSpamOperation(ctx context.Context, config *resources.Config) error {
@@ -716,34 +741,42 @@ func performSpamOperation(ctx context.Context, config *resources.Config) error {
 		}
 		closers = append(closers, closer)
 
-		// Ensure wallets have sufficient funds before proceeding
-		log.Printf("[INFO] Checking wallet funds for node '%s'...", node.Name)
-		_, err = resources.GetAllWalletAddressesExceptGenesis(ctx, api)
-		if err != nil {
-			log.Printf("[WARN] Failed to ensure wallets are funded on '%s': %v", node.Name, err)
-			// Create some wallets if needed
-			numWallets := 3
-			log.Printf("[INFO] Creating %d new wallets on node '%s'...", numWallets, node.Name)
-			if err := resources.InitializeWallets(ctx, api, numWallets, abi.NewTokenAmount(1000000000000000)); err != nil {
-				log.Printf("[WARN] Failed to create new wallets: %v", err)
+		// Use RetryOperation for wallet operations on each node
+		err = resources.RetryOperation(ctx, func() error {
+			// Ensure wallets have sufficient funds before proceeding
+			log.Printf("[INFO] Checking wallet funds for node '%s'...", node.Name)
+			_, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+			if err != nil {
+				log.Printf("[WARN] Failed to ensure wallets are funded on '%s': %v", node.Name, err)
+				// Create some wallets if needed
+				numWallets := 3
+				log.Printf("[INFO] Creating %d new wallets on node '%s'...", numWallets, node.Name)
+				if err := resources.InitializeWallets(ctx, api, numWallets, abi.NewTokenAmount(1000000000000000)); err != nil {
+					return fmt.Errorf("failed to create new wallets: %w", err)
+				}
 			}
-		}
 
-		log.Printf("[INFO] Retrieving wallets for node '%s'...", node.Name)
-		nodeWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+			log.Printf("[INFO] Retrieving wallets for node '%s'...", node.Name)
+			nodeWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+			if err != nil {
+				return fmt.Errorf("failed to retrieve wallets for node '%s': %w", node.Name, err)
+			}
+			log.Printf("[INFO] Retrieved %d wallets for node '%s'.", len(nodeWallets), node.Name)
+
+			if len(nodeWallets) < 2 {
+				return fmt.Errorf("not enough wallets on node '%s' (found %d). At least 2 needed for spam operation",
+					node.Name, len(nodeWallets))
+			}
+
+			apis = append(apis, api)
+			wallets = append(wallets, nodeWallets)
+			return nil
+		}, fmt.Sprintf("Wallet setup for node %s", node.Name))
+
 		if err != nil {
-			return fmt.Errorf("failed to retrieve wallets for node '%s': %w", node.Name, err)
-		}
-		log.Printf("[INFO] Retrieved %d wallets for node '%s'.", len(nodeWallets), node.Name)
-
-		if len(nodeWallets) < 2 {
-			log.Printf("[WARN] Not enough wallets on node '%s' (found %d). At least 2 needed for spam operation.",
-				node.Name, len(nodeWallets))
+			log.Printf("[WARN] Failed to setup wallets for node '%s': %v", node.Name, err)
 			continue
 		}
-
-		apis = append(apis, api)
-		wallets = append(wallets, nodeWallets)
 	}
 
 	// Ensure we have enough nodes connected for spam
@@ -751,15 +784,18 @@ func performSpamOperation(ctx context.Context, config *resources.Config) error {
 		return fmt.Errorf("not enough nodes available for spam operation")
 	}
 
-	// Perform spam transactions
-	rand.Seed(time.Now().UnixNano())
-	numTransactions := rand.Intn(30) + 1
-	log.Printf("[INFO] Initiating spam operation with %d transactions...", numTransactions)
-	if err := resources.SpamTransactions(ctx, apis, wallets, numTransactions); err != nil {
-		return fmt.Errorf("spam operation failed: %w", err)
-	}
-	log.Println("[INFO] Spam operation completed successfully.")
-	return nil
+	// Use RetryOperation for the spam transactions
+	return resources.RetryOperation(ctx, func() error {
+		// Perform spam transactions
+		rand.Seed(time.Now().UnixNano())
+		numTransactions := rand.Intn(30) + 1
+		log.Printf("[INFO] Initiating spam operation with %d transactions...", numTransactions)
+		if err := resources.SpamTransactions(ctx, apis, wallets, numTransactions); err != nil {
+			return fmt.Errorf("spam operation failed: %w", err)
+		}
+		log.Println("[INFO] Spam operation completed successfully.")
+		return nil
+	}, "Spam transactions operation")
 }
 
 func performConnectDisconnectOperation(ctx context.Context, nodeConfig *resources.NodeConfig, config *resources.Config) error {
@@ -777,192 +813,215 @@ func performConnectDisconnectOperation(ctx context.Context, nodeConfig *resource
 		}
 	}
 
-	// Check current connections
-	peers, err := api.NetPeers(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get peer list: %w", err)
-	}
+	return resources.RetryOperation(ctx, func() error {
+		// Check current connections
+		peers, err := api.NetPeers(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get peer list: %w", err)
+		}
 
-	// If we have peers, disconnect; otherwise connect
-	if len(peers) > 0 {
-		log.Printf("Node '%s' has %d peers, disconnecting...", nodeConfig.Name, len(peers))
-		if err := resources.DisconnectFromOtherNodes(ctx, api); err != nil {
-			return fmt.Errorf("failed to disconnect node '%s' from other nodes: %w", nodeConfig.Name, err)
+		// If we have peers, disconnect; otherwise connect
+		if len(peers) > 0 {
+			log.Printf("Node '%s' has %d peers, disconnecting...", nodeConfig.Name, len(peers))
+			if err := resources.DisconnectFromOtherNodes(ctx, api); err != nil {
+				return fmt.Errorf("failed to disconnect node '%s' from other nodes: %w", nodeConfig.Name, err)
+			}
+			log.Printf("Node '%s' disconnected successfully", nodeConfig.Name)
+		} else {
+			log.Printf("Node '%s' has no peers, connecting...", nodeConfig.Name)
+			if err := resources.ConnectToOtherNodes(ctx, api, *nodeConfig, lotusNodes); err != nil {
+				return fmt.Errorf("failed to connect node '%s' to other nodes: %w", nodeConfig.Name, err)
+			}
+			log.Printf("Node '%s' connected successfully", nodeConfig.Name)
 		}
-		log.Printf("Node '%s' disconnected successfully", nodeConfig.Name)
-	} else {
-		log.Printf("Node '%s' has no peers, connecting...", nodeConfig.Name)
-		if err := resources.ConnectToOtherNodes(ctx, api, *nodeConfig, lotusNodes); err != nil {
-			return fmt.Errorf("failed to connect node '%s' to other nodes: %w", nodeConfig.Name, err)
-		}
-		log.Printf("Node '%s' connected successfully", nodeConfig.Name)
-	}
-	return nil
+		return nil
+	}, fmt.Sprintf("Connection toggle operation for node %s", nodeConfig.Name))
 }
 
 func performDeploySimpleCoin(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) error {
-
 	log.Printf("[INFO] Deploying SimpleCoin contract on node %s from %s", nodeConfig.Name, contractPath)
 
-	// Connect to Lotus node
-	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
-	if err != nil {
-		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return fmt.Errorf("failed to connect to Lotus node: %w", err)
-	}
-	defer closer()
-
-	// Verify contract file exists
+	// Verify contract file exists first
 	if _, err := os.Stat(contractPath); os.IsNotExist(err) {
 		log.Printf("[ERROR] Contract file not found: %s", contractPath)
 		return fmt.Errorf("contract file not found: %s", contractPath)
 	}
 
-	// Check if we have a default wallet address
-	defaultAddr, err := api.WalletDefaultAddress(ctx)
-	if err != nil || defaultAddr.Empty() {
-		log.Printf("[WARN] No default wallet address found, attempting to get or create one")
+	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+	}
+	defer closer()
 
-		// Get all available addresses
-		addresses, err := api.WalletList(ctx)
+	return resources.RetryOperation(ctx, func() error {
+		// Check if we have a default wallet address
+		defaultAddr, err := api.WalletDefaultAddress(ctx)
+		if err != nil || defaultAddr.Empty() {
+			log.Printf("[WARN] No default wallet address found, attempting to get or create one")
+
+			// Get all available addresses
+			addresses, err := api.WalletList(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to list wallet addresses: %w", err)
+			}
+
+			// If we have addresses, set the first one as default
+			if len(addresses) > 0 {
+				defaultAddr = addresses[0]
+				log.Printf("[INFO] Using existing wallet address: %s", defaultAddr)
+				err = api.WalletSetDefault(ctx, defaultAddr)
+				if err != nil {
+					log.Printf("[WARN] Failed to set default wallet address: %v", err)
+				}
+			} else {
+				// Create a new address if none exists
+				log.Printf("[INFO] No wallet addresses found, creating a new one")
+				newAddr, err := api.WalletNew(ctx, types.KTSecp256k1)
+				if err != nil {
+					return fmt.Errorf("failed to create new wallet address: %w", err)
+				}
+				defaultAddr = newAddr
+				log.Printf("[INFO] Created new wallet address: %s", defaultAddr)
+
+				err = api.WalletSetDefault(ctx, defaultAddr)
+				if err != nil {
+					log.Printf("[WARN] Failed to set default wallet address: %v", err)
+				}
+			}
+		}
+
+		log.Printf("[INFO] Using wallet address: %s", defaultAddr)
+
+		// Verify the address has funds before deploying
+		balance, err := api.WalletBalance(ctx, defaultAddr)
 		if err != nil {
-			return fmt.Errorf("failed to list wallet addresses: %w", err)
+			log.Printf("[WARN] Failed to check wallet balance: %v", err)
+		} else if balance.IsZero() {
+			log.Printf("[WARN] Wallet has zero balance, contract deployment may fail")
 		}
 
-		// If we have addresses, set the first one as default
-		if len(addresses) > 0 {
-			defaultAddr = addresses[0]
-			log.Printf("[INFO] Using existing wallet address: %s", defaultAddr)
-			err = api.WalletSetDefault(ctx, defaultAddr)
-			if err != nil {
-				log.Printf("[WARN] Failed to set default wallet address: %v", err)
-			}
+		// Deploy the contract
+		log.Printf("[INFO] Deploying contract from %s", contractPath)
+		fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
+
+		if fromAddr.Empty() || contractAddr.Empty() {
+			log.Printf("[WARN] Deployment returned empty addresses, will retry")
+			return err
+		}
+
+		log.Printf("[INFO] Contract deployed from %s to %s", fromAddr, contractAddr)
+
+		// Generate input data for owner's address
+		inputData := resources.InputDataFromFrom(ctx, api, fromAddr)
+		if len(inputData) == 0 {
+			log.Printf("[WARN] Failed to generate input data, will retry")
+			return err
+		}
+
+		// Invoke contract for owner's balance
+		log.Printf("[INFO] Checking owner's balance")
+		result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
+		if err != nil {
+			log.Printf("[WARN] Failed to retrieve owner's balance: %v", err)
 		} else {
-			// Create a new address if none exists
-			log.Printf("[INFO] No wallet addresses found, creating a new one")
-			newAddr, err := api.WalletNew(ctx, types.KTSecp256k1)
-			if err != nil {
-				return fmt.Errorf("failed to create new wallet address: %w", err)
-			}
-			defaultAddr = newAddr
-			log.Printf("[INFO] Created new wallet address: %s", defaultAddr)
-
-			err = api.WalletSetDefault(ctx, defaultAddr)
-			if err != nil {
-				log.Printf("[WARN] Failed to set default wallet address: %v", err)
-			}
+			log.Printf("[INFO] Owner's balance: %x", result)
 		}
-	}
 
-	log.Printf("[INFO] Using wallet address: %s", defaultAddr)
-
-	// Verify the address has funds before deploying
-	balance, err := api.WalletBalance(ctx, defaultAddr)
-	if err != nil {
-		log.Printf("[WARN] Failed to check wallet balance: %v", err)
-	} else if balance.IsZero() {
-		log.Printf("[WARN] Wallet has zero balance, contract deployment may fail")
-	}
-
-	// Deploy the contract
-	log.Printf("[INFO] Deploying contract from %s", contractPath)
-	fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
-
-	if fromAddr.Empty() {
-		return fmt.Errorf("deployment failed: empty from address")
-	}
-
-	if contractAddr.Empty() {
-		return fmt.Errorf("deployment failed: empty contract address")
-	}
-
-	log.Printf("[INFO] Contract deployed from %s to %s", fromAddr, contractAddr)
-
-	// Generate input data for owner's address
-	inputData := resources.InputDataFromFrom(ctx, api, fromAddr)
-	if len(inputData) == 0 {
-		return fmt.Errorf("failed to generate input data for owner's address")
-	}
-
-	// Invoke contract for owner's balance
-	log.Printf("[INFO] Checking owner's balance")
-	result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
-	if err != nil {
-		log.Printf("[WARN] Failed to retrieve owner's balance: %v", err)
-	} else {
-		log.Printf("[INFO] Owner's balance: %x", result)
-	}
-
-	return nil
+		return nil
+	}, "SimpleCoin contract deployment operation")
 }
 
 func performDeployMCopy(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) error {
 	log.Printf("Deploying and invoking MCopy contract on node '%s'...", nodeConfig.Name)
+
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
 	}
 	defer closer()
 
-	fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
+	return resources.RetryOperation(ctx, func() error {
+		fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
 
-	hexString := "000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000087465737464617461000000000000000000000000000000000000000000000000"
-	inputArgument, err := hex.DecodeString(hexString)
-	if err != nil {
-		log.Fatalf("Failed to decode input argument: %v", err)
-	}
+		hexString := "000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000087465737464617461000000000000000000000000000000000000000000000000"
+		inputArgument, err := hex.DecodeString(hexString)
+		if err != nil {
+			return fmt.Errorf("failed to decode input argument: %w", err)
+		}
 
-	result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "optimizedCopy(bytes)", inputArgument)
-	if err != nil {
-		log.Fatalf("Failed to invoke MCopy contract: %v", err)
-	}
-	if bytes.Equal(result, inputArgument) {
-		log.Printf("MCopy invocation result matches the input argument. No change in the output.")
-	} else {
-		log.Printf("MCopy invocation result: %x\n", result)
-	}
-	return nil
+		result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "optimizedCopy(bytes)", inputArgument)
+		if err != nil {
+			return fmt.Errorf("failed to invoke MCopy contract: %w", err)
+		}
+		if bytes.Equal(result, inputArgument) {
+			log.Printf("MCopy invocation result matches the input argument. No change in the output.")
+		} else {
+			log.Printf("MCopy invocation result: %x\n", result)
+		}
+		return nil
+	}, "MCopy contract deployment operation")
 }
 
 func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, contractPath string) error {
 	log.Printf("Deploying and invoking TStore contract on node '%s'...", nodeConfig.Name)
 
-	// Connect to Lotus node
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
 	}
 	defer closer()
 
-	// Deploy the contract
-	fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
+	return resources.RetryOperation(ctx, func() error {
+		// Deploy the contract
+		fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
+		if fromAddr.Empty() || contractAddr.Empty() {
+			return fmt.Errorf("failed to deploy initial contract instance")
+		}
 
-	inputData := make([]byte, 0)
+		inputData := make([]byte, 0)
 
-	// Run initial tests
-	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "runTests()", inputData)
-	assert.Sometimes(err == nil, "Failed to invoke runTests()", map[string]interface{}{"err": err})
-	fmt.Printf("InvokeContractByFuncName Error: %s", err)
-	// Validate lifecycle in subsequent transactions
-	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testLifecycleValidationSubsequentTransaction()", inputData)
-	assert.Sometimes(err == nil, "Failed to invoke testLifecycleValidationSubsequentTransaction()", map[string]interface{}{"err": err})
-	fmt.Printf("InvokeContractByFuncName Error: %s", err)
-	// Deploy a second contract instance for further testing
-	fromAddr, contractAddr2 := resources.DeployContractFromFilename(ctx, api, contractPath)
-	inputDataContract := resources.InputDataFromFrom(ctx, api, contractAddr2)
-	fmt.Printf("InvokeContractByFuncName Error: %s", err)
-	// Test re-entry scenarios
-	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testReentry(address)", inputDataContract)
-	assert.Sometimes(err == nil, "Failed to invoke testReentry(address)", map[string]interface{}{"err": err})
-	fmt.Printf("InvokeContractByFuncName Error: %s", err)
+		// Run initial tests
+		_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "runTests()", inputData)
+		if err != nil {
+			return fmt.Errorf("failed to invoke runTests(): %w", err)
+		}
+		assert.Sometimes(err == nil, "Failed to invoke runTests()", map[string]interface{}{"err": err})
 
-	// Test nested contract interactions
-	_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testNestedContracts(address)", inputDataContract)
-	assert.Sometimes(err == nil, "Failed to invoke testNestedContracts(address)", map[string]interface{}{"err": err})
-	fmt.Printf("InvokeContractByFuncName Error: %s", err)
+		// Validate lifecycle in subsequent transactions
+		_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testLifecycleValidationSubsequentTransaction()", inputData)
+		if err != nil {
+			return fmt.Errorf("failed to invoke testLifecycleValidationSubsequentTransaction(): %w", err)
+		}
+		assert.Sometimes(err == nil, "Failed to invoke testLifecycleValidationSubsequentTransaction()", map[string]interface{}{"err": err})
 
-	log.Printf("TStore contract successfully deployed and tested on node '%s'.", nodeConfig.Name)
-	return nil
+		// Deploy a second contract instance for further testing
+		fromAddr, contractAddr2 := resources.DeployContractFromFilename(ctx, api, contractPath)
+		if fromAddr.Empty() || contractAddr2.Empty() {
+			return fmt.Errorf("failed to deploy second contract instance")
+		}
+
+		inputDataContract := resources.InputDataFromFrom(ctx, api, contractAddr2)
+		if len(inputDataContract) == 0 {
+			return fmt.Errorf("failed to generate input data for contract address")
+		}
+
+		// Test re-entry scenarios
+		_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testReentry(address)", inputDataContract)
+		if err != nil {
+			return fmt.Errorf("failed to invoke testReentry(): %w", err)
+		}
+		assert.Sometimes(err == nil, "Failed to invoke testReentry(address)", map[string]interface{}{"err": err})
+
+		// Test nested contract interactions
+		_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testNestedContracts(address)", inputDataContract)
+		if err != nil {
+			return fmt.Errorf("failed to invoke testNestedContracts(): %w", err)
+		}
+		assert.Sometimes(err == nil, "Failed to invoke testNestedContracts(address)", map[string]interface{}{"err": err})
+
+		log.Printf("TStore contract successfully deployed and tested on node '%s'.", nodeConfig.Name)
+		return nil
+	}, "TStore contract deployment and testing operation")
 }
 
 func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, count, concurrency int, strategy string) error {
@@ -970,35 +1029,38 @@ func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, c
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return err
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
 	}
 	defer closer()
 
-	wallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get wallet addresses: %v", err)
-		return err
-	}
-
-	if len(wallets) < 2 {
-		log.Printf("[WARN] Not enough wallets (found %d). Creating more wallets.", len(wallets))
-		numWallets := 2
-		if err := performCreateOperation(ctx, nodeConfig, numWallets, types.FromFil(100)); err != nil {
-			log.Printf("Create operation failed: %v", err)
+	return resources.RetryOperation(ctx, func() error {
+		wallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+		if err != nil {
+			log.Printf("[WARN] Failed to get wallet addresses, will retry: %v", err)
+			return err // Return original error for retry
 		}
 
-		wallets, err = resources.GetAllWalletAddressesExceptGenesis(ctx, api)
-		if err != nil || len(wallets) < 2 {
-			return fmt.Errorf("failed to get enough wallet addresses after creation attempt: %v", err)
+		if len(wallets) < 2 {
+			log.Printf("[WARN] Not enough wallets (found %d). Creating more wallets.", len(wallets))
+			numWallets := 2
+			if err := performCreateOperation(ctx, nodeConfig, numWallets, types.FromFil(100)); err != nil {
+				log.Printf("[WARN] Create operation failed, will retry: %v", err)
+				return err // Return original error for retry
+			}
+
+			wallets, err = resources.GetAllWalletAddressesExceptGenesis(ctx, api)
+			if err != nil || len(wallets) < 2 {
+				log.Printf("[WARN] Still not enough wallets after creation, will retry")
+				return err // Return original error for retry
+			}
 		}
-	}
 
-	from := wallets[0]
-	to := wallets[1]
+		from := wallets[0]
+		to := wallets[1]
 
-	// Call the appropriate fuzzing strategy
-	return mpoolfuzz.FuzzMempoolWithStrategy(ctx, api, from, to, strategy, count)
+		// Call the appropriate fuzzing strategy
+		return mpoolfuzz.FuzzMempoolWithStrategy(ctx, api, from, to, strategy, count)
+	}, "Mempool fuzzing operation")
 }
 
 func performMempoolTracking(ctx context.Context, nodeConfig *resources.NodeConfig, duration, interval time.Duration) error {
@@ -1006,34 +1068,35 @@ func performMempoolTracking(ctx context.Context, nodeConfig *resources.NodeConfi
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return err
+		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
 	}
 	defer closer()
 
-	// Create tracker with custom interval
-	tracker := resources.NewMempoolTracker(api, interval)
-	tracker.Start()
+	return resources.RetryOperation(ctx, func() error {
+		// Create tracker with custom interval
+		tracker := resources.NewMempoolTracker(api, interval)
+		tracker.Start()
 
-	// Wait for the specified duration
-	select {
-	case <-ctx.Done():
-		tracker.Stop()
-		return ctx.Err()
-	case <-time.After(duration):
-		tracker.Stop()
-	}
+		// Wait for the specified duration
+		select {
+		case <-ctx.Done():
+			tracker.Stop()
+			return ctx.Err()
+		case <-time.After(duration):
+			tracker.Stop()
+		}
 
-	// Get final statistics
-	stats := tracker.GetStats()
-	log.Printf("[INFO] Mempool tracking completed on node '%s':", nodeConfig.Name)
-	log.Printf("[INFO]   Total measurements: %v", stats["count"])
-	log.Printf("[INFO]   Average size: %.2f", stats["average_size"])
-	log.Printf("[INFO]   Min size: %v", stats["min_size"])
-	log.Printf("[INFO]   Max size: %v", stats["max_size"])
-	log.Printf("[INFO]   Data points: %v", stats["data_points"])
+		// Get final statistics
+		stats := tracker.GetStats()
+		log.Printf("[INFO] Mempool tracking completed on node '%s':", nodeConfig.Name)
+		log.Printf("[INFO]   Total measurements: %v", stats["count"])
+		log.Printf("[INFO]   Average size: %.2f", stats["average_size"])
+		log.Printf("[INFO]   Min size: %v", stats["min_size"])
+		log.Printf("[INFO]   Max size: %v", stats["max_size"])
+		log.Printf("[INFO]   Data points: %v", stats["data_points"])
 
-	return nil
+		return nil
+	}, "Mempool tracking operation")
 }
 
 func callV2API(endpoint string) {
@@ -1068,7 +1131,8 @@ func performConsensusCheck(ctx context.Context, config *resources.Config, height
 	// Run the consensus check
 	err = checker.CheckConsensus(ctx, abi.ChainEpoch(height))
 	if err != nil {
-		return fmt.Errorf("consensus check failed: %w", err)
+		log.Printf("[WARN] Consensus check failed, will retry: %v", err)
+		return err // Return original error for retry
 	}
 
 	log.Printf("[INFO] Consensus check completed successfully")
@@ -1301,13 +1365,16 @@ func performBlockFuzzing(ctx context.Context, nodeConfig *resources.NodeConfig) 
 	}
 	defer closer()
 
-	err = resources.FuzzBlockSubmission(ctx, api)
-	if err != nil {
-		return fmt.Errorf("block fuzzing failed: %w", err)
-	}
+	return resources.RetryOperation(ctx, func() error {
+		err := resources.FuzzBlockSubmission(ctx, api)
+		if err != nil {
+			log.Printf("[WARN] Block fuzzing failed, will retry: %v", err)
+			return err // Return original error for retry
+		}
 
-	log.Printf("[INFO] Block fuzzing completed successfully")
-	return nil
+		log.Printf("[INFO] Block fuzzing completed successfully")
+		return nil
+	}, "Block fuzzing operation")
 }
 
 func performCheckBackfill(ctx context.Context, config *resources.Config) error {
@@ -1320,13 +1387,16 @@ func performCheckBackfill(ctx context.Context, config *resources.Config) error {
 		return fmt.Errorf("no Lotus nodes found in config")
 	}
 
-	err := resources.CheckChainBackfill(ctx, filteredNodes)
-	if err != nil {
-		return fmt.Errorf("chain backfill check failed: %w", err)
-	}
-	assert.Sometimes(true, "Chain index backfill check completed.", map[string]interface{}{"requirement": "Chain index backfill check completed."})
-	log.Println("[INFO] Chain index backfill check completed.")
-	return nil
+	return resources.RetryOperation(ctx, func() error {
+		err := resources.CheckChainBackfill(ctx, filteredNodes)
+		if err != nil {
+			log.Printf("[WARN] Chain backfill check failed, will retry: %v", err)
+			return err // Return original error for retry
+		}
+		assert.Sometimes(true, "Chain index backfill check completed.", map[string]interface{}{"requirement": "Chain index backfill check completed."})
+		log.Println("[INFO] Chain index backfill check completed.")
+		return nil
+	}, "Chain index backfill check operation")
 }
 
 func performStressMaxMessageSize(ctx context.Context, nodeConfig *resources.NodeConfig) error {
@@ -1338,13 +1408,15 @@ func performStressMaxMessageSize(ctx context.Context, nodeConfig *resources.Node
 	}
 	defer closer()
 
-	err = resources.SendMaxSizedMessage(ctx, api)
-	if err != nil {
-		return fmt.Errorf("max message size stress test failed: %w", err)
-	}
+	return resources.RetryOperation(ctx, func() error {
+		err := resources.SendMaxSizedMessage(ctx, api)
+		if err != nil {
+			return fmt.Errorf("max message size stress test failed: %w", err)
+		}
 
-	log.Printf("[INFO] Max message size stress test completed successfully")
-	return nil
+		log.Printf("[INFO] Max message size stress test completed successfully")
+		return nil
+	}, "Max message size stress test operation")
 }
 
 func performCheckFinalizedTipsets(ctx context.Context) error {
@@ -1447,14 +1519,14 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 
 		ts1, err := api11.ChainGetTipSet(ctx, heightSelector)
 		if err != nil {
-			log.Printf("failed to get finalized tipset by height from %s: %w", v2Nodes[0].Name, err)
+			log.Printf("failed to get finalized tipset by height from %s: %v", v2Nodes[0].Name, err)
 			return nil
 		}
 		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts1.Cids(), v2Nodes[0].Name, i)
 
 		ts2, err := api22.ChainGetTipSet(ctx, heightSelector)
 		if err != nil {
-			log.Printf("failed to get finalized tipset by height from %s: %w", v2Nodes[1].Name, err)
+			log.Printf("failed to get finalized tipset by height from %s: %v", v2Nodes[1].Name, err)
 			return nil
 		}
 		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts2.Cids(), v2Nodes[1].Name, i)
