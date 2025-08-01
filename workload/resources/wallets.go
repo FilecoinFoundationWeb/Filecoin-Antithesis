@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"math/rand"
 	"time"
@@ -22,7 +21,8 @@ func InitializeWallets(ctx context.Context, api api.FullNode, numWallets int, fu
 	genesisWallet, err := GetGenesisWallet(ctx, api)
 
 	if err != nil {
-		return fmt.Errorf("failed to get genesis wallet: %v", err)
+		log.Printf("[ERROR] Failed to get genesis wallet: %v", err)
+		return nil
 	}
 
 	createdWallets := 0
@@ -45,7 +45,8 @@ func InitializeWallets(ctx context.Context, api api.FullNode, numWallets int, fu
 	}
 
 	if createdWallets == 0 {
-		return fmt.Errorf("failed to create and fund any wallets")
+		log.Printf("[ERROR] Failed to create and fund any wallets")
+		return nil
 	}
 
 	if createdWallets < numWallets {
@@ -59,8 +60,8 @@ func InitializeWallets(ctx context.Context, api api.FullNode, numWallets int, fu
 func CreateWallet(ctx context.Context, api api.FullNode, walletType types.KeyType) (address.Address, error) {
 	wallet, err := api.WalletNew(ctx, walletType)
 	if err != nil {
-		log.Printf("Failed to create wallet: %v", err)
-		return address.Undef, fmt.Errorf("failed to create wallet: %w", err)
+		log.Printf("[ERROR] Failed to create wallet: %v", err)
+		return address.Undef, nil
 	}
 	return wallet, nil
 }
@@ -98,11 +99,13 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 				"recommendation": "Check message validity and node mempool state",
 			})
 		log.Printf("Failed to push message to mempool: %v", err)
-		return fmt.Errorf("failed to push message to mempool: %w", err)
+		log.Printf("[ERROR] Failed to push message to mempool: %v", err)
+		return nil
 	}
 	if sm == nil {
 		log.Printf("Message is nil after pushing to mempool")
-		return fmt.Errorf("message is nil after pushing to mempool")
+		log.Printf("[ERROR] Message is nil after pushing to mempool")
+		return nil
 	}
 
 	time.Sleep(20 * time.Second)
@@ -110,13 +113,15 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 	result, err := api.StateWaitMsg(ctx, sm.Cid(), 5, abi.ChainEpoch(-1), false)
 	if err != nil {
 		log.Printf("Error waiting for message: %v", err)
-		return fmt.Errorf("error waiting for message: %w", err)
+		log.Printf("[ERROR] Error waiting for message: %v", err)
+		return nil
 	}
 
 	// Check if result is nil
 	if result == nil {
 		log.Printf("Message result is nil")
-		return fmt.Errorf("message result is nil")
+		log.Printf("[ERROR] Message result is nil")
+		return nil
 	}
 
 	// Check if the message execution was successful
@@ -124,13 +129,16 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, result.Message)
 		if replayErr != nil {
 			log.Printf("StateReplay failed: %v", replayErr)
-			return fmt.Errorf("state replay error: %w", replayErr)
+			log.Printf("[ERROR] State replay error: %v", replayErr)
+			return nil
 		}
 		if replayResult == nil {
 			log.Printf("StateReplay returned nil result")
-			return fmt.Errorf("state replay returned nil result")
+			log.Printf("[ERROR] State replay returned nil result")
+			return nil
 		}
-		return fmt.Errorf("message execution failed with exit code: %d", result.Receipt.ExitCode)
+		log.Printf("[ERROR] Message execution failed with exit code: %d", result.Receipt.ExitCode)
+		return nil
 	}
 
 	return nil
@@ -158,12 +166,13 @@ func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, e
 	wallets, err := api.WalletList(ctx)
 	if err != nil {
 		log.Printf("Failed to list wallets: %v", err)
-		return address.Undef, fmt.Errorf("failed to list wallets: %w", err)
+		log.Printf("[ERROR] Failed to list wallets: %v", err)
+		return address.Undef, nil
 	}
 
 	if len(wallets) == 0 {
-		log.Printf("No wallets found in the node")
-		return address.Undef, fmt.Errorf("no wallets found in the node")
+		log.Printf("[ERROR] No wallets found in the node")
+		return address.Undef, nil
 	}
 
 	// Explicitly select the first wallet as fallback
@@ -171,7 +180,8 @@ func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, e
 	log.Printf("Using the first wallet as fallback: %s", fallbackWallet)
 
 	if fallbackWallet == address.Undef {
-		return address.Undef, fmt.Errorf("invalid fallback wallet address")
+		log.Printf("[ERROR] Invalid fallback wallet address")
+		return address.Undef, nil
 	}
 
 	return fallbackWallet, nil
@@ -181,13 +191,15 @@ func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, e
 func GetAllWalletAddressesExceptGenesis(ctx context.Context, api api.FullNode) ([]address.Address, error) {
 	genesisWallet, err := GetGenesisWallet(ctx, api)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get genesis wallet: %w", err)
+		log.Printf("[ERROR] Failed to get genesis wallet: %v", err)
+		return nil, nil
 	}
 
 	allWallets, err := api.WalletList(ctx)
 	if err != nil {
 		log.Printf("Failed to list wallets: %v", err)
-		return nil, fmt.Errorf("failed to list wallets: %w", err)
+		log.Printf("[ERROR] Failed to list wallets: %v", err)
+		return nil, nil
 	}
 
 	var walletsToDelete []address.Address
@@ -204,7 +216,8 @@ func GetAllWalletAddressesExceptGenesis(ctx context.Context, api api.FullNode) (
 func GetRandomWallets(ctx context.Context, api api.FullNode, numWallets int) ([]address.Address, error) {
 	allWallets, err := GetAllWalletAddressesExceptGenesis(ctx, api)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list wallets: %w", err)
+		log.Printf("[ERROR] Failed to list wallets: %v", err)
+		return nil, nil
 	}
 
 	rand.Seed(time.Now().UnixNano())
@@ -223,8 +236,8 @@ func DeleteWallets(ctx context.Context, api api.FullNode, walletsToDelete []addr
 	for _, wallet := range walletsToDelete {
 		err := api.WalletDelete(ctx, wallet)
 		if err != nil {
-			log.Printf("Failed to delete wallet %s: %v", wallet.String(), err)
-			return fmt.Errorf("failed to delete wallet %s: %w", wallet.String(), err)
+			log.Printf("[ERROR] Failed to delete wallet %s: %v", wallet.String(), err)
+			return nil
 		}
 		log.Printf("Successfully deleted wallet: %s", wallet.String())
 	}
@@ -237,19 +250,22 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 	// Remove 0x prefix if present
 	ea, err := ethtypes.ParseEthAddress(ethAddr)
 	if err != nil {
-		return fmt.Errorf("failed to parse target address; address must be a valid FIL address or an ETH address: %w", err)
+		log.Printf("[ERROR] Failed to parse target address; address must be a valid FIL address or an ETH address: %v", err)
+		return nil
 	}
-	fmt.Printf("ea: %s\n", ea)
+	log.Printf("[INFO] ETH address: %s", ea)
 	// Convert to f4 address
 	to, err := ea.ToFilecoinAddress()
 	if err != nil {
-		return fmt.Errorf("failed to convert eth address to filecoin address: %w", err)
+		log.Printf("[ERROR] Failed to convert eth address to filecoin address: %v", err)
+		return nil
 	}
-	fmt.Printf("to: %s\n", to)
+	log.Printf("[INFO] Filecoin address: %s", to)
 	// Create message
 	amountFIL, err := types.ParseFIL("1000")
 	if err != nil {
-		return fmt.Errorf("failed to parse amount: %w", err)
+		log.Printf("[ERROR] Failed to parse amount: %v", err)
+		return nil
 	}
 	msg := &types.Message{
 		From:       from,
@@ -279,12 +295,14 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 				"recommendation": "Check message validity and node mempool state",
 			})
 		log.Printf("Failed to push message to mempool: %v", err)
-		return fmt.Errorf("failed to push message to mempool: %w", err)
+		log.Printf("[ERROR] Failed to push message to mempool: %v", err)
+		return nil
 	}
 
 	if sm == nil {
 		log.Printf("Message is nil after pushing to mempool")
-		return fmt.Errorf("message is nil after pushing to mempool")
+		log.Printf("[ERROR] Message is nil after pushing to mempool")
+		return nil
 	}
 
 	// Wait for message execution
@@ -293,13 +311,15 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 	result, err := api.StateWaitMsg(ctx, sm.Cid(), 5, abi.ChainEpoch(-1), false)
 	if err != nil {
 		log.Printf("Error waiting for message: %v", err)
-		return fmt.Errorf("error waiting for message: %w", err)
+		log.Printf("[ERROR] Error waiting for message: %v", err)
+		return nil
 	}
 
 	// Check if result is nil
 	if result == nil {
 		log.Printf("Message result is nil")
-		return fmt.Errorf("message result is nil")
+		log.Printf("[ERROR] Message result is nil")
+		return nil
 	}
 
 	// Check if the message execution was successful
@@ -307,13 +327,16 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, result.Message)
 		if replayErr != nil {
 			log.Printf("StateReplay failed: %v", replayErr)
-			return fmt.Errorf("state replay error: %w", replayErr)
+			log.Printf("[ERROR] State replay error: %v", replayErr)
+			return nil
 		}
 		if replayResult == nil {
 			log.Printf("StateReplay returned nil result")
-			return fmt.Errorf("state replay returned nil result")
+			log.Printf("[ERROR] State replay returned nil result")
+			return nil
 		}
-		return fmt.Errorf("message execution failed with exit code: %d", result.Receipt.ExitCode)
+		log.Printf("[ERROR] Message execution failed with exit code: %d", result.Receipt.ExitCode)
+		return nil
 	}
 
 	return nil

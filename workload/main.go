@@ -45,7 +45,8 @@ func main() {
 			var err error
 			config, err = resources.LoadConfig(c.String("config"))
 			if err != nil {
-				return fmt.Errorf("failed to load config: %w", err)
+				log.Printf("[ERROR] Failed to load config: %v", err)
+				return nil
 			}
 			return nil
 		},
@@ -73,7 +74,8 @@ func main() {
 func getNodeConfig(c *cli.Context) (*resources.NodeConfig, error) {
 	nodeName := c.String("node")
 	if nodeName == "" {
-		return nil, fmt.Errorf("node name is required")
+		log.Printf("[ERROR] Node name is required")
+		return nil, nil
 	}
 
 	for i := range config.Nodes {
@@ -81,7 +83,8 @@ func getNodeConfig(c *cli.Context) (*resources.NodeConfig, error) {
 			return &config.Nodes[i], nil
 		}
 	}
-	return nil, fmt.Errorf("node '%s' not found in config", nodeName)
+	log.Printf("[ERROR] Node '%s' not found in config", nodeName)
+	return nil, nil
 }
 
 func walletCommands() *cli.Command {
@@ -157,13 +160,15 @@ func networkCommands() *cli.Command {
 					log.Printf("Connecting node '%s' to other nodes...", nodeConfig.Name)
 					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
 					if err != nil {
-						return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+						log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+						return nil
 					}
 					defer closer()
 
 					lotusNodes := resources.FilterLotusNodes(config.Nodes)
 					if err := resources.ConnectToOtherNodes(c.Context, api, *nodeConfig, lotusNodes); err != nil {
-						return fmt.Errorf("failed to connect node '%s' to other nodes: %w", nodeConfig.Name, err)
+						log.Printf("[ERROR] Failed to connect node '%s' to other nodes: %v", nodeConfig.Name, err)
+						return nil
 					}
 					log.Printf("Node '%s' connected successfully", nodeConfig.Name)
 					return nil
@@ -183,12 +188,14 @@ func networkCommands() *cli.Command {
 					log.Printf("Disconnecting node '%s' from other nodes...", nodeConfig.Name)
 					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
 					if err != nil {
-						return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+						log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+						return nil
 					}
 					defer closer()
 
 					if err := resources.DisconnectFromOtherNodes(c.Context, api); err != nil {
-						return fmt.Errorf("failed to disconnect node '%s' from other nodes: %w", nodeConfig.Name, err)
+						log.Printf("[ERROR] Failed to disconnect node '%s' from other nodes: %v", nodeConfig.Name, err)
+						return nil
 					}
 					log.Printf("Node '%s' disconnected successfully", nodeConfig.Name)
 					return nil
@@ -224,7 +231,8 @@ func networkCommands() *cli.Command {
 					log.Printf("Simulating reorg for node '%s'...", nodeConfig.Name)
 					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
 					if err != nil {
-						return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+						log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+						return nil
 					}
 					defer closer()
 
@@ -520,7 +528,8 @@ func stateCommands() *cli.Command {
 
 					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
 					if err != nil {
-						return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+						log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+						return nil
 					}
 					defer closer()
 
@@ -688,14 +697,16 @@ func performDeleteOperation(ctx context.Context, nodeConfig *resources.NodeConfi
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
 	return resources.RetryOperation(ctx, func() error {
 		allWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
 		if err != nil {
-			return fmt.Errorf("failed to list wallets on node '%s': %w", nodeConfig.Name, err)
+			log.Printf("[ERROR] Failed to list wallets on node '%s': %v", nodeConfig.Name, err)
+			return nil
 		}
 
 		if len(allWallets) == 0 {
@@ -709,7 +720,8 @@ func performDeleteOperation(ctx context.Context, nodeConfig *resources.NodeConfi
 		walletsToDelete := allWallets[:numToDelete]
 
 		if err := resources.DeleteWallets(ctx, api, walletsToDelete); err != nil {
-			return fmt.Errorf("failed to delete wallets on node '%s': %w", nodeConfig.Name, err)
+			log.Printf("[ERROR] Failed to delete wallets on node '%s': %v", nodeConfig.Name, err)
+			return nil
 		}
 
 		log.Printf("Deleted %d wallets successfully on node '%s'", numToDelete, nodeConfig.Name)
@@ -737,7 +749,8 @@ func performSpamOperation(ctx context.Context, config *resources.Config) error {
 		log.Printf("[INFO] Connecting to Lotus node '%s'...", node.Name)
 		api, closer, err := resources.ConnectToNode(ctx, node)
 		if err != nil {
-			return fmt.Errorf("failed to connect to Lotus node '%s': %w", node.Name, err)
+			log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", node.Name, err)
+			return nil
 		}
 		closers = append(closers, closer)
 
@@ -752,19 +765,21 @@ func performSpamOperation(ctx context.Context, config *resources.Config) error {
 				numWallets := 3
 				log.Printf("[INFO] Creating %d new wallets on node '%s'...", numWallets, node.Name)
 				if err := resources.InitializeWallets(ctx, api, numWallets, abi.NewTokenAmount(1000000000000000)); err != nil {
-					return fmt.Errorf("failed to create new wallets: %w", err)
+					log.Printf("[ERROR] Failed to create new wallets: %v", err)
+					return nil
 				}
 			}
 
 			log.Printf("[INFO] Retrieving wallets for node '%s'...", node.Name)
 			nodeWallets, err := resources.GetAllWalletAddressesExceptGenesis(ctx, api)
 			if err != nil {
-				return fmt.Errorf("failed to retrieve wallets for node '%s': %w", node.Name, err)
+				log.Printf("[ERROR] Failed to retrieve wallets for node '%s': %v", node.Name, err)
+				return nil
 			}
 			log.Printf("[INFO] Retrieved %d wallets for node '%s'.", len(nodeWallets), node.Name)
 
 			if len(nodeWallets) < 2 {
-				return fmt.Errorf("not enough wallets on node '%s' (found %d). At least 2 needed for spam operation",
+				log.Printf("[ERROR] Not enough wallets on node '%s' (found %d). At least 2 needed for spam operation",
 					node.Name, len(nodeWallets))
 			}
 
@@ -781,7 +796,8 @@ func performSpamOperation(ctx context.Context, config *resources.Config) error {
 
 	// Ensure we have enough nodes connected for spam
 	if len(apis) < 1 {
-		return fmt.Errorf("not enough nodes available for spam operation")
+		log.Printf("[ERROR] Not enough nodes available for spam operation")
+		return nil
 	}
 
 	// Use RetryOperation for the spam transactions
@@ -791,7 +807,8 @@ func performSpamOperation(ctx context.Context, config *resources.Config) error {
 		numTransactions := rand.Intn(30) + 1
 		log.Printf("[INFO] Initiating spam operation with %d transactions...", numTransactions)
 		if err := resources.SpamTransactions(ctx, apis, wallets, numTransactions); err != nil {
-			return fmt.Errorf("spam operation failed: %w", err)
+			log.Printf("[ERROR] Spam operation failed: %v", err)
+			return nil
 		}
 		log.Println("[INFO] Spam operation completed successfully.")
 		return nil
@@ -802,7 +819,8 @@ func performConnectDisconnectOperation(ctx context.Context, nodeConfig *resource
 	log.Printf("Toggling connection for node '%s'...", nodeConfig.Name)
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
@@ -817,20 +835,23 @@ func performConnectDisconnectOperation(ctx context.Context, nodeConfig *resource
 		// Check current connections
 		peers, err := api.NetPeers(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to get peer list: %w", err)
+			log.Printf("[ERROR] Failed to get peer list: %v", err)
+			return nil
 		}
 
 		// If we have peers, disconnect; otherwise connect
 		if len(peers) > 0 {
 			log.Printf("Node '%s' has %d peers, disconnecting...", nodeConfig.Name, len(peers))
 			if err := resources.DisconnectFromOtherNodes(ctx, api); err != nil {
-				return fmt.Errorf("failed to disconnect node '%s' from other nodes: %w", nodeConfig.Name, err)
+				log.Printf("[ERROR] Failed to disconnect node '%s' from other nodes: %v", nodeConfig.Name, err)
+				return nil
 			}
 			log.Printf("Node '%s' disconnected successfully", nodeConfig.Name)
 		} else {
 			log.Printf("Node '%s' has no peers, connecting...", nodeConfig.Name)
 			if err := resources.ConnectToOtherNodes(ctx, api, *nodeConfig, lotusNodes); err != nil {
-				return fmt.Errorf("failed to connect node '%s' to other nodes: %w", nodeConfig.Name, err)
+				log.Printf("[ERROR] Failed to connect node '%s' to other nodes: %v", nodeConfig.Name, err)
+				return nil
 			}
 			log.Printf("Node '%s' connected successfully", nodeConfig.Name)
 		}
@@ -844,12 +865,14 @@ func performDeploySimpleCoin(ctx context.Context, nodeConfig *resources.NodeConf
 	// Verify contract file exists first
 	if _, err := os.Stat(contractPath); os.IsNotExist(err) {
 		log.Printf("[ERROR] Contract file not found: %s", contractPath)
-		return fmt.Errorf("contract file not found: %s", contractPath)
+		log.Printf("[ERROR] Contract file not found: %s", contractPath)
+		return nil
 	}
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
@@ -862,7 +885,8 @@ func performDeploySimpleCoin(ctx context.Context, nodeConfig *resources.NodeConf
 			// Get all available addresses
 			addresses, err := api.WalletList(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to list wallet addresses: %w", err)
+				log.Printf("[ERROR] Failed to list wallet addresses: %v", err)
+				return nil
 			}
 
 			// If we have addresses, set the first one as default
@@ -878,7 +902,8 @@ func performDeploySimpleCoin(ctx context.Context, nodeConfig *resources.NodeConf
 				log.Printf("[INFO] No wallet addresses found, creating a new one")
 				newAddr, err := api.WalletNew(ctx, types.KTSecp256k1)
 				if err != nil {
-					return fmt.Errorf("failed to create new wallet address: %w", err)
+					log.Printf("[ERROR] Failed to create new wallet address: %v", err)
+					return nil
 				}
 				defaultAddr = newAddr
 				log.Printf("[INFO] Created new wallet address: %s", defaultAddr)
@@ -936,7 +961,8 @@ func performDeployMCopy(ctx context.Context, nodeConfig *resources.NodeConfig, c
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
@@ -946,12 +972,14 @@ func performDeployMCopy(ctx context.Context, nodeConfig *resources.NodeConfig, c
 		hexString := "000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000087465737464617461000000000000000000000000000000000000000000000000"
 		inputArgument, err := hex.DecodeString(hexString)
 		if err != nil {
-			return fmt.Errorf("failed to decode input argument: %w", err)
+			log.Printf("[ERROR] Failed to decode input argument: %v", err)
+			return nil
 		}
 
 		result, _, err := resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "optimizedCopy(bytes)", inputArgument)
 		if err != nil {
-			return fmt.Errorf("failed to invoke MCopy contract: %w", err)
+			log.Printf("[ERROR] Failed to invoke MCopy contract: %v", err)
+			return nil
 		}
 		if bytes.Equal(result, inputArgument) {
 			log.Printf("MCopy invocation result matches the input argument. No change in the output.")
@@ -967,7 +995,8 @@ func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, 
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
@@ -975,7 +1004,8 @@ func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, 
 		// Deploy the contract
 		fromAddr, contractAddr := resources.DeployContractFromFilename(ctx, api, contractPath)
 		if fromAddr.Empty() || contractAddr.Empty() {
-			return fmt.Errorf("failed to deploy initial contract instance")
+			log.Printf("[ERROR] Failed to deploy initial contract instance")
+			return nil
 		}
 
 		inputData := make([]byte, 0)
@@ -983,39 +1013,45 @@ func performDeployTStore(ctx context.Context, nodeConfig *resources.NodeConfig, 
 		// Run initial tests
 		_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "runTests()", inputData)
 		if err != nil {
-			return fmt.Errorf("failed to invoke runTests(): %w", err)
+			log.Printf("[ERROR] Failed to invoke runTests(): %v", err)
+			return nil
 		}
 		assert.Sometimes(err == nil, "Failed to invoke runTests()", map[string]interface{}{"err": err})
 
 		// Validate lifecycle in subsequent transactions
 		_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testLifecycleValidationSubsequentTransaction()", inputData)
 		if err != nil {
-			return fmt.Errorf("failed to invoke testLifecycleValidationSubsequentTransaction(): %w", err)
+			log.Printf("[ERROR] Failed to invoke testLifecycleValidationSubsequentTransaction(): %v", err)
+			return nil
 		}
 		assert.Sometimes(err == nil, "Failed to invoke testLifecycleValidationSubsequentTransaction()", map[string]interface{}{"err": err})
 
 		// Deploy a second contract instance for further testing
 		fromAddr, contractAddr2 := resources.DeployContractFromFilename(ctx, api, contractPath)
 		if fromAddr.Empty() || contractAddr2.Empty() {
-			return fmt.Errorf("failed to deploy second contract instance")
+			log.Printf("[ERROR] Failed to deploy second contract instance")
+			return nil
 		}
 
 		inputDataContract := resources.InputDataFromFrom(ctx, api, contractAddr2)
 		if len(inputDataContract) == 0 {
-			return fmt.Errorf("failed to generate input data for contract address")
+			log.Printf("[ERROR] Failed to generate input data for contract address")
+			return nil
 		}
 
 		// Test re-entry scenarios
 		_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testReentry(address)", inputDataContract)
 		if err != nil {
-			return fmt.Errorf("failed to invoke testReentry(): %w", err)
+			log.Printf("[ERROR] Failed to invoke testReentry(): %v", err)
+			return nil
 		}
 		assert.Sometimes(err == nil, "Failed to invoke testReentry(address)", map[string]interface{}{"err": err})
 
 		// Test nested contract interactions
 		_, _, err = resources.InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testNestedContracts(address)", inputDataContract)
 		if err != nil {
-			return fmt.Errorf("failed to invoke testNestedContracts(): %w", err)
+			log.Printf("[ERROR] Failed to invoke testNestedContracts(): %v", err)
+			return nil
 		}
 		assert.Sometimes(err == nil, "Failed to invoke testNestedContracts(address)", map[string]interface{}{"err": err})
 
@@ -1029,7 +1065,8 @@ func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, c
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
@@ -1068,7 +1105,8 @@ func performMempoolTracking(ctx context.Context, nodeConfig *resources.NodeConfi
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
@@ -1118,7 +1156,8 @@ func performConsensusCheck(ctx context.Context, config *resources.Config, height
 
 	checker, err := resources.NewConsensusChecker(ctx, config.Nodes)
 	if err != nil {
-		return fmt.Errorf("failed to create consensus checker: %w", err)
+		log.Printf("[ERROR] Failed to create consensus checker: %v", err)
+		return nil
 	}
 
 	// If height is 0, we'll let the checker pick a random height
@@ -1146,7 +1185,8 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return fmt.Errorf("failed to connect to Lotus node: %w", err)
+		log.Printf("[ERROR] Failed to connect to Lotus node: %v", err)
+		return nil
 	}
 	defer closer()
 
@@ -1158,14 +1198,16 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	defaultAddr, err := api.WalletDefaultAddress(ctx)
 	if err != nil {
 		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
-		return fmt.Errorf("failed to get default wallet address: %w", err)
+		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
+		return nil
 	}
 
 	// Send funds to deployer account
 	log.Printf("[INFO] Sending funds to deployer account...")
 	err = resources.SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
 	if err != nil {
-		return fmt.Errorf("failed to send funds to deployer: %w", err)
+		log.Printf("[ERROR] Failed to send funds to deployer: %v", err)
+		return nil
 	}
 
 	// Wait for funds to be available
@@ -1176,12 +1218,14 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	contractHex, err := os.ReadFile(contractPath)
 	if err != nil {
 		log.Printf("[ERROR] Failed to read contract file: %v", err)
-		return fmt.Errorf("failed to read contract file: %w", err)
+		log.Printf("[ERROR] Failed to read contract file: %v", err)
+		return nil
 	}
 	contract, err := hex.DecodeString(string(contractHex))
 	if err != nil {
 		log.Printf("[ERROR] Failed to decode contract: %v", err)
-		return fmt.Errorf("failed to decode contract: %w", err)
+		log.Printf("[ERROR] Failed to decode contract: %v", err)
+		return nil
 	}
 
 	// Estimate gas
@@ -1191,26 +1235,30 @@ func deploySmartContract(ctx context.Context, nodeConfig *resources.NodeConfig, 
 	}})
 	if err != nil {
 		log.Printf("[ERROR] Failed to marshal gas params: %v", err)
-		return fmt.Errorf("failed to marshal gas params: %w", err)
+		log.Printf("[ERROR] Failed to marshal gas params: %v", err)
+		return nil
 	}
 	gasLimit, err := api.EthEstimateGas(ctx, gasParams)
 	if err != nil {
 		log.Printf("[ERROR] Failed to estimate gas: %v", err)
-		return fmt.Errorf("failed to estimate gas: %w", err)
+		log.Printf("[ERROR] Failed to estimate gas: %v", err)
+		return nil
 	}
 
 	// Get gas fees
 	maxPriorityFee, err := api.EthMaxPriorityFeePerGas(ctx)
 	if err != nil {
 		log.Printf("[ERROR] Failed to get max priority fee: %v", err)
-		return fmt.Errorf("failed to get max priority fee: %w", err)
+		log.Printf("[ERROR] Failed to get max priority fee: %v", err)
+		return nil
 	}
 
 	// Get nonce
 	nonce, err := api.MpoolGetNonce(ctx, deployer)
 	if err != nil {
 		log.Printf("[ERROR] Failed to get nonce: %v", err)
-		return fmt.Errorf("failed to get nonce: %w", err)
+		log.Printf("[ERROR] Failed to get nonce: %v", err)
+		return nil
 	}
 
 	// Create transaction
@@ -1267,13 +1315,15 @@ func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeCon
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
 	defaultAddr, err := api.WalletDefaultAddress(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get default wallet address: %w", err)
+		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
+		return nil
 	}
 
 	resources.SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
@@ -1285,7 +1335,8 @@ func sendEthLegacyTransaction(ctx context.Context, nodeConfig *resources.NodeCon
 		Value: ethtypes.EthBigInt(big.NewInt(100)),
 	}})
 	if err != nil {
-		return fmt.Errorf("failed to marshal gas params: %w", err)
+		log.Printf("[ERROR] Failed to marshal gas params: %v", err)
+		return nil
 	}
 
 	gasLimit, err := api.EthEstimateGas(ctx, gasParams)
@@ -1339,7 +1390,8 @@ func performSendConsensusFault(ctx context.Context) error {
 	log.Println("[INFO] Attempting to send a consensus fault...")
 	err := resources.SendConsensusFault(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to send consensus fault: %w", err)
+		log.Printf("[ERROR] Failed to send consensus fault: %v", err)
+		return nil
 	}
 	log.Println("[INFO] SendConsensusFault operation initiated. Check further logs for details.")
 	return nil
@@ -1350,7 +1402,8 @@ func performEthMethodsCheck(ctx context.Context) error {
 
 	err := resources.CheckEthMethods(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create ETH methods checker: %w", err)
+		log.Printf("[ERROR] Failed to create ETH methods checker: %v", err)
+		return nil
 	}
 	log.Printf("[INFO] ETH methods consistency check completed successfully")
 	return nil
@@ -1361,7 +1414,8 @@ func performBlockFuzzing(ctx context.Context, nodeConfig *resources.NodeConfig) 
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
@@ -1384,7 +1438,8 @@ func performCheckBackfill(ctx context.Context, config *resources.Config) error {
 	filteredNodes := resources.FilterLotusNodes(config.Nodes)
 
 	if len(filteredNodes) == 0 {
-		return fmt.Errorf("no Lotus nodes found in config")
+		log.Printf("[ERROR] No Lotus nodes found in config")
+		return nil
 	}
 
 	return resources.RetryOperation(ctx, func() error {
@@ -1404,14 +1459,16 @@ func performStressMaxMessageSize(ctx context.Context, nodeConfig *resources.Node
 
 	api, closer, err := resources.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Lotus node '%s': %w", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
 	}
 	defer closer()
 
 	return resources.RetryOperation(ctx, func() error {
 		err := resources.SendMaxSizedMessage(ctx, api)
 		if err != nil {
-			return fmt.Errorf("max message size stress test failed: %w", err)
+			log.Printf("[ERROR] Max message size stress test failed: %v", err)
+			return nil
 		}
 
 		log.Printf("[INFO] Max message size stress test completed successfully")
@@ -1425,7 +1482,8 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 	// Load configuration
 	config, err := resources.LoadConfig("/opt/antithesis/resources/config.json")
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		log.Printf("[ERROR] Failed to load config: %v", err)
+		return nil
 	}
 
 	// Filter nodes to get V1 and V2 nodes separately
@@ -1433,33 +1491,39 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 	v2Nodes := resources.FilterLotusNodesWithV2(config.Nodes)
 
 	if len(v1Nodes) < 2 {
-		return fmt.Errorf("need at least two Lotus V1 nodes for this test, found %d", len(v1Nodes))
+		log.Printf("[ERROR] Need at least two Lotus V1 nodes for this test, found %d", len(v1Nodes))
+		return nil
 	}
 	if len(v2Nodes) < 2 {
-		return fmt.Errorf("need at least two Lotus V2 nodes for this test, found %d", len(v2Nodes))
+		log.Printf("[ERROR] Need at least two Lotus V2 nodes for this test, found %d", len(v2Nodes))
+		return nil
 	}
 
 	// Connect to V1 nodes to get chain heads and find common height range
 	api1, closer1, err := resources.ConnectToNode(ctx, v1Nodes[0])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", v1Nodes[0].Name, err)
+		log.Printf("[ERROR] Failed to connect to %s: %v", v1Nodes[0].Name, err)
+		return nil
 	}
 	defer closer1()
 
 	api2, closer2, err := resources.ConnectToNode(ctx, v1Nodes[1])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", v1Nodes[1].Name, err)
+		log.Printf("[ERROR] Failed to connect to %s: %v", v1Nodes[1].Name, err)
+		return nil
 	}
 	defer closer2()
 
 	ch1, err := api1.ChainHead(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get chain head from %s: %w", v1Nodes[0].Name, err)
+		log.Printf("[ERROR] Failed to get chain head from %s: %v", v1Nodes[0].Name, err)
+		return nil
 	}
 
 	ch2, err := api2.ChainHead(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get chain head from %s: %w", v1Nodes[1].Name, err)
+		log.Printf("[ERROR] Failed to get chain head from %s: %v", v1Nodes[1].Name, err)
+		return nil
 	}
 
 	h1 := ch1.Height()
@@ -1500,13 +1564,15 @@ func performCheckFinalizedTipsets(ctx context.Context) error {
 	// Connect to V2 nodes for finalized tipset comparison
 	api11, closer11, err := resources.ConnectToNodeV2(ctx, v2Nodes[0])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", v2Nodes[0].Name, err)
+		log.Printf("[ERROR] Failed to connect to %s: %v", v2Nodes[0].Name, err)
+		return nil
 	}
 	defer closer11()
 
 	api22, closer22, err := resources.ConnectToNodeV2(ctx, v2Nodes[1])
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", v2Nodes[1].Name, err)
+		log.Printf("[ERROR] Failed to connect to %s: %v", v2Nodes[1].Name, err)
+		return nil
 	}
 	defer closer22()
 

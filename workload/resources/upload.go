@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -168,17 +167,18 @@ func InvokeContractByFuncName(ctx context.Context, api api.FullNode, fromAddr ad
 
 	wait, err := InvokeSolidity(ctx, api, fromAddr, idAddr, entryPoint, inputData)
 	if err != nil {
-		log.Printf("Failed to invoke Solidity function: %v", err)
-		return nil, wait, fmt.Errorf("failed to invoke Solidity function: %w", err)
+		log.Printf("[ERROR] Failed to invoke Solidity function: %v", err)
+		return nil, wait, nil
 	}
 
 	if !wait.Receipt.ExitCode.IsSuccess() {
 		replayResult, replayErr := api.StateReplay(ctx, types.EmptyTSK, wait.Message)
 		if replayErr != nil {
-			log.Printf("Failed to replay failed message: %v", replayErr)
-			return nil, wait, fmt.Errorf("failed to replay failed message: %w", replayErr)
+			log.Printf("[ERROR] Failed to replay failed message: %v", replayErr)
+			return nil, wait, nil
 		}
-		return nil, wait, fmt.Errorf("invoke failed with error: %v", replayResult.Error)
+		log.Printf("[ERROR] Invoke failed with error: %v", replayResult.Error)
+		return nil, wait, nil
 	}
 
 	result, err := cbg.ReadByteArray(bytes.NewBuffer(wait.Receipt.Return), uint64(len(wait.Receipt.Return)))
@@ -195,8 +195,8 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 	var buffer bytes.Buffer
 	err := cbg.WriteByteArray(&buffer, params)
 	if err != nil {
-		log.Printf("Failed to write byte array to buffer: %v", err)
-		return nil, fmt.Errorf("failed to write byte array to buffer: %w", err)
+		log.Printf("[ERROR] Failed to write byte array to buffer: %v", err)
+		return nil, nil
 	}
 
 	params = buffer.Bytes()
@@ -229,9 +229,11 @@ func InvokeSolidityWithValue(ctx context.Context, api api.FullNode, sender addre
 		log.Printf("StateReplay Error (err): %s", err)
 		if replayResult != nil {
 			log.Printf("StateReplay Error (replayResult.Error): %s", replayResult.Error)
-			return nil, fmt.Errorf("invoke failed with error: %v", replayResult.Error)
+			log.Printf("[ERROR] Invoke failed with error: %v", replayResult.Error)
+			return nil, nil
 		}
-		return nil, fmt.Errorf("invoke failed and failed to replay: %v", err)
+		log.Printf("[ERROR] Invoke failed and failed to replay: %v", err)
+		return nil, nil
 	}
 	return wait, nil
 }

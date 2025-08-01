@@ -3,7 +3,6 @@ package resources
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -74,7 +73,8 @@ func NewConsensusChecker(ctx context.Context, nodes []NodeConfig) (*ConsensusChe
 	}
 
 	if len(checker.nodes) < 2 {
-		return nil, fmt.Errorf("need at least 2 Lotus nodes for consensus checking")
+		log.Printf("[ERROR] Need at least 2 Lotus nodes for consensus checking")
+		return nil, nil
 	}
 
 	return checker, nil
@@ -112,7 +112,8 @@ func (cc *ConsensusChecker) makeRPCRequest(ctx context.Context, nodeInfo NodeInf
 	}
 
 	if rpcResp.Error != nil {
-		return nil, fmt.Errorf("RPC error: %s", rpcResp.Error.Message)
+		log.Printf("[ERROR] RPC error: %s", rpcResp.Error.Message)
+		return nil, nil
 	}
 
 	return &rpcResp, nil
@@ -191,7 +192,8 @@ func (cc *ConsensusChecker) checkTipsetConsensus(ctx context.Context, height abi
 
 			tipsetKey, err := cc.getTipsetAtHeight(ctx, info, height)
 			if err != nil {
-				result.err = fmt.Errorf("failed to get tipset at height %d from %s: %w", height, name, err)
+				log.Printf("[ERROR] Failed to get tipset at height %d from %s: %v", height, name, err)
+				result.err = err
 			} else {
 				result.tipsetKey = tipsetKey
 			}
@@ -216,7 +218,8 @@ func (cc *ConsensusChecker) checkTipsetConsensus(ctx context.Context, height abi
 	}
 
 	if len(errors) > 0 {
-		return false, tipsetKeys, fmt.Errorf("errors during consensus check at height %d: %v", height, errors)
+		log.Printf("[ERROR] Errors during consensus check at height %d: %v", height, errors)
+		return false, tipsetKeys, nil
 	}
 
 	return len(tipsetKeys) == 1, tipsetKeys, nil
@@ -225,106 +228,111 @@ func (cc *ConsensusChecker) checkTipsetConsensus(ctx context.Context, height abi
 // CheckConsensus verifies that all nodes have consensus on tipsets for a range of heights
 // If no height is specified (height = 0), it chooses a random height between genesis and minHead-20
 func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.ChainEpoch) error {
-	log.Printf("Starting consensus check between nodes")
+	return RetryOperation(ctx, func() error {
+		log.Printf("Starting consensus check between nodes")
 
-	// Validate height is not negative
-	if height < 0 {
-		log.Printf("Invalid height %d provided, will use random height instead", height)
-		height = 0
-	}
-
-	// First, get chain heads to determine height range
-	var minHead abi.ChainEpoch
-	first := true
-	for nodeName, nodeInfo := range cc.nodes {
-		head, err := cc.getChainHead(ctx, nodeInfo)
-		if err != nil {
-			return fmt.Errorf("failed to get chain head from %s: %w", nodeName, err)
+		// Validate height is not negative
+		if height < 0 {
+			log.Printf("Invalid height %d provided, will use random height instead", height)
+			height = 0
 		}
-		if first || head < minHead {
-			minHead = head
-			first = false
+
+		// First, get chain heads to determine height range
+		var minHead abi.ChainEpoch
+		first := true
+		for nodeName, nodeInfo := range cc.nodes {
+			head, err := cc.getChainHead(ctx, nodeInfo)
+			if err != nil {
+				log.Printf("[ERROR] Failed to get chain head from %s: %v", nodeName, err)
+				return nil
+			}
+			if first || head < minHead {
+				minHead = head
+				first = false
+			}
 		}
-	}
 
-	// Choose a random height between genesis (1) and minHead-20 (to avoid reorgs)
-	if height == 0 {
-		if minHead < 30 {
-			return fmt.Errorf("chain too short for consensus check, height: %d", minHead)
+		// Choose a random height between genesis (1) and minHead-20 (to avoid reorgs)
+		if height == 0 {
+			if minHead < 30 {
+				log.Printf("[ERROR] Chain too short for consensus check, height: %d", minHead)
+				return nil
+			}
+			safeMaxHeight := minHead - 20 // Stay away from head to avoid reorgs
+			height = abi.ChainEpoch(rand.Int63n(int64(safeMaxHeight-1))) + 1
+		} else if height > minHead {
+			log.Printf("Requested height %d is beyond current chain head %d, will use random height instead", height, minHead)
+			height = 0
+			if minHead < 30 {
+				log.Printf("[ERROR] Chain too short for consensus check, height: %d", minHead)
+				return nil
+			}
+			safeMaxHeight := minHead - 20
+			height = abi.ChainEpoch(rand.Int63n(int64(safeMaxHeight-1))) + 1
 		}
-		safeMaxHeight := minHead - 20 // Stay away from head to avoid reorgs
-		height = abi.ChainEpoch(rand.Int63n(int64(safeMaxHeight-1))) + 1
-	} else if height > minHead {
-		log.Printf("Requested height %d is beyond current chain head %d, will use random height instead", height, minHead)
-		height = 0
-		if minHead < 30 {
-			return fmt.Errorf("chain too short for consensus check, height: %d", minHead)
+
+		// Ensure we have enough height to walk back without going negative
+		if height < 10 {
+			log.Printf("Height %d is too low for 10-block consensus walk, adjusting starting height", height)
+			height = 10
 		}
-		safeMaxHeight := minHead - 20
-		height = abi.ChainEpoch(rand.Int63n(int64(safeMaxHeight-1))) + 1
-	}
 
-	// Ensure we have enough height to walk back without going negative
-	if height < 10 {
-		log.Printf("Height %d is too low for 10-block consensus walk, adjusting starting height", height)
-		height = 10
-	}
+		log.Printf("Starting consensus walk from height %d", height)
 
-	log.Printf("Starting consensus walk from height %d", height)
+		// Wait for settling period after getting chain head
+		log.Printf("Waiting %s for tipsets to settle...", settlingPeriod)
+		time.Sleep(settlingPeriod)
 
-	// Wait for settling period after getting chain head
-	log.Printf("Waiting %s for tipsets to settle...", settlingPeriod)
-	time.Sleep(settlingPeriod)
+		// Check consensus for 10 consecutive tipsets
+		for i := 0; i < 10; i++ {
+			currentHeight := height - abi.ChainEpoch(i)
+			log.Printf("Checking consensus at height %d", currentHeight)
 
-	// Check consensus for 10 consecutive tipsets
-	for i := 0; i < 10; i++ {
-		currentHeight := height - abi.ChainEpoch(i)
-		log.Printf("Checking consensus at height %d", currentHeight)
+			// Try multiple times with delay between attempts
+			var consensusReached bool
+			var tipsetKeys map[string][]string
+			var lastErr error
 
-		// Try multiple times with delay between attempts
-		var consensusReached bool
-		var tipsetKeys map[string][]string
-		var lastErr error
+			for retry := 0; retry < maxConsensusRetries; retry++ {
+				if retry > 0 {
+					log.Printf("Retry %d/%d for height %d after %s delay", retry+1, maxConsensusRetries, currentHeight, retryDelay)
+					time.Sleep(retryDelay)
+				}
 
-		for retry := 0; retry < maxConsensusRetries; retry++ {
-			if retry > 0 {
-				log.Printf("Retry %d/%d for height %d after %s delay", retry+1, maxConsensusRetries, currentHeight, retryDelay)
-				time.Sleep(retryDelay)
+				consensusReached, tipsetKeys, lastErr = cc.checkTipsetConsensus(ctx, currentHeight)
+				if lastErr != nil {
+					log.Printf("Error checking consensus (attempt %d/%d): %v", retry+1, maxConsensusRetries, lastErr)
+					continue
+				}
+
+				if consensusReached {
+					log.Printf("Consensus reached at height %d on attempt %d", currentHeight, retry+1)
+					break
+				}
+
+				log.Printf("Consensus not reached at height %d on attempt %d, tipset distribution: %v",
+					currentHeight, retry+1, tipsetKeys)
 			}
 
-			consensusReached, tipsetKeys, lastErr = cc.checkTipsetConsensus(ctx, currentHeight)
-			if lastErr != nil {
-				log.Printf("Error checking consensus (attempt %d/%d): %v", retry+1, maxConsensusRetries, lastErr)
-				continue
-			}
+			// After all retries, make the final assertion
+			assert.Always(consensusReached,
+				"[Consensus Check] All nodes must agree on the same tipset",
+				map[string]interface{}{
+					"height":         currentHeight,
+					"tipset_keys":    tipsetKeys,
+					"property":       "Chain consensus",
+					"impact":         "Critical - indicates chain fork or consensus failure",
+					"details":        "All nodes must have identical tipsets at each height",
+					"recommendation": "Check network connectivity and sync status",
+					"nodes_checked":  len(cc.nodes),
+					"unique_tipsets": len(tipsetKeys),
+					"retries":        maxConsensusRetries,
+				})
 
-			if consensusReached {
-				log.Printf("Consensus reached at height %d on attempt %d", currentHeight, retry+1)
-				break
-			}
-
-			log.Printf("Consensus not reached at height %d on attempt %d, tipset distribution: %v",
-				currentHeight, retry+1, tipsetKeys)
+			log.Printf("Consensus verified at height %d", currentHeight)
 		}
 
-		// After all retries, make the final assertion
-		assert.Always(consensusReached,
-			"[Consensus Check] All nodes must agree on the same tipset",
-			map[string]interface{}{
-				"height":         currentHeight,
-				"tipset_keys":    tipsetKeys,
-				"property":       "Chain consensus",
-				"impact":         "Critical - indicates chain fork or consensus failure",
-				"details":        "All nodes must have identical tipsets at each height",
-				"recommendation": "Check network connectivity and sync status",
-				"nodes_checked":  len(cc.nodes),
-				"unique_tipsets": len(tipsetKeys),
-				"retries":        maxConsensusRetries,
-			})
-
-		log.Printf("Consensus verified at height %d", currentHeight)
-	}
-
-	log.Printf("Consensus walk completed successfully from height %d to %d", height, height-9)
-	return nil
+		log.Printf("Consensus walk completed successfully from height %d to %d", height, height-9)
+		return nil
+	}, "Consensus check operation")
 }

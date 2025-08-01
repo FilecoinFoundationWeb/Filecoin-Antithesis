@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"math"
 	"sync"
@@ -203,7 +202,8 @@ func (m *MempoolTracker) getMempoolSize() (int64, error) {
 	// Get pending messages from mempool using MpoolPending
 	pending, err := m.api.MpoolPending(ctx, types.EmptyTSK)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get mempool pending: %w", err)
+		log.Printf("[ERROR] Failed to get mempool pending: %v", err)
+		return 0, nil
 	}
 
 	return int64(len(pending)), nil

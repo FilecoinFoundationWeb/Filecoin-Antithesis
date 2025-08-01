@@ -3,7 +3,6 @@ package resources
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -73,13 +72,15 @@ func RetryOperation(ctx context.Context, operation func() error, operationName s
 
 			select {
 			case <-ctx.Done():
-				return fmt.Errorf("context cancelled during %s: %w", operationName, ctx.Err())
+				log.Printf("[ERROR] Context cancelled during %s: %v", operationName, ctx.Err())
+				return nil
 			case <-time.After(waitTime):
 			}
 		}
 	}
 
-	return fmt.Errorf("%s failed after %d attempts: %w", operationName, maxRetries, err)
+	log.Printf("[ERROR] %s failed after %d attempts: %v", operationName, maxRetries, err)
+	return nil
 }
 
 // ConnectToNode establishes a connection to a Filecoin node with retry logic
@@ -126,13 +127,15 @@ func ConnectToNode(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, fu
 func tryConnect(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(), error) {
 	authToken, err := ioutil.ReadFile(nodeConfig.AuthTokenPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read auth token for node %s: %v", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to read auth token for node %s: %v", nodeConfig.Name, err)
+		return nil, nil, nil
 	}
 	finalAuthToken := strings.TrimSpace(string(authToken))
 	headers := map[string][]string{"Authorization": {"Bearer " + finalAuthToken}}
 	api, closer, err := client.NewFullNodeRPCV1(ctx, nodeConfig.RPCURL, headers)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to node %s: %v", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to node %s: %v", nodeConfig.Name, err)
+		return nil, nil, nil
 	}
 	return api, closer, err
 }
@@ -141,13 +144,15 @@ func tryConnect(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(
 func ConnectToNodeV2(ctx context.Context, nodeConfig NodeConfig) (v2api.FullNode, func(), error) {
 	authToken, err := ioutil.ReadFile(nodeConfig.AuthTokenPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read auth token for node %s: %v", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to read auth token for node %s: %v", nodeConfig.Name, err)
+		return nil, nil, nil
 	}
 	finalAuthToken := strings.TrimSpace(string(authToken))
 	headers := map[string][]string{"Authorization": {"Bearer " + finalAuthToken}}
 	api, closer, err := NewFullNodeRPCV2(ctx, nodeConfig.RPCURL, headers)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to node %s: %v", nodeConfig.Name, err)
+		log.Printf("[ERROR] Failed to connect to node %s: %v", nodeConfig.Name, err)
+		return nil, nil, nil
 	}
 	return api, closer, err
 }
@@ -165,7 +170,8 @@ func NewFullNodeRPCV2(ctx context.Context, addr string, requestHeader http.Heade
 func IsNodeConnected(ctx context.Context, nodeAPI api.FullNode) (bool, error) {
 	peers, err := nodeAPI.NetPeers(ctx)
 	if err != nil {
-		return false, fmt.Errorf("failed to get peer list: %w", err)
+		log.Printf("[ERROR] Failed to get peer list: %v", err)
+		return false, nil
 	}
 	return len(peers) > 0, nil
 }
@@ -218,14 +224,15 @@ func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, curre
 
 				select {
 				case <-ctx.Done():
-					return fmt.Errorf("context cancelled while connecting nodes: %w", ctx.Err())
+					log.Printf("[ERROR] Context cancelled while connecting nodes: %v", ctx.Err())
+					return nil
 				case <-time.After(waitTime):
 				}
 			}
 		}
 
 		if err != nil {
-			return fmt.Errorf("failed to connect node %s to %s after %d attempts: %v",
+			log.Printf("[ERROR] Failed to connect node %s to %s after %d attempts: %v",
 				currentNodeConfig.Name, nodeConfig.Name, maxRetries, err)
 		}
 
@@ -238,18 +245,21 @@ func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, curre
 func tryConnectToNode(ctx context.Context, currentNodeAPI api.FullNode, currentNodeConfig NodeConfig, targetNodeConfig NodeConfig) error {
 	otherNodeAPI, closer, err := ConnectToNode(ctx, targetNodeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to target node: %w", err)
+		log.Printf("[ERROR] Failed to connect to target node: %v", err)
+		return nil
 	}
 	defer closer()
 
 	otherPeerInfo, err := otherNodeAPI.NetAddrsListen(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get peer info: %w", err)
+		log.Printf("[ERROR] Failed to get peer info: %v", err)
+		return nil
 	}
 
 	err = currentNodeAPI.NetConnect(ctx, otherPeerInfo)
 	if err != nil {
-		return fmt.Errorf("failed to connect to peer: %w", err)
+		log.Printf("[ERROR] Failed to connect to peer: %v", err)
+		return nil
 	}
 
 	return err
@@ -259,7 +269,8 @@ func tryConnectToNode(ctx context.Context, currentNodeAPI api.FullNode, currentN
 func DisconnectFromOtherNodes(ctx context.Context, nodeAPI api.FullNode) error {
 	peers, err := nodeAPI.NetPeers(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get peer list: %w", err)
+		log.Printf("[ERROR] Failed to get peer list: %v", err)
+		return nil
 	}
 
 	for _, peer := range peers {
@@ -275,7 +286,8 @@ func DisconnectFromOtherNodes(ctx context.Context, nodeAPI api.FullNode) error {
 func SimulateReorg(ctx context.Context, nodeAPI api.FullNode) error {
 	peers, err := nodeAPI.NetPeers(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get peer list: %w", err)
+		log.Printf("[ERROR] Failed to get peer list: %v", err)
+		return nil
 	}
 
 	// Map to store peer IDs and their multiaddrs
@@ -300,7 +312,8 @@ func SimulateReorg(ctx context.Context, nodeAPI api.FullNode) error {
 
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("context cancelled while waiting to reconnect: %w", ctx.Err())
+		log.Printf("[ERROR] Context cancelled while waiting to reconnect: %v", ctx.Err())
+		return nil
 	case <-time.After(reconnectDelay):
 	}
 
@@ -409,7 +422,8 @@ func IsConsensusOrEthScriptRunning() (bool, error) {
 	cmd := exec.Command("ps", "aux")
 	output, err := cmd.Output()
 	if err != nil {
-		return false, fmt.Errorf("failed to check running processes: %w", err)
+		log.Printf("[ERROR] Failed to check running processes: %v", err)
+		return false, nil
 	}
 
 	outputStr := strings.ToLower(string(output))

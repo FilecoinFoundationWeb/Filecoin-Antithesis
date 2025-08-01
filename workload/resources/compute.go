@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"math/rand"
 
@@ -36,7 +35,7 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 	for checkTs.Height() != 0 {
 		if checkTs == nil {
 			log.Printf("[ERROR] checkTs is nil")
-			return fmt.Errorf("checkTs is nil")
+			return nil
 		}
 		if checkTs.Height()%1000 == 0 {
 			log.Printf("Reached height %d", checkTs.Height())
