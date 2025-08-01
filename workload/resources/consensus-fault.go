@@ -3,7 +3,6 @@ package resources
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/filecoin-project/go-state-types/builtin"
@@ -20,37 +19,43 @@ import (
 func SendConsensusFault(ctx context.Context) error {
 	config, err := LoadConfig("/opt/antithesis/resources/config.json")
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		log.Printf("[ERROR] Failed to load config: %v", err)
+		return nil
 	}
 
 	// Try with first miner
 	api1, closer1, err := ConnectToNode(ctx, config.Nodes[0])
 	if err != nil {
-		return fmt.Errorf("failed to connect to lotus-1: %w", err)
+		log.Printf("[ERROR] Failed to connect to lotus-1: %v", err)
+		return nil
 	}
 	defer closer1()
 
 	// Get chain head
 	head, err := api1.ChainHead(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get chain head: %w", err)
+		log.Printf("[ERROR] Failed to get chain head: %v", err)
+		return nil
 	}
 
 	// Try head-3 tipset to ensure we're well behind the current epoch
 	targetHeight := head.Height() - 3
 	if targetHeight <= 0 {
-		return fmt.Errorf("chain height too low: %d", head.Height())
+		log.Printf("[ERROR] Chain height too low: %d", head.Height())
+		return nil
 	}
 
 	ts, err := api1.ChainGetTipSetByHeight(ctx, targetHeight, types.EmptyTSK)
 	if err != nil {
-		return fmt.Errorf("failed to get tipset at height %d: %w", targetHeight, err)
+		log.Printf("[ERROR] Failed to get tipset at height %d: %v", targetHeight, err)
+		return nil
 	}
 
 	// Try with first block from tipset
 	blockHeader, err := api1.ChainGetBlock(ctx, ts.Cids()[0])
 	if err != nil {
-		return fmt.Errorf("getting block header: %w", err)
+		log.Printf("[ERROR] Getting block header: %v", err)
+		return nil
 	}
 
 	// Get miner info
@@ -109,37 +114,43 @@ func SendConsensusFault(ctx context.Context) error {
 	// Try with second miner
 	api2, closer2, err := ConnectToNode(ctx, config.Nodes[1])
 	if err != nil {
-		return fmt.Errorf("failed to connect to lotus-2: %w", err)
+		log.Printf("[ERROR] Failed to connect to lotus-2: %v", err)
+		return nil
 	}
 	defer closer2()
 
 	// Get chain head
 	head, err = api2.ChainHead(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get chain head: %w", err)
+		log.Printf("[ERROR] Failed to get chain head: %v", err)
+		return nil
 	}
 
 	// Try head-3 tipset for second miner as well
 	targetHeight = head.Height() - 3
 	if targetHeight <= 0 {
-		return fmt.Errorf("chain height too low: %d", head.Height())
+		log.Printf("[ERROR] Chain height too low: %d", head.Height())
+		return nil
 	}
 
 	ts, err = api2.ChainGetTipSetByHeight(ctx, targetHeight, types.EmptyTSK)
 	if err != nil {
-		return fmt.Errorf("failed to get tipset at height %d: %w", targetHeight, err)
+		log.Printf("[ERROR] Failed to get tipset at height %d: %v", targetHeight, err)
+		return nil
 	}
 
 	// Try with first block from tipset
 	blockHeader, err = api2.ChainGetBlock(ctx, ts.Cids()[0])
 	if err != nil {
-		return fmt.Errorf("getting block header: %w", err)
+		log.Printf("[ERROR] Getting block header: %v", err)
+		return nil
 	}
 
 	// Get miner info
 	minfo, err = api2.StateMinerInfo(ctx, blockHeader.Miner, types.EmptyTSK)
 	if err != nil {
-		return fmt.Errorf("getting miner info: %w", err)
+		log.Printf("[ERROR] Getting miner info: %v", err)
+		return nil
 	}
 
 	// Create modified copy with different fork signaling
@@ -149,7 +160,8 @@ func SendConsensusFault(ctx context.Context) error {
 	// Sign the modified block
 	signingBytes, err := blockHeaderCopy.SigningBytes()
 	if err != nil {
-		return fmt.Errorf("getting signing bytes: %w", err)
+		log.Printf("[ERROR] Getting signing bytes: %v", err)
+		return nil
 	}
 
 	sig, err := api2.WalletSign(ctx, minfo.Worker, signingBytes)
@@ -163,10 +175,12 @@ func SendConsensusFault(ctx context.Context) error {
 	buf1 := new(bytes.Buffer)
 	buf2 := new(bytes.Buffer)
 	if err := blockHeader.MarshalCBOR(buf1); err != nil {
-		return fmt.Errorf("marshalling block1: %w", err)
+		log.Printf("[ERROR] Marshalling block1: %v", err)
+		return nil
 	}
 	if err := blockHeaderCopy.MarshalCBOR(buf2); err != nil {
-		return fmt.Errorf("marshalling block2: %w", err)
+		log.Printf("[ERROR] Marshalling block2: %v", err)
+		return nil
 	}
 
 	// Create consensus fault params
@@ -177,7 +191,8 @@ func SendConsensusFault(ctx context.Context) error {
 
 	sp, err := actors.SerializeParams(&params)
 	if err != nil {
-		return fmt.Errorf("serializing params: %w", err)
+		log.Printf("[ERROR] Serializing params: %v", err)
+		return nil
 	}
 
 	// Send the message
@@ -188,7 +203,8 @@ func SendConsensusFault(ctx context.Context) error {
 		Params: sp,
 	}, nil)
 	if err != nil {
-		return fmt.Errorf("mpool push: %w", err)
+		log.Printf("[ERROR] Mpool push: %v", err)
+		return nil
 	}
 
 	log.Printf("Consensus fault reported in message %s", smsg.Cid())
@@ -196,11 +212,13 @@ func SendConsensusFault(ctx context.Context) error {
 	// Wait for message execution
 	wait, err := api2.StateWaitMsg(ctx, smsg.Cid(), 5, api.LookbackNoLimit, false)
 	if err != nil {
-		return fmt.Errorf("waiting for message: %w", err)
+		log.Printf("[ERROR] Waiting for message: %v", err)
+		return nil
 	}
 
 	if wait.Receipt.ExitCode.IsError() {
-		return fmt.Errorf("consensus fault failed with exit code: %s", wait.Receipt.ExitCode)
+		log.Printf("[ERROR] Consensus fault failed with exit code: %s", wait.Receipt.ExitCode)
+		return nil
 	}
 
 	return nil

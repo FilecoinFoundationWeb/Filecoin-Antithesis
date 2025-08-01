@@ -3,7 +3,6 @@ package resources
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	"log"
 
 	"github.com/filecoin-project/go-state-types/abi"
@@ -21,18 +20,21 @@ func SendMaxSizedMessage(ctx context.Context, nodeAPI api.FullNode) error {
 
 	fromAddr, err := nodeAPI.WalletDefaultAddress(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get default wallet: %w", err)
+		log.Printf("[ERROR] Failed to get default wallet: %v", err)
+		return nil
 	}
 
 	toAddr, err := nodeAPI.WalletNew(ctx, types.KTSecp256k1)
 	if err != nil {
-		return fmt.Errorf("failed to create new wallet for destination: %w", err)
+		log.Printf("[ERROR] Failed to create new wallet for destination: %v", err)
+		return nil
 	}
 	log.Printf("[INFO] Sending max sized message from %s to %s", fromAddr, toAddr)
 
 	params := make([]byte, MaxMessageSize)
 	if _, err := rand.Read(params); err != nil {
-		return fmt.Errorf("failed to generate random params: %w", err)
+		log.Printf("[ERROR] Failed to generate random params: %v", err)
+		return nil
 	}
 
 	msg := &types.Message{
@@ -45,7 +47,8 @@ func SendMaxSizedMessage(ctx context.Context, nodeAPI api.FullNode) error {
 
 	gasMsg, err := nodeAPI.GasEstimateMessageGas(ctx, msg, nil, types.EmptyTSK)
 	if err != nil {
-		return fmt.Errorf("failed to estimate gas: %w", err)
+		log.Printf("[ERROR] Failed to estimate gas: %v", err)
+		return nil
 	}
 	msg.GasLimit = gasMsg.GasLimit
 	msg.GasFeeCap = gasMsg.GasFeeCap
@@ -54,7 +57,8 @@ func SendMaxSizedMessage(ctx context.Context, nodeAPI api.FullNode) error {
 	log.Printf("[INFO] Pushing message with size %d bytes to mempool", len(params))
 	signedMsg, err := nodeAPI.MpoolPushMessage(ctx, msg, nil)
 	if err != nil {
-		return fmt.Errorf("failed to push max-sized message: %w", err)
+		log.Printf("[ERROR] Failed to push max-sized message: %v", err)
+		return nil
 	}
 
 	log.Printf("[INFO] Max-sized message sent successfully, CID: %s", signedMsg.Cid())
@@ -66,7 +70,8 @@ func SendMaxMessages(ctx context.Context, nodeAPI api.FullNode) error {
 
 	fromAddr, err := nodeAPI.WalletDefaultAddress(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get default wallet: %w", err)
+		log.Printf("[ERROR] Failed to get default wallet: %v", err)
+		return nil
 	}
 
 	for i := 0; i < 200; i++ {

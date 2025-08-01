@@ -1,11 +1,5 @@
 #!/bin/bash
 
-# Source health check functions
-source "$(dirname "$0")/health_check_functions.sh"
-
-# Perform health check before proceeding
-log_script_start
-
 echo "Starting anytime P2P bomb"
 
 # Run the P2P bomb

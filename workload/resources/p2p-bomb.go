@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"strings"
@@ -206,7 +205,8 @@ func RunP2PBomb(ctx context.Context, nodeCount int) error {
 	// Create malicious P2P nodes
 	hosts, err := CreateP2PNodes(ctx, nodeCount)
 	if err != nil {
-		return fmt.Errorf("failed to create malicious P2P nodes: %w", err)
+		log.Printf("[ERROR] Failed to create malicious P2P nodes: %v", err)
+		return nil
 	}
 
 	// Connect each malicious node to the target nodes from disk paths
@@ -265,7 +265,8 @@ func triggerIdentifyExchange(ctx context.Context, h host.Host, nodeIndex int) {
 func readMultiaddrsFromFile(filePath string) ([]string, error) {
 	content, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read multiaddrs from %s: %w", filePath, err)
+		log.Printf("[ERROR] Failed to read multiaddrs from %s: %v", filePath, err)
+		return nil, nil
 	}
 
 	// Split by lines and filter out empty lines

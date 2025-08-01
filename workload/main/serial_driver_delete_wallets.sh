@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Source health check functions
+source "$(dirname "$0")/health_check_functions.sh"
+
+# Perform health check before proceeding
+log_script_start
+
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
 NODE_NAMES=("Lotus1" "Lotus2")
