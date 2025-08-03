@@ -167,7 +167,7 @@ func GetGenesisWallet(ctx context.Context, api api.FullNode) (address.Address, e
 	if err != nil {
 		log.Printf("Failed to list wallets: %v", err)
 		log.Printf("[ERROR] Failed to list wallets: %v", err)
-		return address.Undef, nil
+		return address.Undef, err
 	}
 
 	if len(wallets) == 0 {
@@ -220,8 +220,8 @@ func GetRandomWallets(ctx context.Context, api api.FullNode, numWallets int) ([]
 		return nil, nil
 	}
 
-	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(len(allWallets), func(i, j int) { allWallets[i], allWallets[j] = allWallets[j], allWallets[i] })
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r.Shuffle(len(allWallets), func(i, j int) { allWallets[i], allWallets[j] = allWallets[j], allWallets[i] })
 
 	if len(allWallets) < numWallets {
 		log.Printf("Only %d wallets available. Selecting all.", len(allWallets))
@@ -237,7 +237,7 @@ func DeleteWallets(ctx context.Context, api api.FullNode, walletsToDelete []addr
 		err := api.WalletDelete(ctx, wallet)
 		if err != nil {
 			log.Printf("[ERROR] Failed to delete wallet %s: %v", wallet.String(), err)
-			return nil
+			continue
 		}
 		log.Printf("Successfully deleted wallet: %s", wallet.String())
 	}
