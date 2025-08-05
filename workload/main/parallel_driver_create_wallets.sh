@@ -1,15 +1,10 @@
 #!/bin/bash
 
-# Source health check functions
-source "$(dirname "$0")/health_check_functions.sh"
-
-# Perform health check before proceeding
-log_script_start
 
 # Configurable parameters
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-NODE_NAMES=("Lotus1" "Lotus2")  # Replace with your actual node names
+NODE_NAMES=("Lotus1" "Lotus2")  
 MIN_WALLETS=5                  # Minimum number of wallets to create
 MAX_WALLETS=15                 # Maximum number of wallets to create
 
