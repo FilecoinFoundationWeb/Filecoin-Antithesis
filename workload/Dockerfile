@@ -6,11 +6,11 @@ FROM ubuntu:latest
 
 # Install necessary packages including Python and Go
 RUN apt-get update -y && \
-    apt-get install -y python3 python3-pip python3-requests python3-filelock curl jq \
-    ntpdate && \
-    curl -OL https://golang.org/dl/go1.23.2.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
-    rm go1.23.2.linux-amd64.tar.gz
+    apt-get install -y python3 python3-pip python3-requests python3-filelock curl jq gcc ntpdate && \
+    ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && \
+    curl -OL "https://golang.org/dl/go1.23.2.linux-${ARCH}.tar.gz" && \
+    tar -C /usr/local -xzf "go1.23.2.linux-${ARCH}.tar.gz" && \
+    rm "go1.23.2.linux-${ARCH}.tar.gz"
 
 # Install Antithesis Python SDK
 RUN pip install antithesis cffi --break-system-packages
@@ -39,7 +39,8 @@ RUN chmod +x ./test/v1/main/*
 RUN go mod download
 
 # Build the Go application
-RUN go build -o ./app ./main.go
+ENV CGO_ENABLED=1
+RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') go build -o ./app ./main.go
 
 RUN rm ./main.go
 
