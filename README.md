@@ -24,9 +24,43 @@ There are supplementary READMEs located in the drand, forest, lotus, and workloa
 
 A good practice to confirm your test script works correctly in Antithesis is to run it locally. Here are the steps:
 
-1. Build each image required by the docker-compose.yml. We need a total of 4 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`). Below is an example of building the lotus image while inside the lotus directory.
+1. Build each image required by the docker-compose.yml. We need a total of 4 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`). The build system automatically detects your architecture (amd64/x86_64 or arm64/aarch64) and builds accordingly.
 
-`docker build . lotus:latest`
+You can build all images for your current architecture using:
+```bash
+make all
+```
+
+For specific architectures, you can use:
+```bash
+# For ARM64 systems
+make build-arm64
+
+# For AMD64/x86_64 systems
+make build-amd64
+
+# Or specify architecture for any make command
+TARGET_ARCH=arm64 make all
+TARGET_ARCH=amd64 make all
+```
+
+You can also build individual services:
+```bash
+make build-lotus    # Builds lotus for current architecture
+make build-forest   # Builds forest for current architecture
+make build-drand    # Builds drand for current architecture
+make build-workload # Builds workload for current architecture
+```
+
+To check your current target architecture:
+```bash
+make show-arch
+```
+
+For a full list of available build targets and options:
+```bash
+make help
+```
 
 2. Run `docker-compose up` from the root directory to start all containers defined in `docker-compose.yml`
 
