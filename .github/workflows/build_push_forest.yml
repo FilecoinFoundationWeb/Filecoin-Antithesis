@@ -60,6 +60,7 @@ jobs:
       with:
         build-args: |
             GIT_COMMIT=${{ github.event.inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
+            LOCAL_BUILD=0
         context: ./forest
         file: ./forest/Dockerfile
         push: true
