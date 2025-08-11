@@ -14,12 +14,12 @@ BUILD_CMD = docker build
 .PHONY: build-forest
 build-forest:
 	@echo "Building forest for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg GIT_COMMIT=$(forest_commit) --build-arg LOCAL_BUILD=$(LOCAL_BUILD) -t forest:latest -f forest/Dockerfile forest
+	$(BUILD_CMD) --build-arg GIT_COMMIT=$(forest_commit) -t forest:latest -f forest/Dockerfile forest
 
 .PHONY: build-drand
 build-drand:
 	@echo "Building drand for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(drand_tag) --build-arg LOCAL_BUILD=$(LOCAL_BUILD) -t drand:latest -f drand/Dockerfile drand
+	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(drand_tag) -t drand:latest -f drand/Dockerfile drand
 
 .PHONY: build-lotus
 build-lotus:
@@ -29,11 +29,11 @@ build-lotus:
 .PHONY: build-workload
 build-workload:
 	@echo "Building workload for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg LOCAL_BUILD=$(LOCAL_BUILD) -t workload:latest -f workload/Dockerfile workload
+	$(BUILD_CMD) -t workload:latest -f workload/Dockerfile workload
 
 .PHONY: run-localnet
 run-localnet:
-	$(builder)-compose up
+	$(builder) compose up
 
 # Build everything and run local docker compose up
 .PHONY: all
@@ -47,7 +47,7 @@ show-arch:
 
 .PHONY: cleanup
 cleanup:
-	$(builder)-compose down
+	$(builder) compose down
 	bash cleanup.sh
 
 .PHONY: help
