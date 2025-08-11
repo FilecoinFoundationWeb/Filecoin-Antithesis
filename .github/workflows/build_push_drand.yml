@@ -52,6 +52,7 @@ jobs:
       with:
         build-args: |
           GIT_BRANCH=${{ github.event.inputs.drand_tag }}
+          LOCAL_BUILD=0
         context: ./drand
         file: ./drand/Dockerfile
         push: true

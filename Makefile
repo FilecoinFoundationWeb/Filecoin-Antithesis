@@ -14,17 +14,17 @@ BUILD_CMD = docker build
 .PHONY: build-forest
 build-forest:
 	@echo "Building forest for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg GIT_COMMIT=$(forest_commit) -t forest:$(forest_commit) -f forest/Dockerfile forest
+	$(BUILD_CMD) --build-arg GIT_COMMIT=$(forest_commit) -t forest:latest -f forest/Dockerfile forest
 
 .PHONY: build-drand
 build-drand:
 	@echo "Building drand for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(drand_tag) -t drand:$(drand_tag) -f drand/Dockerfile drand
+	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(drand_tag) -t drand:latest -f drand/Dockerfile drand
 
 .PHONY: build-lotus
 build-lotus:
 	@echo "Building lotus for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(lotus_tag) -t lotus:$(lotus_tag) -f lotus/Dockerfile lotus
+	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(lotus_tag) -t lotus:latest -f lotus/Dockerfile lotus
 
 .PHONY: build-workload
 build-workload:
@@ -33,20 +33,11 @@ build-workload:
 
 .PHONY: run-localnet
 run-localnet:
-	DRAND_TAG=$(drand_tag) LOTUS_TAG=$(lotus_tag) FOREST_COMMIT=$(forest_commit) $(builder)-compose up
+	$(builder) compose up
 
 # Build everything and run local docker compose up
 .PHONY: all
 all: build-drand build-forest build-lotus build-workload run-localnet
-
-# Build for specific architecture
-.PHONY: build-arm64
-build-arm64:
-	@$(MAKE) TARGET_ARCH=arm64 build-drand build-forest build-lotus build-workload
-
-.PHONY: build-amd64
-build-amd64:
-	@$(MAKE) TARGET_ARCH=amd64 build-drand build-forest build-lotus build-workload
 
 # Show current target architecture
 .PHONY: show-arch
@@ -56,19 +47,16 @@ show-arch:
 
 .PHONY: cleanup
 cleanup:
-	$(builder)-compose down
+	$(builder) compose down
 	bash cleanup.sh
 
 .PHONY: help
 help:
 	@echo "Available targets:"
 	@echo "  all              - Build all images for current architecture ($(TARGET_ARCH)) and run localnet"
-	@echo "  build-arm64      - Build all images for ARM64 architecture"
-	@echo "  build-amd64      - Build all images for AMD64 architecture"
 	@echo "  build-<service>  - Build specific service (forest, drand, lotus, workload)"
 	@echo "  show-arch        - Show current target architecture"
 	@echo "  cleanup          - Clean up containers and run cleanup script"
 	@echo ""
 	@echo "Architecture control:"
-	@echo "  TARGET_ARCH=arm64 make all    - Build for ARM64"
-	@echo "  TARGET_ARCH=amd64 make all    - Build for AMD64"
+	@echo "  make all                  - Build all services for current architecture"

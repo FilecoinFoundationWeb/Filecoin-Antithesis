@@ -25,5 +25,3 @@ RUN rm -rf /drand
 
 RUN make build_insecure
 RUN cp drand /usr/local/bin/drand
-
-

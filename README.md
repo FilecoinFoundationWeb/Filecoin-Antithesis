@@ -24,38 +24,32 @@ There are supplementary READMEs located in the drand, forest, lotus, and workloa
 
 A good practice to confirm your test script works correctly in Antithesis is to run it locally. Here are the steps:
 
-1. Build each image required by the docker-compose.yml. We need a total of 4 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`). The build system automatically detects your architecture (amd64/x86_64 or arm64/aarch64) and builds accordingly.
+1. Build each image required by the docker-compose.yml. We need a total of 4 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`). The build system supports both local development builds and instrumented builds for Antithesis testing.
 
-You can build all images for your current architecture using:
+You can build all images using:
 ```bash
-make all
-```
+# For local development (no instrumentation)
+make all LOCAL_BUILD=1
 
-For specific architectures, you can use:
-```bash
-# For ARM64 systems
-make build-arm64
-
-# For AMD64/x86_64 systems
-make build-amd64
-
-# Or specify architecture for any make command
-TARGET_ARCH=arm64 make all
-TARGET_ARCH=amd64 make all
+# For Antithesis instrumented builds
+make all LOCAL_BUILD=0
 ```
 
 You can also build individual services:
 ```bash
-make build-lotus    # Builds lotus for current architecture
-make build-forest   # Builds forest for current architecture
-make build-drand    # Builds drand for current architecture
-make build-workload # Builds workload for current architecture
+# For local development builds
+make build-lotus LOCAL_BUILD=1     # Builds lotus without instrumentation
+make build-forest LOCAL_BUILD=1    # Builds forest without instrumentation
+make build-drand LOCAL_BUILD=1     # Builds drand without instrumentation
+make build-workload               # Builds workload (not affected by LOCAL_BUILD)
+
+# For Antithesis instrumented builds
+make build-lotus LOCAL_BUILD=0     # Builds lotus with instrumentation
+make build-forest LOCAL_BUILD=0    # Builds forest with instrumentation
+make build-drand LOCAL_BUILD=0     # Builds drand with instrumentation
 ```
 
-To check your current target architecture:
-```bash
-make show-arch
-```
+The build system will automatically detect your architecture (amd64/x86_64 or arm64/aarch64) and use the appropriate Go and Rust toolchains.
 
 For a full list of available build targets and options:
 ```bash
