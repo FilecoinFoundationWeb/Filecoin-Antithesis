@@ -41,9 +41,9 @@ forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --p2p-listen-address "/ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT}" \
        --healthcheck-address "${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT}" \
        --skip-load-actors &
-
 # Ensure the Forest node API is up before calling other commands
-forest-cli wait-api
+forest-cli wait-api&
+
 
 # Admin token is required for connection commands and wallet management.
 TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
