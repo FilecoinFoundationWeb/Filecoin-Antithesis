@@ -28,7 +28,7 @@ COPY ./forest_config.toml.tpl .
 # Step 4: Copy and apply the patch (this changes more frequently, so it's placed later)
 # COPY ./forest.patch ./forest.patch
 # RUN git apply ./forest.patch
-
+COPY libvoidstar.so /usr/local/lib/libvoidstar.so 
 RUN if [ "$LOCAL_BUILD" = "1" ]; then \
         cargo build --release --bin forest-cli; \
         cargo build --release --bin forest-tool; \
@@ -47,7 +47,6 @@ RUN if [ "$LOCAL_BUILD" = "1" ]; then \
         cp /forest/target/release/forest-tool /usr/local/cargo/bin/forest-tool && \
         cp /forest/target/release/forest-wallet /usr/local/cargo/bin/forest-wallet && \
         # Setup Antithesis instrumentation
-        cp libvoidstar.so /usr/local/lib/libvoidstar.so && \
         export LD_LIBRARY_PATH=/usr/local/lib && \
         export RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 \
         -Cllvm-args=-sanitizer-coverage-trace-pc-guard -Clink-arg=-Wl,-z,undefs \
