@@ -34,9 +34,17 @@ export NETWORK_NAME=$NETWORK_NAME
 forest --version
 cp /forest/forest_config.toml.tpl "${FOREST_DATA_DIR}/forest_config.toml"
 echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
+
+# Perform basic initialization of the Forest node, including generating the admin token.
 forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
        --save-token "${FOREST_DATA_DIR}/jwt" \
+       --no-healthcheck \
+       --skip-load-actors \
+       --exit-after-init
+
+forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
+       --config "${FOREST_DATA_DIR}/forest_config.toml" \
        --rpc-address "${FOREST_IP}:${FOREST_RPC_PORT}" \
        --p2p-listen-address "/ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT}" \
        --healthcheck-address "${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT}" \
