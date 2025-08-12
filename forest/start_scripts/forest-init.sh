@@ -42,7 +42,7 @@ forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --healthcheck-address "${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT}" \
        --skip-load-actors &
 # Ensure the Forest node API is up before calling other commands
-forest-cli wait-api&
+forest-cli wait-api
 
 
 # Admin token is required for connection commands and wallet management.
