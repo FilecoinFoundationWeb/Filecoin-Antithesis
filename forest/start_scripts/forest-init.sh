@@ -41,9 +41,6 @@ forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --p2p-listen-address "/ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT}" \
        --healthcheck-address "${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT}" \
        --skip-load-actors &
-# Ensure the Forest node API is up before calling other commands
-forest-cli wait-api
-
 
 # Admin token is required for connection commands and wallet management.
 TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
@@ -52,6 +49,9 @@ FULLNODE_API_INFO=$TOKEN:/ip4/${FOREST_IP}/tcp/${FOREST_RPC_PORT}/http
 export FULLNODE_API_INFO
 
 echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
+
+# Ensure the Forest node API is up before calling other commands
+forest-cli wait-api
 echo "forest: collecting network info…"
 
 forest-cli net listen | head -n1 > "${FOREST_DATA_DIR}/forest-listen-addr"
