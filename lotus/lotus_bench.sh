@@ -310,3 +310,4 @@ case $method in
         echo "transaction hash: $tx_hash"
         ./lotus-bench rpc --method="$method:::[$tx_hash]" --endpoint="$endpoint"
         ;;
+esac
