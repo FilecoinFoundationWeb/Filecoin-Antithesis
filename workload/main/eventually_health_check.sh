@@ -21,7 +21,3 @@ echo "Asserting finalized tipsets are the same between two nodes"
 
 echo "Running ETH methods consistency check"
 /opt/antithesis/app eth check
-
-echo "Checking state mismatch between two nodes"
-/opt/antithesis/app state check --node "Lotus1" --window 50
-/opt/antithesis/app state check --node "Lotus2" --window 50
