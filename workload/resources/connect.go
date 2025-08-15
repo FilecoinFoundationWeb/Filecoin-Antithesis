@@ -173,7 +173,7 @@ func IsNodeConnected(ctx context.Context, nodeAPI api.FullNode) (bool, error) {
 		log.Printf("[ERROR] Failed to get peer list: %v", err)
 		return false, nil
 	}
-	return len(peers) > 0, nil
+	return len(peers) > 1, nil
 }
 
 // EnsureNodesConnected verifies that a node is connected to peers and attempts to establish connections if not
@@ -283,7 +283,7 @@ func DisconnectFromOtherNodes(ctx context.Context, nodeAPI api.FullNode) error {
 
 // SimulateReorg disconnects the current node from all connected peers,
 // saves their multiaddrs, waits for a few minutes, and then reconnects
-func SimulateReorg(ctx context.Context, nodeAPI api.FullNode) error {
+func SimulateReorg(ctx context.Context, nodeAPI api.FullNode, duration time.Duration) error {
 	peers, err := nodeAPI.NetPeers(ctx)
 	if err != nil {
 		log.Printf("[ERROR] Failed to get peer list: %v", err)
@@ -307,7 +307,7 @@ func SimulateReorg(ctx context.Context, nodeAPI api.FullNode) error {
 	}
 
 	// Wait for a few minutes before reconnecting
-	reconnectDelay := 2 * time.Minute
+	reconnectDelay := duration
 	log.Printf("[INFO] Waiting %v before reconnecting to peers...", reconnectDelay)
 
 	select {
@@ -436,4 +436,31 @@ func IsConsensusOrEthScriptRunning() (bool, error) {
 	}
 
 	return false, nil
+}
+
+func ConnectToPeer(ctx context.Context, api api.FullNode, ma multiaddr.Multiaddr) error {
+	addrInfo, err := peer.AddrInfoFromP2pAddr(ma)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get peer info: %v", err)
+		return err
+	}
+
+	return api.NetConnect(ctx, *addrInfo)
+}
+
+// Function to read multiaddr from a file
+func ReadMultiaddrFromFile(filePath string) (multiaddr.Multiaddr, error) {
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		log.Printf("[ERROR] Failed to read file: %v", err)
+		return nil, err
+	}
+
+	maddr, err := multiaddr.NewMultiaddr(strings.TrimSpace(string(data)))
+	if err != nil {
+		log.Printf("[ERROR] Invalid multiaddr: %v", err)
+		return nil, err
+	}
+
+	return maddr, nil
 }

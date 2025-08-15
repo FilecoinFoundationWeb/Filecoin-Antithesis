@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/api"
@@ -249,6 +251,205 @@ func SendConcurrentBurst(ctx context.Context, api api.FullNode, from, to address
 			log.Printf("[ERROR] Message verification failed: %v", err)
 			return err
 		}
+	}
+
+	return nil
+}
+func SendReorgAttack(ctx context.Context, api1, api2 api.FullNode, count int) error {
+	log.Printf("[INFO] Starting reorg attack simulation")
+
+	// Disconnect both nodes from other peers to create network partition
+	err := resources.DisconnectFromOtherNodes(ctx, api1)
+	if err != nil {
+		log.Printf("[WARN] Failed to disconnect api1 from other nodes: %v", err)
+	}
+
+	err = resources.DisconnectFromOtherNodes(ctx, api2)
+	if err != nil {
+		log.Printf("[WARN] Failed to disconnect api2 from other nodes: %v", err)
+	}
+
+	// Wait a bit for disconnections to take effect
+	time.Sleep(5 * time.Second)
+	log.Printf("[INFO] Nodes disconnected, sending identical messages to both nodes")
+
+	// Send transactions to both nodes
+	var acceptedCids []cid.Cid
+	var mutationDescriptions []string
+
+	// Limit to fewer messages to avoid running out of funds
+	maxMessages := 10
+	if count > maxMessages {
+		count = maxMessages
+		log.Printf("[INFO] Limiting reorg attack to %d messages to avoid fund exhaustion", maxMessages)
+	}
+
+	// Get genesis wallet from api1
+	genesisWallet, err := resources.GetGenesisWallet(ctx, api1)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get genesis wallet: %v", err)
+		return err
+	}
+	log.Printf("[INFO] Using genesis wallet %s for reorg attack", genesisWallet)
+
+	// Export genesis wallet from api1 and import to api2
+	walletExport, err := api1.WalletExport(ctx, genesisWallet)
+	if err != nil {
+		log.Printf("[ERROR] Failed to export genesis wallet from api1: %v", err)
+		return err
+	}
+	importedAddr, err := api2.WalletImport(ctx, walletExport)
+	if err != nil {
+		log.Printf("[ERROR] Failed to import genesis wallet to api2: %v", err)
+		return err
+	}
+	log.Printf("[INFO] Successfully imported genesis wallet to api2 as %s", importedAddr)
+
+	// Check balance on api1
+	balance, err := api1.WalletBalance(ctx, genesisWallet)
+	if err != nil {
+		log.Printf("[WARN] Failed to check wallet balance: %v", err)
+	} else {
+		log.Printf("[INFO] Wallet balance: %s FIL", types.FIL(balance))
+		// Ensure we have enough balance for the attack
+		requiredBalance := types.NewInt(uint64(count * 100000)) // Rough estimate
+		if balance.LessThan(requiredBalance) {
+			log.Printf("[WARN] Low wallet balance, reducing message count")
+			count = int(balance.Int64() / 100000)
+			if count < 1 {
+				count = 1
+			}
+		}
+	}
+
+	for i := 0; i < count; i++ {
+		// Create identical base message with minimal value and using default wallet
+		msg := &types.Message{
+			From:   genesisWallet,      // Use genesis wallet that we imported on both nodes
+			To:     genesisWallet,      // Send to self to avoid needing external addresses
+			Value:  types.NewInt(1000), // Minimal value (1000 attoFIL)
+			Method: 0,
+			Params: nil,
+			// Omit Nonce, GasLimit, GasFeeCap, GasPremium - MpoolPushMessage will set these
+		}
+		description := "Reorg attack message"
+
+		log.Printf("[REORG %d] Sending identical message to both nodes", i)
+
+		// Send to Lotus-1
+		smsg1, err1 := api1.MpoolPushMessage(ctx, msg, nil)
+		if err1 == nil {
+			log.Printf("[REORG %d] Accepted on Lotus-1: %s", i, smsg1.Cid())
+			acceptedCids = append(acceptedCids, smsg1.Cid())
+			mutationDescriptions = append(mutationDescriptions, description+" on Lotus-1")
+		} else {
+			log.Printf("[REORG %d] Rejected on Lotus-1: %v", i, err1)
+		}
+
+		// Send to Lotus-2
+		smsg2, err2 := api2.MpoolPushMessage(ctx, msg, nil)
+		if err2 == nil {
+			log.Printf("[REORG %d] Accepted on Lotus-2: %s", i, smsg2.Cid())
+			acceptedCids = append(acceptedCids, smsg2.Cid())
+			mutationDescriptions = append(mutationDescriptions, description+" on Lotus-2")
+		} else {
+			log.Printf("[REORG %d] Rejected on Lotus-2: %v", i, err2)
+		}
+
+		// Small delay between messages
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	log.Printf("[INFO] Reconnecting nodes to allow consensus")
+
+	// Try to get peer info from api2 and connect api1 to it
+	peerInfo2, err := api2.NetAddrsListen(ctx)
+	if err != nil {
+		log.Printf("[WARN] Failed to get peer info from api2: %v", err)
+
+		// Fallback: try using the robust ConnectToOtherNodes method
+		config, configErr := resources.LoadConfig("/opt/antithesis/resources/config.json")
+		if configErr != nil {
+			log.Printf("[ERROR] Failed to load config for reconnection: %v", configErr)
+			return configErr
+		}
+
+		// Filter to get only Lotus nodes
+		lotusNodes := resources.FilterLotusNodes(config.Nodes)
+		if len(lotusNodes) < 2 {
+			log.Printf("[ERROR] Need at least 2 Lotus nodes for reconnection")
+			return err
+		}
+
+		// Find the current node config (assuming api1 is the first Lotus node)
+		currentNodeConfig := lotusNodes[0]
+
+		// Reconnect to all other Lotus nodes using the existing robust method
+		err = resources.ConnectToOtherNodes(ctx, api1, currentNodeConfig, lotusNodes)
+		if err != nil {
+			log.Printf("[WARN] Failed to reconnect using ConnectToOtherNodes: %v", err)
+			// Continue anyway as this is not fatal for the test
+		} else {
+			log.Printf("[INFO] Successfully reconnected Lotus nodes using ConnectToOtherNodes")
+		}
+	} else {
+		// Direct connection using peer info
+		err = api1.NetConnect(ctx, peerInfo2)
+		if err != nil {
+			log.Printf("[WARN] Failed to directly reconnect api1 to api2: %v", err)
+		} else {
+			log.Printf("[INFO] Successfully reconnected api1 to api2 directly")
+		}
+	}
+
+	log.Printf("[INFO] Waiting 60 seconds for consensus and finalization")
+	time.Sleep(time.Second * 60)
+
+	if len(acceptedCids) == 0 {
+		log.Printf("[WARN] No messages were accepted during reorg attack")
+		return nil
+	}
+
+	// Check state wait with non-fatal error handling
+	err = checkStateWait(ctx, api1, acceptedCids, mutationDescriptions)
+	if err != nil {
+		log.Printf("[WARN] State wait check failed on Lotus-1: %v", err)
+		// Continue with other checks
+	}
+
+	// Use the first accepted message for chain verification
+	testCid := acceptedCids[0]
+	foundOnChain1, err := IsMessageOnChain(ctx, api1, testCid)
+	if err != nil {
+		log.Printf("[WARN] Failed to check if message is on chain for Lotus-1: %v", err)
+		foundOnChain1 = false
+	}
+
+	// Check if the message is on chain for Lotus-2
+	foundOnChain2, err := IsMessageOnChain(ctx, api2, testCid)
+	if err != nil {
+		log.Printf("[WARN] Failed to check if message is on chain for Lotus-2: %v", err)
+		foundOnChain2 = false
+	}
+
+	log.Printf("[REORG RESULT] Message %s found on chain - Lotus-1: %v, Lotus-2: %v",
+		testCid, foundOnChain1, foundOnChain2)
+
+	// The assertion: after reorg, the message should be found on at least one chain
+	// but ideally not on both (as that would indicate a consensus failure)
+	assert.Always(foundOnChain1 || foundOnChain2, "Message should be found on one chain after reorg", map[string]interface{}{
+		"foundOnChain1": foundOnChain1,
+		"foundOnChain2": foundOnChain2,
+		"messageCid":    testCid.String(),
+		"requirement":   "After reorg, message should be found on at least one chain",
+	})
+
+	if foundOnChain1 && foundOnChain2 {
+		log.Printf("[WARN] Message found on both chains - potential consensus issue")
+	} else if foundOnChain1 || foundOnChain2 {
+		log.Printf("[SUCCESS] Reorg attack completed successfully - message found on exactly one chain")
+	} else {
+		log.Printf("[ERROR] Message not found on either chain - potential issue with test")
 	}
 
 	return nil

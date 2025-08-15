@@ -236,7 +236,7 @@ func networkCommands() *cli.Command {
 					}
 					defer closer()
 
-					if err := resources.SimulateReorg(c.Context, api); err != nil {
+					if err := resources.SimulateReorg(c.Context, api, 3); err != nil {
 						log.Printf("failed to simulate reorg for node '%s': %v", nodeConfig.Name, err)
 						return nil
 					}
@@ -360,8 +360,38 @@ func mempoolCommands() *cli.Command {
 					return performSpamOperation(c.Context, config)
 				},
 			},
+			{
+				Name:  "reorg-attack",
+				Usage: "Run reorg attack",
+				Action: func(c *cli.Context) error {
+					return performReorgAttack(c.Context, config)
+				},
+			},
 		},
 	}
+}
+
+func performReorgAttack(context context.Context, config *resources.Config) error {
+	// Filter to only use Lotus nodes for reorg attack
+	lotusNodes := resources.FilterLotusNodes(config.Nodes)
+	if len(lotusNodes) < 2 {
+		log.Printf("[ERROR] Need at least 2 Lotus nodes for reorg attack, found %d", len(lotusNodes))
+		return nil
+	}
+
+	api1, closer, err := resources.ConnectToNode(context, lotusNodes[0])
+	if err != nil {
+		return err
+	}
+	defer closer()
+
+	api2, closer, err := resources.ConnectToNode(context, lotusNodes[1])
+	if err != nil {
+		return err
+	}
+	defer closer()
+	// Reorg attack now uses default wallet internally, no need for external addresses
+	return mpoolfuzz.FuzzMempoolWithStrategy(context, api1, api2, address.Undef, address.Undef, "reorg", 10)
 }
 
 func contractCommands() *cli.Command {
@@ -1096,7 +1126,7 @@ func performMempoolFuzz(ctx context.Context, nodeConfig *resources.NodeConfig, c
 		to := wallets[1]
 
 		// Call the appropriate fuzzing strategy
-		return mpoolfuzz.FuzzMempoolWithStrategy(ctx, api, from, to, strategy, count)
+		return mpoolfuzz.FuzzMempoolWithStrategy(ctx, api, nil, from, to, strategy, count)
 	}, "Mempool fuzzing operation")
 }
 

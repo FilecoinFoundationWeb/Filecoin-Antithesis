@@ -9,12 +9,13 @@ import (
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
+	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/ipfs/go-cid"
 )
 
-func CreateBaseMessage(from, to address.Address, _ uint64) *types.Message {
+func CreateBaseMessage(from, to address.Address, nonce uint64) *types.Message {
 	return &types.Message{
 		From:       from,
 		To:         to,
@@ -24,6 +25,7 @@ func CreateBaseMessage(from, to address.Address, _ uint64) *types.Message {
 		GasPremium: types.NewInt(1000000000), // 1 nanoFIL in attoFIL
 		Method:     0,
 		Params:     nil,
+		// Nonce is omitted - MpoolPushMessage will set it automatically
 	}
 }
 
@@ -41,6 +43,13 @@ func GenerateRandomAddress() (address.Address, error) {
 	return address.NewIDAddress(n.Uint64())
 }
 
+func IsMessageOnChain(ctx context.Context, api api.FullNode, msgCid cid.Cid) (bool, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	lookup, _ := api.StateWaitMsg(waitCtx, msgCid, 1, abi.ChainEpoch(-1), false)
+	cancel()
+	return lookup != nil, nil
+}
+
 // checkStateWait verifies that our mutated transactions never get mined
 // It returns an error if any of the transactions are found on chain
 func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid, mutationDescriptions []string) error {
@@ -56,7 +65,7 @@ func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid, mu
 
 		// Check with StateWaitMsg with a short timeout
 		waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		lookup, _ := api.StateWaitMsg(waitCtx, msgCid, 1, 5, false)
+		lookup, _ := api.StateWaitMsg(waitCtx, msgCid, 1, abi.ChainEpoch(-1), false)
 		cancel()
 
 		if lookup != nil {

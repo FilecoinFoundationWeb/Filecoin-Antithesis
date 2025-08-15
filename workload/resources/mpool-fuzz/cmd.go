@@ -18,7 +18,7 @@ func FuzzMempool(ctx context.Context, api api.FullNode, from, to address.Address
 	return RunFuzzer(ctx, api, from, to, config)
 }
 
-func FuzzMempoolWithStrategy(ctx context.Context, api api.FullNode, from, to address.Address, strategy string, count int) error {
+func FuzzMempoolWithStrategy(ctx context.Context, api, api2 api.FullNode, from, to address.Address, strategy string, count int) error {
 	config := DefaultConfig()
 	config.Count = count
 
@@ -35,6 +35,8 @@ func FuzzMempoolWithStrategy(ctx context.Context, api api.FullNode, from, to add
 		err = SendStandardMutations(ctx, api, from, to, count, r)
 	case "chained":
 		err = SendChainedTransactions(ctx, api, from, to, count, r)
+	case "reorg":
+		err = SendReorgAttack(ctx, api, api2, count)
 	default:
 		// Default to standard mutations
 		err = SendStandardMutations(ctx, api, from, to, count, r)
@@ -48,5 +50,6 @@ func GetAvailableStrategies() []string {
 	return []string{
 		"standard",
 		"chained",
+		"reorg",
 	}
 }

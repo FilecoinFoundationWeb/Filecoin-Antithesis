@@ -13,7 +13,7 @@ check_drand_server() {
   return 0
 }
 
-sleep 10
+sleep 12
 
 DRAND_SERVER="http://10.20.20.21"
 

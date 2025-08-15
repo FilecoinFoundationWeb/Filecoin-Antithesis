@@ -8,6 +8,8 @@ const (
 	SimpleAttack AttackType = "simple"
 	// ChainedAttack represents a chained message attack
 	ChainedAttack AttackType = "chained"
+	// Same transaction during reorg
+	ReorgAttack AttackType = "reorg"
 )
 
 type Config struct {
