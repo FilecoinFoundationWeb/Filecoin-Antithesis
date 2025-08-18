@@ -361,3 +361,202 @@ func SignLegacyHomesteadTransaction(tx *ethtypes.EthLegacyHomesteadTxArgs, privK
 		return
 	}
 }
+
+// PerformDeploySimpleCoin deploys SimpleCoin contract on a specified node
+func PerformDeploySimpleCoin(ctx context.Context, nodeConfig *NodeConfig, contractPath string) error {
+	log.Printf("[INFO] Deploying SimpleCoin contract on node %s from %s", nodeConfig.Name, contractPath)
+
+	// Verify contract file exists first
+	if _, err := os.Stat(contractPath); os.IsNotExist(err) {
+		log.Printf("[ERROR] Contract file not found: %s", contractPath)
+		return nil
+	}
+
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	return RetryOperation(ctx, func() error {
+		// Check if we have a default wallet address
+		defaultAddr, err := api.WalletDefaultAddress(ctx)
+		if err != nil || defaultAddr.Empty() {
+			log.Printf("[WARN] No default wallet address found, attempting to get or create one")
+
+			// Get all available addresses
+			addresses, err := api.WalletList(ctx)
+			if err != nil {
+				log.Printf("[ERROR] Failed to list wallet addresses: %v", err)
+				return nil
+			}
+
+			// If we have addresses, set the first one as default
+			if len(addresses) > 0 {
+				defaultAddr = addresses[0]
+				log.Printf("[INFO] Using existing wallet address: %s", defaultAddr)
+				err = api.WalletSetDefault(ctx, defaultAddr)
+				if err != nil {
+					log.Printf("[WARN] Failed to set default wallet address: %v", err)
+				}
+			} else {
+				// Create a new address if none exists
+				log.Printf("[INFO] No wallet addresses found, creating a new one")
+				newAddr, err := api.WalletNew(ctx, types.KTSecp256k1)
+				if err != nil {
+					log.Printf("[ERROR] Failed to create new wallet address: %v", err)
+					return nil
+				}
+				defaultAddr = newAddr
+				log.Printf("[INFO] Created new wallet address: %s", defaultAddr)
+
+				err = api.WalletSetDefault(ctx, defaultAddr)
+				if err != nil {
+					log.Printf("[WARN] Failed to set default wallet address: %v", err)
+				}
+			}
+		}
+
+		log.Printf("[INFO] Using wallet address: %s", defaultAddr)
+
+		// Verify the address has funds before deploying
+		balance, err := api.WalletBalance(ctx, defaultAddr)
+		if err != nil {
+			log.Printf("[WARN] Failed to check wallet balance: %v", err)
+		} else if balance.IsZero() {
+			log.Printf("[WARN] Wallet has zero balance, contract deployment may fail")
+		}
+
+		// Deploy the contract
+		log.Printf("[INFO] Deploying contract from %s", contractPath)
+		fromAddr, contractAddr := DeployContractFromFilename(ctx, api, contractPath)
+
+		if fromAddr.Empty() || contractAddr.Empty() {
+			log.Printf("[WARN] Deployment returned empty addresses, will retry")
+			return err
+		}
+
+		log.Printf("[INFO] Contract deployed from %s to %s", fromAddr, contractAddr)
+
+		// Generate input data for owner's address
+		inputData := InputDataFromFrom(ctx, api, fromAddr)
+		if len(inputData) == 0 {
+			log.Printf("[WARN] Failed to generate input data, will retry")
+			return err
+		}
+
+		// Invoke contract for owner's balance
+		log.Printf("[INFO] Checking owner's balance")
+		result, _, err := InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "getBalance(address)", inputData)
+		if err != nil {
+			log.Printf("[WARN] Failed to retrieve owner's balance: %v", err)
+		} else {
+			log.Printf("[INFO] Owner's balance: %x", result)
+		}
+
+		return nil
+	}, "SimpleCoin contract deployment operation")
+}
+
+// PerformDeployMCopy deploys MCopy contract on a specified node
+func PerformDeployMCopy(ctx context.Context, nodeConfig *NodeConfig, contractPath string) error {
+	log.Printf("Deploying and invoking MCopy contract on node '%s'...", nodeConfig.Name)
+
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	return RetryOperation(ctx, func() error {
+		fromAddr, contractAddr := DeployContractFromFilename(ctx, api, contractPath)
+
+		hexString := "000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000087465737464617461000000000000000000000000000000000000000000000000"
+		inputArgument, err := hex.DecodeString(hexString)
+		if err != nil {
+			log.Printf("[ERROR] Failed to decode input argument: %v", err)
+			return nil
+		}
+
+		result, _, err := InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "optimizedCopy(bytes)", inputArgument)
+		if err != nil {
+			log.Printf("[ERROR] Failed to invoke MCopy contract: %v", err)
+			return nil
+		}
+		if bytes.Equal(result, inputArgument) {
+			log.Printf("MCopy invocation result matches the input argument. No change in the output.")
+		} else {
+			log.Printf("MCopy invocation result: %x\n", result)
+		}
+		return nil
+	}, "MCopy contract deployment operation")
+}
+
+// PerformDeployTStore deploys TStore contract on a specified node
+func PerformDeployTStore(ctx context.Context, nodeConfig *NodeConfig, contractPath string) error {
+	log.Printf("Deploying and invoking TStore contract on node '%s'...", nodeConfig.Name)
+
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	return RetryOperation(ctx, func() error {
+		// Deploy the contract
+		fromAddr, contractAddr := DeployContractFromFilename(ctx, api, contractPath)
+		if fromAddr.Empty() || contractAddr.Empty() {
+			log.Printf("[ERROR] Failed to deploy initial contract instance")
+			return nil
+		}
+
+		inputData := make([]byte, 0)
+
+		// Run initial tests
+		_, _, err = InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "runTests()", inputData)
+		if err != nil {
+			log.Printf("[ERROR] Failed to invoke runTests(): %v", err)
+			return nil
+		}
+
+		// Validate lifecycle in subsequent transactions
+		_, _, err = InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testLifecycleValidationSubsequentTransaction()", inputData)
+		if err != nil {
+			log.Printf("[ERROR] Failed to invoke testLifecycleValidationSubsequentTransaction(): %v", err)
+			return nil
+		}
+
+		// Deploy a second contract instance for further testing
+		fromAddr, contractAddr2 := DeployContractFromFilename(ctx, api, contractPath)
+		if fromAddr.Empty() || contractAddr2.Empty() {
+			log.Printf("[ERROR] Failed to deploy second contract instance")
+			return nil
+		}
+
+		inputDataContract := InputDataFromFrom(ctx, api, contractAddr2)
+		if len(inputDataContract) == 0 {
+			log.Printf("[ERROR] Failed to generate input data for contract address")
+			return nil
+		}
+
+		// Test re-entry scenarios
+		_, _, err = InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testReentry(address)", inputDataContract)
+		if err != nil {
+			log.Printf("[ERROR] Failed to invoke testReentry(): %v", err)
+			return nil
+		}
+
+		// Test nested contract interactions
+		_, _, err = InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "testNestedContracts(address)", inputDataContract)
+		if err != nil {
+			log.Printf("[ERROR] Failed to invoke testNestedContracts(): %v", err)
+			return nil
+		}
+
+		log.Printf("TStore contract successfully deployed and tested on node '%s'.", nodeConfig.Name)
+		return nil
+	}, "TStore contract deployment and testing operation")
+}

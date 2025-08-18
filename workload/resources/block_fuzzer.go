@@ -362,3 +362,49 @@ func FuzzBlockSubmission(ctx context.Context, api api.FullNode) error {
 	log.Printf("[INFO] Completed %d test cases", len(testCases))
 	return nil
 }
+
+// PerformStressMaxMessageSize runs max message size stress test
+func PerformStressMaxMessageSize(ctx context.Context, nodeConfig *NodeConfig) error {
+	log.Printf("[INFO] Starting max message size stress test on node '%s'...", nodeConfig.Name)
+
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	return RetryOperation(ctx, func() error {
+		err := SendMaxSizedMessage(ctx, api)
+		if err != nil {
+			log.Printf("[ERROR] Max message size stress test failed: %v", err)
+			return nil
+		}
+
+		log.Printf("[INFO] Max message size stress test completed successfully")
+		return nil
+	}, "Max message size stress test operation")
+}
+
+// PerformBlockFuzzing runs block fuzzing on a specified node
+func PerformBlockFuzzing(ctx context.Context, nodeConfig *NodeConfig) error {
+	log.Printf("[INFO] Starting block fuzzing on node '%s'...", nodeConfig.Name)
+
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	return RetryOperation(ctx, func() error {
+		err := FuzzBlockSubmission(ctx, api)
+		if err != nil {
+			log.Printf("[WARN] Block fuzzing failed, will retry: %v", err)
+			return err // Return original error for retry
+		}
+
+		log.Printf("[INFO] Block fuzzing completed successfully")
+		return nil
+	}, "Block fuzzing operation")
+}

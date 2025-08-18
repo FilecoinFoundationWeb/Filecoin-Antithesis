@@ -29,6 +29,7 @@ echo "formatted_json: $formatted_json"
 export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
 export FOREST_F3_BOOTSTRAP_EPOCH=21
 export FOREST_F3_FINALITY=10
+export FOREST_CHAIN_INDEXER_ENABLED=true
 NETWORK_NAME=$(jq -r '.NetworkName' "${LOTUS_1_DATA_DIR}/localnet.json")
 export NETWORK_NAME=$NETWORK_NAME
 forest --version

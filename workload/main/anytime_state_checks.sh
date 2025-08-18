@@ -7,19 +7,12 @@ source "$(dirname "$0")/health_check_functions.sh"
 log_script_start
 
 # Array of available nodes
-NODES=("Lotus1" "Lotus2")
+NODES=("Lotus1" "Lotus2" "Forest")
 
-# Function to get a random node
-get_random_node() {
-    local len=${#NODES[@]}
-    local rand_index=$((RANDOM % len))
-    echo "${NODES[$rand_index]}"
-}
+# Loop through all nodes and check state
+for node in "${NODES[@]}"; do
+    echo "Running state mismatch check for node: $node"
+    /opt/antithesis/app state check --node "$node"
+done
 
-# Get a random node
-SELECTED_NODE=$(get_random_node)
-
-echo "Selected node for state mismatch check: $SELECTED_NODE"
-
-# Run state mismatch check
-/opt/antithesis/app state check --node "$SELECTED_NODE"
+exit 0
