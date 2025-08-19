@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 type MethodConfig struct {
@@ -202,4 +204,80 @@ func DoRawRPCRequest(endpoint string, version int, body string) (int, []byte) {
 		return 0, nil
 	}
 	return response.StatusCode, respBody
+}
+
+// CallV2API calls V2 API tests
+func CallV2API(endpoint string) {
+	log.Printf("[INFO] Starting V2 API tests on endpoint: %s", endpoint)
+
+	// Run standard tests
+	log.Printf("[INFO] Running standard V2 API tests...")
+	RunV2APITests(endpoint, 5*time.Second)
+
+	// Run load tests
+	log.Printf("[INFO] Running V2 API load tests...")
+	RunV2APILoadTest(endpoint, 10*time.Second, 5, 10)
+
+	log.Printf("[INFO] V2 API testing completed")
+}
+
+// CheckF3Running checks if F3 is running on nodes
+func CheckF3Running() error {
+	urls := []string{
+		"http://forest:23456",
+		"http://lotus-1:1234",
+		"http://lotus-2:1235",
+	}
+
+	request := `{"jsonrpc":"2.0","method":"Filecoin.F3IsRunning","params":[],"id":1}`
+
+	for _, url := range urls {
+		_, resp := DoRawRPCRequest(url, 1, request)
+		var response struct {
+			Result bool `json:"result"`
+		}
+		if err := json.Unmarshal(resp, &response); err != nil {
+			log.Printf("[WARN] Failed to parse response from %s: %v", url, err)
+			continue
+		}
+
+		log.Printf("[INFO] F3 is running on %s: %v", url, response.Result)
+		assert.Sometimes(response.Result, fmt.Sprintf("F3 is running on %s", url),
+			map[string]interface{}{"requirement": fmt.Sprintf("F3 is running on %s", url)})
+	}
+	return nil
+}
+
+// CheckPeers checks peer connections
+func CheckPeers() error {
+	urls := []string{
+		"http://forest:3456",
+		"http://lotus-1:1234",
+		"http://lotus-2:1235",
+	}
+
+	request := `{"jsonrpc":"2.0","method":"Filecoin.NetPeers","params":[],"id":1}`
+
+	for _, url := range urls {
+		_, resp := DoRawRPCRequest(url, 1, request)
+		var response struct {
+			Result []struct {
+				ID string `json:"ID"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(resp, &response); err != nil {
+			log.Printf("[WARN] Failed to parse response from %s: %v", url, err)
+			continue
+		}
+
+		peerCount := len(response.Result)
+		if peerCount == 0 {
+			log.Printf("[INFO] Node %s has no peers (may be intentionally disconnected for reorg simulation)", url)
+		} else {
+			log.Printf("[INFO] Node %s has %d peers", url, peerCount)
+		}
+	}
+
+	log.Printf("[INFO] Peer information logged for all nodes")
+	return nil
 }

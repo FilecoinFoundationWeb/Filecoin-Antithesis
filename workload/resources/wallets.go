@@ -341,3 +341,79 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 
 	return nil
 }
+
+// PerformCreateOperation creates wallets on a specified node
+func PerformCreateOperation(ctx context.Context, nodeConfig *NodeConfig, numWallets int, tokenAmount abi.TokenAmount) error {
+	log.Printf("Creating %d wallets on node '%s'...", numWallets, nodeConfig.Name)
+
+	// Retry connection up to 3 times
+	for retry := 0; retry < 3; retry++ {
+		api, closer, err := ConnectToNode(ctx, *nodeConfig)
+		if err != nil {
+			log.Printf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+			return nil
+		}
+
+		// Handle graceful connection failure
+		if api == nil {
+			if retry < 2 {
+				log.Printf("[WARN] Could not establish connection to node '%s' (retry %d/3), retrying...", nodeConfig.Name, retry+1)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			log.Printf("[WARN] Could not establish connection to node '%s' after 3 attempts, skipping wallet creation", nodeConfig.Name)
+			return nil
+		}
+
+		defer closer()
+
+		err = InitializeWallets(ctx, api, numWallets, tokenAmount)
+		if err != nil {
+			log.Printf("Warning: Error occurred during wallet initialization: %v", err)
+			return err
+		} else {
+			log.Printf("Wallets created successfully on node '%s'", nodeConfig.Name)
+			return nil
+		}
+	}
+
+	return nil
+}
+
+// PerformDeleteOperation deletes wallets on a specified node
+func PerformDeleteOperation(ctx context.Context, nodeConfig *NodeConfig) error {
+	log.Printf("Deleting wallets on node '%s'...", nodeConfig.Name)
+
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	return RetryOperation(ctx, func() error {
+		allWallets, err := GetAllWalletAddressesExceptGenesis(ctx, api)
+		if err != nil {
+			log.Printf("[ERROR] Failed to list wallets on node '%s': %v", nodeConfig.Name, err)
+			return nil
+		}
+
+		if len(allWallets) == 0 {
+			log.Printf("No wallets available to delete on node '%s'", nodeConfig.Name)
+			return nil
+		}
+
+		// Delete a random number of wallets
+		rand.Seed(time.Now().UnixNano())
+		numToDelete := rand.Intn(len(allWallets)) + 1
+		walletsToDelete := allWallets[:numToDelete]
+
+		if err := DeleteWallets(ctx, api, walletsToDelete); err != nil {
+			log.Printf("[ERROR] Failed to delete wallets on node '%s': %v", nodeConfig.Name, err)
+			return nil
+		}
+
+		log.Printf("Deleted %d wallets successfully on node '%s'", numToDelete, nodeConfig.Name)
+		return nil
+	}, "Delete wallets operation")
+}

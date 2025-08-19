@@ -27,8 +27,9 @@ json=$(curl -s "$DRAND_SERVER/info")
 formatted_json=$(jq --arg server "$DRAND_SERVER" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$json")
 echo "formatted_json: $formatted_json"
 export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
-export FOREST_F3_BOOTSTRAP_EPOCH=21
-export FOREST_F3_FINALITY=10
+export FOREST_F3_BOOTSTRAP_EPOCH=5
+export FOREST_F3_FINALITY=2
+export FOREST_CHAIN_INDEXER_ENABLED=true
 NETWORK_NAME=$(jq -r '.NetworkName' "${LOTUS_1_DATA_DIR}/localnet.json")
 export NETWORK_NAME=$NETWORK_NAME
 forest --version

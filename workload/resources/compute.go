@@ -74,3 +74,19 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 	}
 	return nil
 }
+
+// PerformStateCheck checks state consistency
+func PerformStateCheck(ctx context.Context, nodeConfig *NodeConfig) error {
+	log.Printf("[INFO] Starting state consistency check on node '%s'...", nodeConfig.Name)
+
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	return RetryOperation(ctx, func() error {
+		return StateMismatch(ctx, api)
+	}, "State consistency check operation")
+}
