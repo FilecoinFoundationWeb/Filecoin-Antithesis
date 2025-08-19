@@ -101,7 +101,45 @@ func walletCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					return resources.PerformCreateOperation(c.Context, nodeConfig, c.Int("count"), abi.NewTokenAmount(1000000000000000))
+					if nodeConfig.Name == "Forest" {
+						api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+						if err != nil {
+							return err
+						}
+						defer closer()
+						return resources.CreateForestWallets(c.Context, api, c.Int("count"), abi.NewTokenAmount(100000000000000))
+					} else {
+						return resources.PerformCreateOperation(c.Context, nodeConfig, c.Int("count"), abi.NewTokenAmount(1000000000000000))
+					}
+				},
+			},
+			{
+				Name:  "fund",
+				Usage: "Fund forest genesis wallet",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+					if err != nil {
+						return err
+					}
+					defer closer()
+					lotusNodeConfig := resources.NodeConfig{
+						Name:          "Lotus1",
+						RPCURL:        "http://lotus-1:1234/rpc/v1",
+						AuthTokenPath: "/root/devgen/lotus-1/jwt",
+					}
+					lotusapi, closer, err := resources.ConnectToNode(c.Context, lotusNodeConfig)
+					if err != nil {
+						return err
+					}
+					defer closer()
+					return resources.InitializeForestWallets(c.Context, api, lotusapi, 1, abi.NewTokenAmount(10000000000000000))
 				},
 			},
 			{

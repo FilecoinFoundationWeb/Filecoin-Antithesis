@@ -56,6 +56,94 @@ func InitializeWallets(ctx context.Context, api api.FullNode, numWallets int, fu
 	return nil
 }
 
+func InitializeForestWallets(ctx context.Context, api, lotusapi api.FullNode, numWallets int, fundingAmount abi.TokenAmount) error {
+
+	wallet, err := CreateWallet(ctx, api, types.KTBLS)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create wallet: %v", err)
+		return nil
+	}
+	log.Printf("Created wallet: %s", wallet)
+
+	genesisWallet, err := GetGenesisWallet(ctx, lotusapi)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get genesis wallet: %v", err)
+		return nil
+	}
+
+	err = SendFunds(ctx, api, genesisWallet, wallet, fundingAmount)
+	if err != nil {
+		log.Printf("[ERROR] Failed to send funds: %v", err)
+		return nil
+	}
+	log.Printf("Sent funds to wallet: %s", wallet)
+
+	err = api.WalletSetDefault(ctx, wallet)
+	if err != nil {
+		log.Printf("[ERROR] Failed to set default wallet: %v", err)
+		return nil
+	}
+	log.Printf("Set default wallet: %s", wallet)
+	time.Sleep(20 * time.Second)
+	return nil
+}
+
+func CreateForestWallets(ctx context.Context, api api.FullNode, numWallets int, fundingAmount abi.TokenAmount) error {
+	defaultWallet, err := api.WalletDefaultAddress(ctx)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get default wallet: %v", err)
+		return nil
+	}
+	funds, err := api.WalletBalance(ctx, defaultWallet)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get balance: %v", err)
+		return nil
+	}
+	nodeconfig := NodeConfig{
+		Name:          "Forest",
+		RPCURL:        "http://lotus-1:1234/rpc/v1",
+		AuthTokenPath: "/root/devgen/lotus-1/jwt",
+	}
+	lotusapi, closer, err := ConnectToNode(ctx, nodeconfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node: %v", err)
+		return nil
+	}
+	defer closer()
+	if funds == abi.NewTokenAmount(0) {
+		log.Printf("[ERROR] Default wallet has no balance")
+		InitializeForestWallets(ctx, api, lotusapi, 1, abi.NewTokenAmount(1000000000000000))
+		return nil
+	}
+	log.Printf("Balance: %s", funds)
+	createdWallets := 0
+	for i := 0; i < numWallets; i++ {
+		wallet, err := CreateWallet(ctx, api, types.KTBLS)
+		if err != nil {
+			log.Printf("[ERROR] Failed to create wallet: %v", err)
+			return nil
+		}
+		err = SendFunds(ctx, api, defaultWallet, wallet, fundingAmount)
+		if err != nil {
+			log.Printf("Failed to fund wallet #%d: %v. Wallet was created but not funded.", i+1, err)
+			continue
+		}
+		log.Printf("Created and funded wallet #%d: %s with %s FIL", i+1, wallet, fundingAmount.String())
+		createdWallets++
+	}
+
+	if createdWallets == 0 {
+		log.Printf("[ERROR] Failed to create and fund any wallets")
+		return nil
+	}
+
+	if createdWallets < numWallets {
+		log.Printf("Warning: Only created %d out of %d requested wallets", createdWallets, numWallets)
+	}
+
+	return nil
+}
+
 // CreateWallet creates a wallet of the specified type and returns its address.
 func CreateWallet(ctx context.Context, api api.FullNode, walletType types.KeyType) (address.Address, error) {
 	wallet, err := api.WalletNew(ctx, walletType)
@@ -208,7 +296,6 @@ func GetAllWalletAddressesExceptGenesis(ctx context.Context, api api.FullNode) (
 			walletsToDelete = append(walletsToDelete, wallet)
 		}
 	}
-
 	return walletsToDelete, nil
 }
 

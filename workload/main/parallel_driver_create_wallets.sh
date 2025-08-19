@@ -9,9 +9,9 @@ log_script_start
 # Configurable parameters
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-NODE_NAMES=("Lotus1" "Lotus2")  # Replace with your actual node names
-MIN_WALLETS=5                  # Minimum number of wallets to create
-MAX_WALLETS=15                 # Maximum number of wallets to create
+NODE_NAMES=("Lotus1" "Lotus2" "Forest")  
+MIN_WALLETS=5                 
+MAX_WALLETS=15                 
 
 # Ensure the app binary exists
 if [ ! -f "$APP_BINARY" ]; then
