@@ -18,10 +18,10 @@ func CreateBaseMessage(from, to address.Address, _ uint64) *types.Message {
 	return &types.Message{
 		From:       from,
 		To:         to,
-		Value:      types.NewInt(100000000000000), // 0.0001 FIL in attoFIL
+		Value:      types.NewInt(1000000), // 0.0001 FIL in attoFIL
 		GasLimit:   1000000,
-		GasFeeCap:  types.NewInt(1000000000), // 1 nanoFIL in attoFIL
-		GasPremium: types.NewInt(1000000000), // 1 nanoFIL in attoFIL
+		GasFeeCap:  types.NewInt(100000), // 1 nanoFIL in attoFIL
+		GasPremium: types.NewInt(100000), // 1 nanoFIL in attoFIL
 		Method:     0,
 		Params:     nil,
 	}

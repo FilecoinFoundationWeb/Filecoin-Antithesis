@@ -9,16 +9,11 @@ log_script_start
 echo "Starting parallel block fuzzing"
 
 
-# Randomly select a node
-if [ $((RANDOM % 2)) -eq 0 ]; then
-    NODE="Lotus1"
-else
-    NODE="Lotus2"
-fi
+NODES=("Lotus1" "Lotus2" "Forest")
 
-log_info "Running block fuzzing on ${NODE}"
-
-# Run block fuzzing
-/opt/antithesis/app stress block-fuzz --node ${NODE}
+for NODE in "${NODES[@]}"; do
+    log_info "Running block fuzzing on ${NODE}"
+    /opt/antithesis/app stress block-fuzz --node ${NODE}
+done
 
 echo "Parallel block fuzzing completed" 

@@ -63,7 +63,7 @@ func CheckEthMethods(ctx context.Context) error {
 					}
 					log.Printf("[DEBUG] Block by Number - Height: %d, Hash: %s", i, ethBlockA.Hash)
 
-					ethBlockB, err := api.EthGetBlockByHash(ctx, ethBlockA.Hash, false)
+					ethBlockB, err := api.EthGetBlockByHash(ctx, ethBlockA.Hash, true)
 					if err != nil {
 						log.Printf("[ERROR] Failed to get tipset @%d via eth_getBlockByHash: %v", i, err)
 						return nil

@@ -36,6 +36,9 @@ do
 done
 
 echo "Workload [entrypoint]: chainhead has reached block height ${INIT_BLOCK_HEIGHT}"
+echo "Funding forest default wallet..."
+/opt/antithesis/app wallet fund --node Forest
+echo "Completed funding forest default wallet."
 
 python3 -u /opt/antithesis/entrypoint/setup_complete.py
 

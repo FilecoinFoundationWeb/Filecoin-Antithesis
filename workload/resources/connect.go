@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-jsonrpc"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
@@ -522,4 +523,115 @@ func PerformReorgOperation(ctx context.Context, nodeConfig *NodeConfig, checkCon
 	}
 	log.Printf("Reorg simulation completed successfully for node '%s'", nodeConfig.Name)
 	return nil
+}
+
+func PerformNotifyOperation(ctx context.Context, config *Config) error {
+	log.Printf("Streaming chain updates concurrently across all nodes...")
+	nodes := FilterV1Nodes(config.Nodes)
+
+	// Create a context with cancellation for all goroutines
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Channel to collect errors from goroutines
+	errorChan := make(chan error, len(nodes))
+
+	// Launch a goroutine for each node
+	for _, node := range nodes {
+		node := node // Capture loop variable for goroutine
+		go func() {
+			if err := streamNodeUpdates(ctx, node); err != nil {
+				errorChan <- fmt.Errorf("node %s error: %w", node.Name, err)
+			} else {
+				errorChan <- nil
+			}
+		}()
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < len(nodes); i++ {
+		if err := <-errorChan; err != nil {
+			log.Printf("[ERROR] %v", err)
+			// Don't return immediately, wait for all nodes
+		}
+	}
+
+	log.Printf("[INFO] All nodes completed streaming")
+	return nil
+}
+
+// streamNodeUpdates handles streaming for a single node
+func streamNodeUpdates(ctx context.Context, node NodeConfig) error {
+	api, closer, err := ConnectToNode(ctx, node)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to node '%s': %v", node.Name, err)
+		return err
+	}
+	defer closer()
+
+	// Get initial chain head
+	initialHead, err := api.ChainHead(ctx)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get initial chain head for node '%s': %v", node.Name, err)
+		return err
+	}
+
+	initialHeight := initialHead.Height() - 5
+	log.Printf("[INFO] Node '%s' starting at height: %d, TipSet: %s",
+		node.Name, initialHeight, initialHead.Cids())
+
+	// Stream updates for a few epochs (e.g., 5 epochs)
+	targetHeight := initialHeight + 15
+	log.Printf("[INFO] Node '%s' streaming updates until height %d...", node.Name, targetHeight)
+
+	// Poll every 7 seconds for new blocks
+	ticker := time.NewTicker(7 * time.Second)
+	defer ticker.Stop()
+
+	timeout := time.After(1 * time.Minute) // Maximum 1 minute per node
+
+	lastReportedHeight := initialHeight
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("[INFO] Context cancelled for node '%s'", node.Name)
+			return nil
+		case <-timeout:
+			log.Printf("[INFO] Timeout reached for node '%s'", node.Name)
+			return nil
+		case <-ticker.C:
+			currentHead, err := api.ChainHead(ctx)
+			if err != nil {
+				log.Printf("[WARN] Failed to get current chain head for node '%s': %v", node.Name, err)
+				continue
+			}
+
+			currentHeight := currentHead.Height()
+
+			// Check if we've reached our target height
+			if currentHeight >= targetHeight {
+				log.Printf("[INFO] Node '%s' reached target height %d, stopping stream",
+					node.Name, targetHeight)
+				return nil
+			}
+
+			// Check if there are new blocks since last check
+			if currentHeight > lastReportedHeight {
+				heightDiff := currentHeight - lastReportedHeight
+				log.Printf("[INFO] Node '%s' advanced %d epochs: %d → %d (TipSet: %s)",
+					node.Name, heightDiff, lastReportedHeight, currentHeight, currentHead.Cids())
+
+				lastReportedHeight = currentHeight
+			}
+			assert.Always(currentHeight > lastReportedHeight, "All nodes should be advancing", map[string]interface{}{
+				"current_height":       currentHeight,
+				"last_reported_height": lastReportedHeight,
+				"node":                 node.Name,
+				"property":             "Chain advancement",
+				"impact":               "Critical - indicates node stalls",
+			})
+
+		}
+	}
 }

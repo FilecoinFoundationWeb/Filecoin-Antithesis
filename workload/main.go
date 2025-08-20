@@ -107,7 +107,7 @@ func walletCommands() *cli.Command {
 							return err
 						}
 						defer closer()
-						return resources.CreateForestWallets(c.Context, api, c.Int("count"), abi.NewTokenAmount(100000000000000))
+						return resources.CreateForestWallets(c.Context, api, c.Int("count"), abi.NewTokenAmount(10000000000000))
 					} else {
 						return resources.PerformCreateOperation(c.Context, nodeConfig, c.Int("count"), abi.NewTokenAmount(1000000000000000))
 					}
@@ -139,7 +139,7 @@ func walletCommands() *cli.Command {
 						return err
 					}
 					defer closer()
-					return resources.InitializeForestWallets(c.Context, api, lotusapi, 1, abi.NewTokenAmount(10000000000000000))
+					return resources.InitializeForestWallets(c.Context, api, lotusapi, 1, abi.NewTokenAmount(1000000000000000000))
 				},
 			},
 			{
@@ -190,13 +190,20 @@ func networkCommands() *cli.Command {
 					}
 					defer closer()
 
-					lotusNodes := resources.FilterLotusNodes(config.Nodes)
+					lotusNodes := resources.FilterV1Nodes(config.Nodes)
 					if err := resources.ConnectToOtherNodes(c.Context, api, *nodeConfig, lotusNodes); err != nil {
 						log.Printf("[ERROR] Failed to connect node '%s' to other nodes: %v", nodeConfig.Name, err)
 						return nil
 					}
 					log.Printf("Node '%s' connected successfully", nodeConfig.Name)
 					return nil
+				},
+			},
+			{
+				Name:  "notify",
+				Usage: "Poll the chain for new updates",
+				Action: func(c *cli.Context) error {
+					return resources.PerformNotifyOperation(c.Context, config)
 				},
 			},
 			{
@@ -444,7 +451,8 @@ func consensusCommands() *cli.Command {
 					},
 				},
 				Action: func(c *cli.Context) error {
-					return resources.PerformConsensusCheck(c.Context, config, c.Int64("height"))
+					filteredConfig := resources.FilterV1Nodes(config.Nodes)
+					return resources.PerformConsensusCheck(c.Context, &resources.Config{Nodes: filteredConfig}, c.Int64("height"))
 				},
 			},
 			{
@@ -498,13 +506,6 @@ func chainCommands() *cli.Command {
 				Usage: "Check chain index backfill",
 				Action: func(c *cli.Context) error {
 					return resources.PerformCheckBackfill(c.Context, config)
-				},
-			},
-			{
-				Name:  "jsonrpc",
-				Usage: "Test JSON-RPC",
-				Action: func(c *cli.Context) error {
-					return resources.TestJsonRPC(c.Context)
 				},
 			},
 		},

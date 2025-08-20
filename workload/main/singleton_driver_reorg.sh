@@ -9,7 +9,7 @@ log_script_start
 
 echo "Starting reorg simulation"
 # Array of available nodes
-NODES=("Lotus1" "Lotus2")
+NODES=("Lotus1" "Lotus2" "Forest")
 
 # Function to get a random node
 get_random_node() {

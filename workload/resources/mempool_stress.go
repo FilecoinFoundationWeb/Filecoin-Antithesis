@@ -106,7 +106,7 @@ func PerformSpamOperation(ctx context.Context, config *Config) error {
 	}()
 
 	// Filter nodes for operation
-	filteredNodes := FilterLotusNodes(config.Nodes)
+	filteredNodes := FilterV1Nodes(config.Nodes)
 	log.Printf("[INFO] Filtered nodes for spam operation: %+v", filteredNodes)
 
 	// Connect to each node and retrieve wallets
