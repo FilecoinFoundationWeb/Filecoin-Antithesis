@@ -200,13 +200,6 @@ func networkCommands() *cli.Command {
 				},
 			},
 			{
-				Name:  "notify",
-				Usage: "Poll the chain for new updates",
-				Action: func(c *cli.Context) error {
-					return resources.PerformNotifyOperation(c.Context, config)
-				},
-			},
-			{
 				Name:  "disconnect",
 				Usage: "Disconnect node from other nodes",
 				Flags: []cli.Flag{
@@ -490,6 +483,143 @@ func monitoringCommands() *cli.Command {
 				Usage: "Check F3 service status",
 				Action: func(c *cli.Context) error {
 					return resources.CheckF3Running()
+				},
+			},
+			{
+				Name:  "chain-notify",
+				Usage: "Monitor chain notifications for tipset changes",
+				Flags: []cli.Flag{
+					&cli.DurationFlag{
+						Name:  "duration",
+						Usage: "Duration to monitor (e.g., 30s, 1m, 2m)",
+						Value: 30 * time.Second,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					monitorConfig := &resources.HealthMonitorConfig{
+						EnableChainNotify:       true,
+						EnableHeightProgression: false,
+						EnablePeerCount:         false,
+						EnableF3Status:          false,
+						MonitorDuration:         c.Duration("duration"),
+					}
+					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
+				},
+			},
+			{
+				Name:  "height-progression",
+				Usage: "Monitor height progression for all nodes",
+				Flags: []cli.Flag{
+					&cli.DurationFlag{
+						Name:  "duration",
+						Usage: "Duration to monitor (e.g., 30s, 1m, 2m)",
+						Value: 30 * time.Second,
+					},
+					&cli.DurationFlag{
+						Name:  "interval",
+						Usage: "Interval between height checks (e.g., 5s, 7s, 10s)",
+						Value: 7 * time.Second,
+					},
+					&cli.IntFlag{
+						Name:  "max-stalls",
+						Usage: "Maximum consecutive stalls before failing",
+						Value: 3,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					monitorConfig := &resources.HealthMonitorConfig{
+						EnableChainNotify:       false,
+						EnableHeightProgression: true,
+						EnablePeerCount:         false,
+						EnableF3Status:          false,
+						MonitorDuration:         c.Duration("duration"),
+						HeightCheckInterval:     c.Duration("interval"),
+						MaxConsecutiveStalls:    c.Int("max-stalls"),
+					}
+					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
+				},
+			},
+
+			{
+				Name:  "peer-count",
+				Usage: "Check peer count for all nodes",
+				Action: func(c *cli.Context) error {
+					monitorConfig := &resources.HealthMonitorConfig{
+						EnableChainNotify:       false,
+						EnableHeightProgression: false,
+						EnablePeerCount:         true,
+						EnableF3Status:          false,
+					}
+					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
+				},
+			},
+			{
+				Name:  "f3-status",
+				Usage: "Check F3 running status for all nodes",
+				Action: func(c *cli.Context) error {
+					monitorConfig := &resources.HealthMonitorConfig{
+						EnableChainNotify:       false,
+						EnableHeightProgression: false,
+						EnablePeerCount:         false,
+						EnableF3Status:          true,
+					}
+					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
+				},
+			},
+			{
+				Name:  "comprehensive",
+				Usage: "Perform comprehensive health check with all monitoring features",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "chain-notify",
+						Usage: "Enable chain notify monitoring (tipset changes)",
+						Value: true,
+					},
+					&cli.BoolFlag{
+						Name:  "height-progression",
+						Usage: "Enable height progression monitoring",
+						Value: true,
+					},
+
+					&cli.BoolFlag{
+						Name:  "peer-count",
+						Usage: "Enable peer count monitoring",
+						Value: true,
+					},
+					&cli.BoolFlag{
+						Name:  "f3-status",
+						Usage: "Enable F3 running status checks",
+						Value: true,
+					},
+					&cli.DurationFlag{
+						Name:  "monitor-duration",
+						Usage: "Duration to monitor for chain notify and height progression (e.g., 30s, 1m, 2m)",
+						Value: 30 * time.Second,
+					},
+					&cli.DurationFlag{
+						Name:  "height-check-interval",
+						Usage: "Interval between height checks (e.g., 5s, 7s, 10s)",
+						Value: 7 * time.Second,
+					},
+					&cli.IntFlag{
+						Name:  "max-consecutive-stalls",
+						Usage: "Maximum consecutive stalls before failing height progression check",
+						Value: 3,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					// Create a custom config for the health monitor
+					monitorConfig := &resources.HealthMonitorConfig{
+						EnableChainNotify:       c.Bool("chain-notify"),
+						EnableHeightProgression: c.Bool("height-progression"),
+						EnablePeerCount:         c.Bool("peer-count"),
+						EnableF3Status:          c.Bool("f3-status"),
+						MonitorDuration:         c.Duration("monitor-duration"),
+						HeightCheckInterval:     c.Duration("height-check-interval"),
+						MaxConsecutiveStalls:    c.Int("max-consecutive-stalls"),
+					}
+
+					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
 				},
 			},
 		},
