@@ -9,22 +9,23 @@ TARGET_ARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/'
 DOCKER_PLATFORM = linux/$(TARGET_ARCH)
 
 # Simple build command that works with any architecture
-BUILD_CMD = docker build
+BUILD_CMD = docker build --load
+LOCAL_BUILD ?= 1
 
 .PHONY: build-forest
 build-forest:
 	@echo "Building forest for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg GIT_COMMIT=$(forest_commit) -t forest:latest -f forest/Dockerfile forest
+	$(BUILD_CMD) --build-arg GIT_COMMIT=$(forest_commit) --build-arg LOCAL_BUILD=${LOCAL_BUILD}  -t forest:latest -f forest/Dockerfile forest
 
 .PHONY: build-drand
 build-drand:
 	@echo "Building drand for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(drand_tag) -t drand:latest -f drand/Dockerfile drand
+	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(drand_tag) --build-arg LOCAL_BUILD=${LOCAL_BUILD} -t drand:latest -f drand/Dockerfile drand
 
 .PHONY: build-lotus
 build-lotus:
 	@echo "Building lotus for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(lotus_tag) -t lotus:latest -f lotus/Dockerfile lotus
+	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(lotus_tag) --build-arg LOCAL_BUILD=${LOCAL_BUILD} -t lotus:latest -f lotus/Dockerfile lotus
 
 .PHONY: build-workload
 build-workload:
