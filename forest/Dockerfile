@@ -1,4 +1,4 @@
-FROM docker.io/rust:1.81-bookworm as builder
+FROM docker.io/rust:1.81-bookworm AS builder
 
 # Pin forest to a specific branch
 ARG GIT_COMMIT="main"
@@ -28,16 +28,9 @@ COPY ./forest_config.toml.tpl .
 # Step 4: Copy and apply the patch (this changes more frequently, so it's placed later)
 # COPY ./forest.patch ./forest.patch
 # RUN git apply ./forest.patch
-
+COPY libvoidstar.so /usr/local/lib/libvoidstar.so 
 RUN if [ "$LOCAL_BUILD" = "1" ]; then \
-        cargo build --release --bin forest-cli; \
-        cargo build --release --bin forest-tool; \
-        cargo build --release --bin forest-wallet; \
-        cargo build --release --bin forest; \
-        cp /forest/target/release/forest-cli /usr/local/cargo/bin/forest-cli; \
-        cp /forest/target/release/forest-tool /usr/local/cargo/bin/forest-tool; \
-        cp /forest/target/release/forest-wallet /usr/local/cargo/bin/forest-wallet; \
-        cp /forest/target/release/forest /usr/local/cargo/bin/forest; \
+        make install-quick; \
     else \
         # Build forest binaries + Rust instrumentation on main forest binary for code coverage 
         cargo build --release --bin forest-cli && \
@@ -47,7 +40,6 @@ RUN if [ "$LOCAL_BUILD" = "1" ]; then \
         cp /forest/target/release/forest-tool /usr/local/cargo/bin/forest-tool && \
         cp /forest/target/release/forest-wallet /usr/local/cargo/bin/forest-wallet && \
         # Setup Antithesis instrumentation
-        cp libvoidstar.so /usr/local/lib/libvoidstar.so && \
         export LD_LIBRARY_PATH=/usr/local/lib && \
         export RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 \
         -Cllvm-args=-sanitizer-coverage-trace-pc-guard -Clink-arg=-Wl,-z,undefs \

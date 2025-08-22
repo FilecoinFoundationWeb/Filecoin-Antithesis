@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -348,6 +349,17 @@ func FilterLotusNodes(nodes []NodeConfig) []NodeConfig {
 	return lotusNodes
 }
 
+// FilterLotusNodes returns a slice of NodeConfig containing only Lotus1 and Lotus2 nodes
+func FilterV1Nodes(nodes []NodeConfig) []NodeConfig {
+	var lotusNodes []NodeConfig
+	for _, node := range nodes {
+		if node.Name == "Lotus1" || node.Name == "Lotus2" || node.Name == "Forest" {
+			lotusNodes = append(lotusNodes, node)
+		}
+	}
+	return lotusNodes
+}
+
 // ChainPredicate encapsulates a chain condition.
 type ChainPredicate func(set *types.TipSet) bool
 
@@ -436,4 +448,78 @@ func IsConsensusOrEthScriptRunning() (bool, error) {
 	}
 
 	return false, nil
+}
+
+// PerformConnectDisconnectOperation toggles connection for a node
+func PerformConnectDisconnectOperation(ctx context.Context, nodeConfig *NodeConfig, config *Config) error {
+	log.Printf("Toggling connection for node '%s'...", nodeConfig.Name)
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	var lotusNodes []NodeConfig
+	for _, node := range config.Nodes {
+		if node.Name == "Lotus1" || node.Name == "Lotus2" {
+			lotusNodes = append(lotusNodes, node)
+		}
+	}
+
+	return RetryOperation(ctx, func() error {
+		// Check current connections
+		peers, err := api.NetPeers(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get peer list: %v", err)
+			return nil
+		}
+
+		// If we have peers, disconnect; otherwise connect
+		if len(peers) > 0 {
+			log.Printf("Node '%s' has %d peers, disconnecting...", nodeConfig.Name, len(peers))
+			if err := DisconnectFromOtherNodes(ctx, api); err != nil {
+				log.Printf("[ERROR] Failed to disconnect node '%s' from other nodes: %v", nodeConfig.Name, err)
+				return nil
+			}
+			log.Printf("Node '%s' disconnected successfully", nodeConfig.Name)
+		} else {
+			log.Printf("Node '%s' has no peers, connecting...", nodeConfig.Name)
+			if err := ConnectToOtherNodes(ctx, api, *nodeConfig, lotusNodes); err != nil {
+				log.Printf("[ERROR] Failed to connect node '%s' to other nodes: %v", nodeConfig.Name, err)
+				return nil
+			}
+			log.Printf("Node '%s' connected successfully", nodeConfig.Name)
+		}
+		return nil
+	}, fmt.Sprintf("Connection toggle operation for node %s", nodeConfig.Name))
+}
+
+// PerformReorgOperation simulates a reorg by disconnecting, waiting, and reconnecting
+func PerformReorgOperation(ctx context.Context, nodeConfig *NodeConfig, checkConsensus bool) error {
+	// Check for running consensus scripts if the flag is enabled
+	if checkConsensus {
+		isRunning, err := IsConsensusOrEthScriptRunning()
+		if err != nil {
+			log.Printf("[WARN] Failed to check for consensus/eth scripts: %v", err)
+		} else if isRunning {
+			log.Printf("[INFO] Consensus/ETH scripts detected running. Exiting reorg simulation early to avoid interference.")
+			return nil
+		}
+	}
+
+	log.Printf("Simulating reorg for node '%s'...", nodeConfig.Name)
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	if err := SimulateReorg(ctx, api); err != nil {
+		log.Printf("failed to simulate reorg for node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	log.Printf("Reorg simulation completed successfully for node '%s'", nodeConfig.Name)
+	return nil
 }

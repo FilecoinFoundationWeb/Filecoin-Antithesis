@@ -2,13 +2,19 @@ package resources
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"reflect"
+	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
+	"github.com/filecoin-project/go-state-types/big"
 	"github.com/filecoin-project/lotus/chain/types"
+	"github.com/filecoin-project/lotus/chain/types/ethtypes"
 )
 
 // CheckEthMethods verifies consistency between Ethereum API methods by comparing blocks
@@ -22,9 +28,10 @@ func CheckEthMethods(ctx context.Context) error {
 			return nil
 		}
 
-		filteredNodes := FilterLotusNodes(config.Nodes)
+		filteredNodes := FilterV1Nodes(config.Nodes)
 
 		for _, node := range filteredNodes {
+			log.Printf("[INFO] Checking ETH methods on node %s", node.Name)
 			api, closer, err := ConnectToNode(ctx, node)
 			if err != nil {
 				log.Printf("[ERROR] Failed to connect to node %s: %v", node.Name, err)
@@ -154,4 +161,219 @@ func CheckEthMethods(ctx context.Context) error {
 		}
 		return nil
 	}, "ETH methods consistency check")
+}
+
+// PerformEthMethodsCheck checks ETH methods consistency
+func PerformEthMethodsCheck(ctx context.Context) error {
+	log.Printf("[INFO] Starting ETH methods consistency check...")
+
+	err := CheckEthMethods(ctx)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create ETH methods checker: %v", err)
+		return nil
+	}
+	log.Printf("[INFO] ETH methods consistency check completed successfully")
+	return nil
+}
+
+// SendEthLegacyTransaction sends ETH legacy transaction
+func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error {
+	log.Printf("[INFO] Starting ETH legacy transaction check on node '%s'...", nodeConfig.Name)
+	key, ethAddr, deployer := NewAccount()
+	_, ethAddr2, _ := NewAccount()
+
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	defaultAddr, err := api.WalletDefaultAddress(ctx)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
+		return nil
+	}
+
+	SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
+	time.Sleep(60 * time.Second)
+
+	gasParams, err := json.Marshal(ethtypes.EthEstimateGasParams{Tx: ethtypes.EthCall{
+		From:  &ethAddr,
+		To:    &ethAddr2,
+		Value: ethtypes.EthBigInt(big.NewInt(100)),
+	}})
+	if err != nil {
+		log.Printf("[ERROR] Failed to marshal gas params: %v", err)
+		return nil
+	}
+
+	gasLimit, err := api.EthEstimateGas(ctx, gasParams)
+	if err != nil {
+		log.Printf("[WARN] Failed to estimate gas, which might be expected: %v", err)
+		return nil
+	}
+
+	tx := ethtypes.EthLegacyHomesteadTxArgs{
+		Value:    big.NewInt(100),
+		Nonce:    0,
+		To:       &ethAddr2,
+		GasPrice: types.NanoFil,
+		GasLimit: int(gasLimit),
+		V:        big.Zero(),
+		R:        big.Zero(),
+		S:        big.Zero(),
+	}
+	SignLegacyHomesteadTransaction(&tx, key.PrivateKey)
+	txHash := SubmitTransaction(ctx, api, &tx)
+	log.Printf("[INFO] Transaction submitted with hash: %s", txHash)
+
+	if txHash == ethtypes.EmptyEthHash {
+		log.Printf("[WARN] Transaction submission failed (empty hash), which might be expected.")
+		return nil
+	}
+	log.Printf("[INFO] Transaction: %v", txHash)
+
+	// Wait for transaction to be mined
+	log.Printf("[INFO] Waiting for transaction to be mined...")
+	time.Sleep(30 * time.Second)
+
+	// Get transaction receipt
+	receipt, err := api.EthGetTransactionReceipt(ctx, txHash)
+	if err != nil {
+		log.Printf("[WARN] Failed to get transaction receipt, which might be expected: %v", err)
+		return nil
+	}
+
+	if receipt == nil {
+		log.Printf("[WARN] Transaction receipt is nil, which might be expected.")
+		return nil
+	}
+
+	log.Printf("[INFO] ETH legacy transaction check completed successfully")
+	assert.Sometimes(receipt.Status == 1, "Transaction mined successfully", map[string]interface{}{"tx_hash": txHash})
+	return nil
+}
+
+// DeploySmartContract deploys a smart contract
+func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPath string) error {
+	log.Printf("[INFO] Deploying smart contract from %s...", contractPath)
+
+	// Connect to Lotus node
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+
+	// Create new account for deployment
+	key, ethAddr, deployer := NewAccount()
+	log.Printf("[INFO] Created new account - deployer: %s, ethAddr: %s", deployer, ethAddr)
+
+	// Get funds from default account
+	defaultAddr, err := api.WalletDefaultAddress(ctx)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
+		return nil
+	}
+
+	// Send funds to deployer account
+	log.Printf("[INFO] Sending funds to deployer account...")
+	err = SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
+	if err != nil {
+		log.Printf("[ERROR] Failed to send funds to deployer: %v", err)
+		return nil
+	}
+
+	// Wait for funds to be available
+	log.Printf("[INFO] Waiting for funds to be available...")
+	time.Sleep(30 * time.Second)
+
+	// Read and decode contract
+	contractHex, err := os.ReadFile(contractPath)
+	if err != nil {
+		log.Printf("[ERROR] Failed to read contract file: %v", err)
+		return nil
+	}
+	contract, err := hex.DecodeString(string(contractHex))
+	if err != nil {
+		log.Printf("[ERROR] Failed to decode contract: %v", err)
+		return nil
+	}
+
+	// Estimate gas
+	gasParams, err := json.Marshal(ethtypes.EthEstimateGasParams{Tx: ethtypes.EthCall{
+		From: &ethAddr,
+		Data: contract,
+	}})
+	if err != nil {
+		log.Printf("[ERROR] Failed to marshal gas params: %v", err)
+		return nil
+	}
+	gasLimit, err := api.EthEstimateGas(ctx, gasParams)
+	if err != nil {
+		log.Printf("[ERROR] Failed to estimate gas: %v", err)
+		return nil
+	}
+
+	// Get gas fees
+	maxPriorityFee, err := api.EthMaxPriorityFeePerGas(ctx)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get max priority fee: %v", err)
+		return nil
+	}
+
+	// Get nonce
+	nonce, err := api.MpoolGetNonce(ctx, deployer)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get nonce: %v", err)
+		return nil
+	}
+
+	// Create transaction
+	tx := ethtypes.Eth1559TxArgs{
+		ChainID:              31415926,
+		Value:                big.Zero(),
+		Nonce:                int(nonce),
+		MaxFeePerGas:         types.NanoFil,
+		MaxPriorityFeePerGas: big.Int(maxPriorityFee),
+		GasLimit:             int(gasLimit),
+		Input:                contract,
+		V:                    big.Zero(),
+		R:                    big.Zero(),
+		S:                    big.Zero(),
+	}
+
+	// Sign and submit transaction
+	log.Printf("[INFO] Signing and submitting transaction...")
+	SignTransaction(&tx, key.PrivateKey)
+	txHash := SubmitTransaction(ctx, api, &tx)
+	log.Printf("[INFO] Transaction submitted with hash: %s", txHash)
+
+	assert.Sometimes(txHash != ethtypes.EmptyEthHash, "Transaction must be submitted successfully", map[string]interface{}{
+		"tx_hash":     txHash.String(),
+		"deployer":    deployer.String(),
+		"requirement": "Transaction hash must not be empty",
+	})
+
+	// Wait for transaction to be mined
+	log.Printf("[INFO] Waiting for transaction to be mined...")
+	time.Sleep(30 * time.Second)
+
+	// Get transaction receipt
+	receipt, err := api.EthGetTransactionReceipt(ctx, txHash)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get transaction receipt: %v", err)
+		return nil
+	}
+
+	if receipt == nil {
+		log.Printf("[ERROR] Transaction receipt is nil")
+		return nil
+	}
+
+	// Assert transaction was mined successfully
+	assert.Sometimes(receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
+	return nil
 }
