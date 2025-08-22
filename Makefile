@@ -20,12 +20,12 @@ build-forest:
 .PHONY: build-drand
 build-drand:
 	@echo "Building drand for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(drand_tag) --build-arg LOCAL_BUILD=${LOCAL_BUILD} -t drand:latest -f drand/Dockerfile drand
+	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(drand_tag) -t drand:latest -f drand/Dockerfile drand
 
 .PHONY: build-lotus
 build-lotus:
 	@echo "Building lotus for $(TARGET_ARCH) architecture..."
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(lotus_tag) --build-arg LOCAL_BUILD=${LOCAL_BUILD} -t lotus:latest -f lotus/Dockerfile lotus
+	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(lotus_tag) -t lotus:latest -f lotus/Dockerfile lotus
 
 .PHONY: build-workload
 build-workload:
