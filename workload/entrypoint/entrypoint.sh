@@ -19,8 +19,68 @@ echo "Current system time: $current_time"
 
 RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.24:1234/rpc/v0}"
 
+# Function to fund forest wallet
+fund_forest_wallet() {
+    echo "Funding forest default wallet..."
+    LOTUS_WALLET=$(curl -s -X POST \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $(cat /root/devgen/lotus-1/jwt)" \
+      'http://10.20.20.24:1234/rpc/v1' \
+      --data '{
+        "jsonrpc": "2.0",
+        "method": "Filecoin.WalletDefaultAddress",
+        "params": [],
+        "id": 1
+    }' | jq -r '.result')
+
+    echo "Lotus wallet address: $LOTUS_WALLET"
+
+    FOREST_WALLET=$(curl -s -X POST \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $(cat /root/devgen/forest/jwt)" \
+      'http://10.20.20.28:3456/rpc/v1' \
+      --data '{
+        "jsonrpc": "2.0",
+        "method": "Filecoin.WalletNew",
+        "params": ["bls"],
+        "id": 1
+    }' | jq -r '.result')
+
+    echo "Forest wallet address: $FOREST_WALLET"
+
+    # Set the new Forest wallet as default
+    curl -s -X POST \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $(cat /root/devgen/forest/jwt)" \
+      'http://10.20.20.28:3456/rpc/v1' \
+      --data '{
+        "jsonrpc": "2.0",
+        "method": "Filecoin.WalletSetDefault",
+        "params": ["'$FOREST_WALLET'"],
+        "id": 1
+    }'
+    echo "Set Forest wallet as default"
+
+    curl -X POST \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $(cat /root/devgen/lotus-1/jwt)" \
+      'http://10.20.20.24:1234/rpc/v1' \
+      --data '{
+        "jsonrpc": "2.0",
+        "method": "Filecoin.MpoolPushMessage",
+        "params": [{
+            "To": "'$FOREST_WALLET'",
+            "From": "'$LOTUS_WALLET'",
+            "Value": "100000000000000000000000",
+            "Method": 0
+        }, null],
+        "id": 1
+    }'
+    echo "Completed funding forest default wallet."
+}
+
 # Waiting for the chain head to pass a certain height
-INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-10}"
+INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-5}"
 BLOCK_HEIGHT_REACHED=0
 
 echo "Workload [entrypoint]: waiting for block height to reach ${INIT_BLOCK_HEIGHT}"
@@ -36,9 +96,7 @@ do
 done
 
 echo "Workload [entrypoint]: chainhead has reached block height ${INIT_BLOCK_HEIGHT}"
-echo "Funding forest default wallet..."
-/opt/antithesis/app wallet fund --node Forest
-echo "Completed funding forest default wallet."
+fund_forest_wallet
 
 python3 -u /opt/antithesis/entrypoint/setup_complete.py
 
