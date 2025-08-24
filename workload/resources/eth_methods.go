@@ -304,19 +304,56 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 	key, ethAddr, deployer := NewAccount()
 	log.Printf("[INFO] Created new account - deployer: %s, ethAddr: %s", deployer, ethAddr)
 
-	// Get funds from default account
-	defaultAddr, err := api.WalletDefaultAddress(ctx)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
-		return nil
-	}
+	// Handle wallet initialization differently for Forest and Lotus nodes
+	if nodeConfig.Name == "Forest" {
+		// For Forest, we need to get funds from Lotus first
+		lotusNode := NodeConfig{
+			Name:          "Lotus1",
+			RPCURL:        "http://10.20.20.24:1234/rpc/v1",
+			AuthTokenPath: "/root/devgen/lotus-1/jwt",
+		}
+		lotusApi, lotusCloser, err := ConnectToNode(ctx, lotusNode)
+		if err != nil {
+			log.Printf("[ERROR] Failed to connect to Lotus node for Forest wallet initialization: %v", err)
+			return nil
+		}
+		defer lotusCloser()
 
-	// Send funds to deployer account
-	log.Printf("[INFO] Sending funds to deployer account...")
-	err = SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
-	if err != nil {
-		log.Printf("[ERROR] Failed to send funds to deployer: %v", err)
-		return nil
+		// Initialize Forest wallets with funding from Lotus
+		if err := InitializeForestWallets(ctx, api, lotusApi, 1, types.FromFil(100)); err != nil {
+			log.Printf("[ERROR] Failed to initialize Forest wallets: %v", err)
+			return nil
+		}
+
+		// Get the default wallet which was just set by InitializeForestWallets
+		defaultAddr, err := api.WalletDefaultAddress(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get Forest default wallet address: %v", err)
+			return nil
+		}
+
+		// Send funds to deployer account
+		log.Printf("[INFO] Sending funds to deployer account from Forest default wallet...")
+		err = SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
+		if err != nil {
+			log.Printf("[ERROR] Failed to send funds to deployer: %v", err)
+			return nil
+		}
+	} else {
+		// For Lotus nodes, use standard wallet initialization
+		defaultAddr, err := api.WalletDefaultAddress(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get default wallet address: %v", err)
+			return nil
+		}
+
+		// Send funds to deployer account
+		log.Printf("[INFO] Sending funds to deployer account...")
+		err = SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
+		if err != nil {
+			log.Printf("[ERROR] Failed to send funds to deployer: %v", err)
+			return nil
+		}
 	}
 
 	// Wait for funds to be available
