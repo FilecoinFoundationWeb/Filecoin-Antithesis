@@ -47,7 +47,6 @@ func main() {
 			chainCommands(),
 			stateCommands(),
 			stressCommands(),
-			rpcCommands(),
 			ethCommands(),
 		},
 	}
@@ -107,9 +106,9 @@ func walletCommands() *cli.Command {
 							return err
 						}
 						defer closer()
-						return resources.CreateForestWallets(c.Context, api, c.Int("count"), abi.NewTokenAmount(10000000000000))
+						return resources.CreateForestWallets(c.Context, api, c.Int("count"), abi.NewTokenAmount(1000000000000))
 					} else {
-						return resources.PerformCreateOperation(c.Context, nodeConfig, c.Int("count"), abi.NewTokenAmount(1000000000000000))
+						return resources.PerformCreateOperation(c.Context, nodeConfig, c.Int("count"), abi.NewTokenAmount(1000000000000))
 					}
 				},
 			},
@@ -718,30 +717,6 @@ func stressCommands() *cli.Command {
 						return err
 					}
 					return resources.PerformBlockFuzzing(c.Context, nodeConfig)
-				},
-			},
-		},
-	}
-}
-
-func rpcCommands() *cli.Command {
-	return &cli.Command{
-		Name:  "rpc",
-		Usage: "RPC operations",
-		Subcommands: []*cli.Command{
-			{
-				Name:  "benchmark",
-				Usage: "Run RPC benchmark tests",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "url",
-						Usage:    "RPC endpoint URL",
-						Required: true,
-					},
-				},
-				Action: func(c *cli.Context) error {
-					resources.CallV2API(c.String("url"))
-					return nil
 				},
 			},
 		},

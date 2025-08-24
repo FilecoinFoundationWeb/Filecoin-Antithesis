@@ -189,19 +189,52 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 	}
 	defer closer()
 
-	defaultAddr, err := api.WalletDefaultAddress(ctx)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
-		return nil
+	// Handle wallet initialization differently for Forest and Lotus nodes
+	if nodeConfig.Name == "Forest" {
+		// For Forest, we need to get funds from Lotus first
+		lotusNode := NodeConfig{
+			Name:          "Lotus1",
+			RPCURL:        "http://10.20.20.24:1234/rpc/v1",
+			AuthTokenPath: "/root/devgen/lotus-1/jwt",
+		}
+		lotusApi, lotusCloser, err := ConnectToNode(ctx, lotusNode)
+		if err != nil {
+			log.Printf("[ERROR] Failed to connect to Lotus node for Forest wallet initialization: %v", err)
+			return nil
+		}
+		defer lotusCloser()
+
+		// Initialize Forest wallets with funding from Lotus
+		if err := InitializeForestWallets(ctx, api, lotusApi, 1, types.FromFil(1000)); err != nil {
+			log.Printf("[ERROR] Failed to initialize Forest wallets: %v", err)
+			return nil
+		}
+
+		// Get the default wallet which was just set by InitializeForestWallets
+		defaultAddr, err := api.WalletDefaultAddress(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get Forest default wallet address: %v", err)
+			return nil
+		}
+
+		SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
+	} else {
+		// For Lotus nodes, use standard wallet initialization
+		defaultAddr, err := api.WalletDefaultAddress(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get default wallet address: %v", err)
+			return nil
+		}
+
+		SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
 	}
 
-	SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
 	time.Sleep(60 * time.Second)
 
 	gasParams, err := json.Marshal(ethtypes.EthEstimateGasParams{Tx: ethtypes.EthCall{
 		From:  &ethAddr,
 		To:    &ethAddr2,
-		Value: ethtypes.EthBigInt(big.NewInt(100)),
+		Value: ethtypes.EthBigInt(big.NewInt(10)),
 	}})
 	if err != nil {
 		log.Printf("[ERROR] Failed to marshal gas params: %v", err)
