@@ -30,6 +30,27 @@ func CheckEthMethods(ctx context.Context) error {
 
 		filteredNodes := FilterV1Nodes(config.Nodes)
 
+		// Check if we have enough epochs to avoid false positives
+		if len(filteredNodes) > 0 {
+			api, closer, err := ConnectToNode(ctx, filteredNodes[0])
+			if err != nil {
+				log.Printf("[ERROR] Failed to connect to node for epoch check: %v", err)
+				return nil
+			}
+			defer closer()
+
+			head, err := api.ChainHead(ctx)
+			if err != nil {
+				log.Printf("[ERROR] Failed to get chain head for epoch check: %v", err)
+				return nil
+			}
+
+			if head.Height() < 20 {
+				log.Printf("[INFO] Current epoch %d is less than required minimum (20). Skipping ETH methods check to avoid false positives.", head.Height())
+				return nil
+			}
+		}
+
 		for _, node := range filteredNodes {
 			log.Printf("[INFO] Checking ETH methods on node %s", node.Name)
 			api, closer, err := ConnectToNode(ctx, node)

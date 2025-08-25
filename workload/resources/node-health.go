@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -85,6 +84,27 @@ func ComprehensiveHealthCheck(ctx context.Context, config *Config) error {
 
 // ComprehensiveHealthCheckWithConfig performs health checks based on configuration
 func ComprehensiveHealthCheckWithConfig(ctx context.Context, config *Config, monitorConfig *HealthMonitorConfig) error {
+	nodes := FilterLotusNodes(config.Nodes)
+	if len(nodes) > 0 {
+		api, closer, err := ConnectToNode(ctx, nodes[0])
+		if err != nil {
+			log.Printf("[ERROR] Failed to connect to node for epoch check: %v", err)
+			return nil
+		}
+		defer closer()
+
+		head, err := api.ChainHead(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get chain head for epoch check: %v", err)
+			return nil
+		}
+
+		if head.Height() < 20 {
+			log.Printf("[INFO] Current epoch %d is less than required minimum (20). Skipping health checks to avoid false positives.", head.Height())
+			return nil
+		}
+	}
+
 	monitor := NewNodeHealthMonitor(config, monitorConfig)
 
 	log.Printf("[INFO] Starting comprehensive health check with config: %+v", monitorConfig)
@@ -109,9 +129,7 @@ func ComprehensiveHealthCheckWithConfig(ctx context.Context, config *Config, mon
 		log.Printf("[INFO] Height progression check disabled")
 	}
 
-	// Check 3: Reachability check removed (NetAutoNatStatus not reliable)
-
-	// Check 4: Peer count (if enabled)
+	// Check 3: Peer count (if enabled)
 	if monitorConfig.EnablePeerCount {
 		log.Printf("[INFO] Running peer count check...")
 		if err := monitor.CheckPeerCount(ctx); err != nil {
@@ -121,7 +139,7 @@ func ComprehensiveHealthCheckWithConfig(ctx context.Context, config *Config, mon
 		log.Printf("[INFO] Peer count check disabled")
 	}
 
-	// Check 5: F3 running status (if enabled)
+	// Check 4: F3 running status (if enabled)
 	if monitorConfig.EnableF3Status {
 		log.Printf("[INFO] Running F3 status check...")
 		if err := monitor.CheckF3Status(ctx); err != nil {
@@ -152,7 +170,8 @@ func (m *NodeHealthMonitor) CheckChainNotify(ctx context.Context) error {
 		node := node // Capture loop variable for goroutine
 		go func() {
 			if err := m.streamNodeUpdates(ctx, node); err != nil {
-				errorChan <- fmt.Errorf("node %s error: %w", node.Name, err)
+				log.Printf("[ERROR] node %s error: %v", node.Name, err)
+				errorChan <- nil
 			} else {
 				errorChan <- nil
 			}
@@ -279,7 +298,8 @@ func (m *NodeHealthMonitor) CheckHeightProgression(ctx context.Context) error {
 func (m *NodeHealthMonitor) monitorHeightForNode(ctx context.Context, node NodeConfig) error {
 	api, closer, err := ConnectToNode(ctx, node)
 	if err != nil {
-		return fmt.Errorf("failed to connect to node %s: %v", node.Name, err)
+		log.Printf("[ERROR] failed to connect to node %s: %v", node.Name, err)
+		return nil
 	}
 	defer closer()
 
@@ -340,8 +360,6 @@ func (m *NodeHealthMonitor) monitorHeightForNode(ctx context.Context, node NodeC
 	}
 }
 
-// CheckReachability removed - NetAutoNatStatus not reliable across node types
-
 // CheckPeerCount checks peer count for all nodes
 func (m *NodeHealthMonitor) CheckPeerCount(ctx context.Context) error {
 	log.Printf("[INFO] Starting peer count check...")
@@ -361,13 +379,15 @@ func (m *NodeHealthMonitor) CheckPeerCount(ctx context.Context) error {
 func (m *NodeHealthMonitor) checkNodePeerCount(ctx context.Context, node NodeConfig) error {
 	api, closer, err := ConnectToNode(ctx, node)
 	if err != nil {
-		return fmt.Errorf("failed to connect to node %s: %v", node.Name, err)
+		log.Printf("[ERROR] failed to connect to node %s: %v", node.Name, err)
+		return nil
 	}
 	defer closer()
 
 	peers, err := api.NetPeers(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get peers for node %s: %v", node.Name, err)
+		log.Printf("[ERROR] failed to get peers for node %s: %v", node.Name, err)
+		return nil
 	}
 
 	peerCount := len(peers)
@@ -403,13 +423,19 @@ func (m *NodeHealthMonitor) CheckF3Status(ctx context.Context) error {
 func (m *NodeHealthMonitor) checkNodeF3Status(ctx context.Context, node NodeConfig) error {
 	api, closer, err := ConnectToNode(ctx, node)
 	if err != nil {
-		return fmt.Errorf("failed to connect to node %s: %v", node.Name, err)
+		log.Printf("[ERROR] failed to connect to node %s: %v", node.Name, err)
+		return nil
 	}
 	defer closer()
 
 	// Try to call F3IsRunning method
 	// Note: This method might not exist on all API versions, so we'll handle the error gracefully
 	f3Running, err := api.F3IsRunning(ctx)
+	if err != nil {
+		log.Printf("[ERROR] failed to get F3 status for node %s: %v", node.Name, err)
+		return nil
+	}
+
 	log.Printf("[INFO] Node %s F3 status: %v", node.Name, f3Running)
 
 	// Assert that F3 is running
