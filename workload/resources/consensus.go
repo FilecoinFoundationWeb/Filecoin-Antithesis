@@ -122,13 +122,7 @@ func (cc *ConsensusChecker) makeRPCRequest(ctx context.Context, nodeInfo NodeInf
 // getChainHead gets the current chain head for a node
 // It handles both V1 and V2 API versions
 func (cc *ConsensusChecker) getChainHead(ctx context.Context, nodeInfo NodeInfo) (abi.ChainEpoch, error) {
-	// Use different method names for V1 and V2 APIs
-	methodName := "Filecoin.ChainHead"
-	if strings.Contains(nodeInfo.RPCURL, "/rpc/v2") {
-		methodName = "Filecoin.ChainGetHead"
-	}
-
-	resp, err := cc.makeRPCRequest(ctx, nodeInfo, methodName, []interface{}{})
+	resp, err := cc.makeRPCRequest(ctx, nodeInfo, "Filecoin.ChainHead", []interface{}{})
 	if err != nil {
 		return 0, err
 	}

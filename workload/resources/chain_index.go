@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
-	"github.com/filecoin-project/lotus/chain/types"
 )
 
 // CheckChainBackfill validates the chain index for a given set of nodes.
@@ -80,21 +79,4 @@ func PerformCheckBackfill(ctx context.Context, config *Config) error {
 		log.Println("[INFO] Chain index backfill check completed.")
 		return nil
 	}, "Chain index backfill check operation")
-}
-
-// TestJsonRPC tests JSON-RPC functionality
-func TestJsonRPC(ctx context.Context) error {
-	forestNode := NodeConfig{Name: "Forest", RPCURL: "http://10.20.20.28:3456", AuthTokenPath: "/root/devgen/forest/jwt"}
-	api, closer, err := ConnectToNode(ctx, forestNode)
-	if err != nil {
-		log.Println(err)
-	}
-	defer closer()
-	ts, err := api.ChainGetTipSet(ctx, types.EmptyTSK)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	log.Printf("[INFO] Forest node tipset: %v", ts)
-	return nil
 }

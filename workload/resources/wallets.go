@@ -9,6 +9,7 @@ import (
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
+	"github.com/filecoin-project/go-state-types/big"
 	"github.com/filecoin-project/go-state-types/builtin"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
@@ -70,6 +71,12 @@ func InitializeForestWallets(ctx context.Context, api, lotusapi api.FullNode, nu
 		log.Printf("[ERROR] Failed to get genesis wallet: %v", err)
 		return nil
 	}
+	funds, err := api.WalletBalance(ctx, genesisWallet)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get balance: %v", err)
+		return nil
+	}
+	fundingAmount = big.Div(funds, big.NewInt(4))
 
 	err = SendFunds(ctx, api, genesisWallet, wallet, fundingAmount)
 	if err != nil {
@@ -84,7 +91,12 @@ func InitializeForestWallets(ctx context.Context, api, lotusapi api.FullNode, nu
 		return nil
 	}
 	log.Printf("Set default wallet: %s", wallet)
-	time.Sleep(20 * time.Second)
+	time.Sleep(10 * time.Second)
+	err = CreateForestWallets(ctx, api, 3, abi.NewTokenAmount(100000000000000))
+	if err != nil {
+		log.Printf("[ERROR] Failed to create forest wallets: %v", err)
+		return nil
+	}
 	return nil
 }
 
@@ -112,7 +124,7 @@ func CreateForestWallets(ctx context.Context, api api.FullNode, numWallets int, 
 	defer closer()
 	if funds == abi.NewTokenAmount(0) {
 		log.Printf("[ERROR] Default wallet has no balance")
-		InitializeForestWallets(ctx, api, lotusapi, 1, abi.NewTokenAmount(1000000000000000))
+		InitializeForestWallets(ctx, api, lotusapi, 1, abi.NewTokenAmount(1000000000000000000))
 		return nil
 	}
 	log.Printf("Balance: %s", funds)
@@ -157,6 +169,16 @@ func CreateWallet(ctx context.Context, api api.FullNode, walletType types.KeyTyp
 // SendFunds sends funds from one address to another, waiting for the transaction to be confirmed
 // It includes balance checks, message pushing to mempool, and transaction confirmation
 func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, amount abi.TokenAmount) error {
+	// Check for undefined addresses
+	if from == address.Undef {
+		log.Printf("[ERROR] Source address is undefined")
+		return nil
+	}
+	if to == address.Undef {
+		log.Printf("[ERROR] Destination address is undefined")
+		return nil
+	}
+
 	msg := &types.Message{
 		From:  from,
 		To:    to,

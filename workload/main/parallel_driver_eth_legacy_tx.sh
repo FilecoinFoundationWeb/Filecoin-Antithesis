@@ -27,7 +27,7 @@ run_eth_legacy_tx() {
 }
 
 # Array of nodes to test
-nodes=("Lotus1" "Lotus2")
+nodes=("Lotus1" "Lotus2" "Forest")
 
 # Run tests in parallel
 pids=()

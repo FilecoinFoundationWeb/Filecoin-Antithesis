@@ -1,11 +1,11 @@
 #!/bin/bash
 
-set -e
-
 # Source health check functions
 source "$(dirname "$0")/health_check_functions.sh"
 
 # Perform health check before proceeding
 log_script_start
 
-echo "Workload [main][first_check.sh]: completed workload setup."
+echo "Running F3 status check for all nodes"
+
+/opt/antithesis/app monitor f3-status

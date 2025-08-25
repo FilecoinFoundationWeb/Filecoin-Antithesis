@@ -106,7 +106,7 @@ func PerformSpamOperation(ctx context.Context, config *Config) error {
 	}()
 
 	// Filter nodes for operation
-	filteredNodes := FilterLotusNodes(config.Nodes)
+	filteredNodes := FilterV1Nodes(config.Nodes)
 	log.Printf("[INFO] Filtered nodes for spam operation: %+v", filteredNodes)
 
 	// Connect to each node and retrieve wallets
@@ -129,9 +129,32 @@ func PerformSpamOperation(ctx context.Context, config *Config) error {
 				// Create some wallets if needed
 				numWallets := 3
 				log.Printf("[INFO] Creating %d new wallets on node '%s'...", numWallets, node.Name)
-				if err := InitializeWallets(ctx, api, numWallets, abi.NewTokenAmount(1000000000000000)); err != nil {
-					log.Printf("[ERROR] Failed to create new wallets: %v", err)
-					return nil
+
+				// Check if this is a Forest node
+				if node.Name == "Forest" {
+					// For Forest nodes, we need the Lotus API to fund from genesis
+					lotusNode := NodeConfig{
+						Name:          "Lotus1",
+						RPCURL:        "http://10.20.20.24:1234/rpc/v1",
+						AuthTokenPath: "/root/devgen/lotus-1/jwt",
+					}
+					lotusApi, lotusCloser, err := ConnectToNode(ctx, lotusNode)
+					if err != nil {
+						log.Printf("[ERROR] Failed to connect to Lotus node for Forest wallet initialization: %v", err)
+						return nil
+					}
+					defer lotusCloser()
+
+					if err := InitializeForestWallets(ctx, api, lotusApi, numWallets, abi.NewTokenAmount(1000000000000000)); err != nil {
+						log.Printf("[ERROR] Failed to create new Forest wallets: %v", err)
+						return nil
+					}
+				} else {
+					// For Lotus nodes, use standard wallet initialization
+					if err := InitializeWallets(ctx, api, numWallets, abi.NewTokenAmount(1000000000000000)); err != nil {
+						log.Printf("[ERROR] Failed to create new wallets: %v", err)
+						return nil
+					}
 				}
 			}
 

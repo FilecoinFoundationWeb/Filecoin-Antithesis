@@ -8,7 +8,7 @@ log_script_start
 
 APP_BINARY="/opt/antithesis/app"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-NODE_NAMES=("Lotus1" "Lotus2")
+NODE_NAMES=("Lotus1" "Lotus2" "Forest")
 
 if [ ! -f "$APP_BINARY" ]; then
     echo "Error: $APP_BINARY not found."
