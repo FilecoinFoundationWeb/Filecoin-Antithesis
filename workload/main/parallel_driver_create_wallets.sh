@@ -33,10 +33,11 @@ select_random_node() {
 
 # Create random wallets
 random_wallet_count=$((RANDOM % (MAX_WALLETS - MIN_WALLETS + 1) + MIN_WALLETS))
-random_node=$(select_random_node)
 
 echo "Creating $random_wallet_count wallets on random node: $random_node"
-$APP_BINARY wallet create --node "$random_node" --count "$random_wallet_count"
+for i in "${NODE_NAMES[@]}"; do
+    $APP_BINARY wallet create --node "$i" --count "$random_wallet_count"
+done
 
 # Check if the last command succeeded
 if [ $? -eq 0 ]; then

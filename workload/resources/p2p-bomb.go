@@ -191,8 +191,8 @@ func RunP2PBomb(ctx context.Context, nodeCount int) error {
 
 	// Define multiaddr paths using environment variables
 	multiaddrPaths := []string{
-		"/root/devgen/lotus-1/ipv4addr",
-		"/root/devgen/lotus-2/ipv4addr",
+		"/root/devgen/lotus-1/lotus-1-listen-addr",
+		"/root/devgen/lotus-2/lotus-2-listen-addr",
 		"/root/devgen/forest/forest-listen-addr",
 	}
 

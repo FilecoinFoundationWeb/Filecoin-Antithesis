@@ -17,7 +17,7 @@ fi
 current_time=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
 echo "Current system time: $current_time"
 
-RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.24:1234/rpc/v0}"
+RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.26:1235/rpc/v0}"
 
 # Waiting for the chain head to pass a certain height
 INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-10}"
