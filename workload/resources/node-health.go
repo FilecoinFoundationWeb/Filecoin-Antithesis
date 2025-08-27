@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/connect"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
 )
@@ -35,7 +36,7 @@ func DefaultHealthMonitorConfig() *HealthMonitorConfig {
 
 // NodeHealthMonitor holds the state for monitoring node health
 type NodeHealthMonitor struct {
-	config            *Config
+	config            *connect.Config
 	monitorConfig     *HealthMonitorConfig
 	heightHistory     map[string][]abi.ChainEpoch
 	lastTipsetChange  map[string]time.Time
@@ -43,7 +44,7 @@ type NodeHealthMonitor struct {
 }
 
 // NewNodeHealthMonitor creates a new health monitor instance
-func NewNodeHealthMonitor(config *Config, monitorConfig *HealthMonitorConfig) *NodeHealthMonitor {
+func NewNodeHealthMonitor(config *connect.Config, monitorConfig *HealthMonitorConfig) *NodeHealthMonitor {
 	if monitorConfig == nil {
 		monitorConfig = DefaultHealthMonitorConfig()
 	}
@@ -57,10 +58,10 @@ func NewNodeHealthMonitor(config *Config, monitorConfig *HealthMonitorConfig) *N
 	}
 }
 
-func CheckNodeSyncStatus(ctx context.Context, config *Config) error {
-	nodes := FilterLotusNodes(config.Nodes)
+func CheckNodeSyncStatus(ctx context.Context, config *connect.Config) error {
+	nodes := connect.FilterLotusNodes(config.Nodes)
 	for _, node := range nodes {
-		api, closer, err := ConnectToNode(ctx, node)
+		api, closer, err := connect.ConnectToNode(ctx, node)
 		if err != nil {
 			log.Printf("failed to connect to node %s: %v", node.Name, err)
 			continue
@@ -78,15 +79,15 @@ func CheckNodeSyncStatus(ctx context.Context, config *Config) error {
 }
 
 // ComprehensiveHealthCheck performs all health checks with backoff logic (uses default config)
-func ComprehensiveHealthCheck(ctx context.Context, config *Config) error {
+func ComprehensiveHealthCheck(ctx context.Context, config *connect.Config) error {
 	return ComprehensiveHealthCheckWithConfig(ctx, config, DefaultHealthMonitorConfig())
 }
 
 // ComprehensiveHealthCheckWithConfig performs health checks based on configuration
-func ComprehensiveHealthCheckWithConfig(ctx context.Context, config *Config, monitorConfig *HealthMonitorConfig) error {
-	nodes := FilterLotusNodes(config.Nodes)
+func ComprehensiveHealthCheckWithConfig(ctx context.Context, config *connect.Config, monitorConfig *HealthMonitorConfig) error {
+	nodes := connect.FilterLotusNodes(config.Nodes)
 	if len(nodes) > 0 {
-		api, closer, err := ConnectToNode(ctx, nodes[0])
+		api, closer, err := connect.ConnectToNode(ctx, nodes[0])
 		if err != nil {
 			log.Printf("[ERROR] Failed to connect to node for epoch check: %v", err)
 			return nil
@@ -156,7 +157,7 @@ func ComprehensiveHealthCheckWithConfig(ctx context.Context, config *Config, mon
 // CheckChainNotify monitors chain notifications using polling-based approach
 func (m *NodeHealthMonitor) CheckChainNotify(ctx context.Context) error {
 	log.Printf("[INFO] Starting chain notify monitoring...")
-	nodes := FilterV1Nodes(m.config.Nodes)
+	nodes := connect.FilterV1Nodes(m.config.Nodes)
 
 	// Create a context with cancellation for all goroutines
 	ctx, cancel := context.WithCancel(ctx)
@@ -191,8 +192,8 @@ func (m *NodeHealthMonitor) CheckChainNotify(ctx context.Context) error {
 }
 
 // streamNodeUpdates handles streaming for a single node using polling
-func (m *NodeHealthMonitor) streamNodeUpdates(ctx context.Context, node NodeConfig) error {
-	api, closer, err := ConnectToNode(ctx, node)
+func (m *NodeHealthMonitor) streamNodeUpdates(ctx context.Context, node connect.NodeConfig) error {
+	api, closer, err := connect.ConnectToNode(ctx, node)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to node '%s': %v", node.Name, err)
 		return err
@@ -278,10 +279,10 @@ func (m *NodeHealthMonitor) streamNodeUpdates(ctx context.Context, node NodeConf
 func (m *NodeHealthMonitor) CheckHeightProgression(ctx context.Context) error {
 	log.Printf("[INFO] Starting height progression monitoring...")
 
-	nodes := FilterV1Nodes(m.config.Nodes)
+	nodes := connect.FilterV1Nodes(m.config.Nodes)
 
 	for _, node := range nodes {
-		go func(node NodeConfig) {
+		go func(node connect.NodeConfig) {
 			if err := m.monitorHeightForNode(ctx, node); err != nil {
 				log.Printf("[ERROR] Height monitoring failed for node %s: %v", node.Name, err)
 			}
@@ -295,8 +296,8 @@ func (m *NodeHealthMonitor) CheckHeightProgression(ctx context.Context) error {
 }
 
 // monitorHeightForNode monitors height progression for a specific node
-func (m *NodeHealthMonitor) monitorHeightForNode(ctx context.Context, node NodeConfig) error {
-	api, closer, err := ConnectToNode(ctx, node)
+func (m *NodeHealthMonitor) monitorHeightForNode(ctx context.Context, node connect.NodeConfig) error {
+	api, closer, err := connect.ConnectToNode(ctx, node)
 	if err != nil {
 		log.Printf("[ERROR] failed to connect to node %s: %v", node.Name, err)
 		return nil
@@ -364,7 +365,7 @@ func (m *NodeHealthMonitor) monitorHeightForNode(ctx context.Context, node NodeC
 func (m *NodeHealthMonitor) CheckPeerCount(ctx context.Context) error {
 	log.Printf("[INFO] Starting peer count check...")
 
-	nodes := FilterV1Nodes(m.config.Nodes)
+	nodes := connect.FilterV1Nodes(m.config.Nodes)
 
 	for _, node := range nodes {
 		if err := m.checkNodePeerCount(ctx, node); err != nil {
@@ -376,8 +377,8 @@ func (m *NodeHealthMonitor) CheckPeerCount(ctx context.Context) error {
 }
 
 // checkNodePeerCount checks peer count for a specific node
-func (m *NodeHealthMonitor) checkNodePeerCount(ctx context.Context, node NodeConfig) error {
-	api, closer, err := ConnectToNode(ctx, node)
+func (m *NodeHealthMonitor) checkNodePeerCount(ctx context.Context, node connect.NodeConfig) error {
+	api, closer, err := connect.ConnectToNode(ctx, node)
 	if err != nil {
 		log.Printf("[ERROR] failed to connect to node %s: %v", node.Name, err)
 		return nil
@@ -408,7 +409,7 @@ func (m *NodeHealthMonitor) checkNodePeerCount(ctx context.Context, node NodeCon
 func (m *NodeHealthMonitor) CheckF3Status(ctx context.Context) error {
 	log.Printf("[INFO] Starting F3 status check...")
 
-	nodes := FilterV1Nodes(m.config.Nodes)
+	nodes := connect.FilterV1Nodes(m.config.Nodes)
 
 	for _, node := range nodes {
 		if err := m.checkNodeF3Status(ctx, node); err != nil {
@@ -420,8 +421,8 @@ func (m *NodeHealthMonitor) CheckF3Status(ctx context.Context) error {
 }
 
 // checkNodeF3Status checks F3 status for a specific node
-func (m *NodeHealthMonitor) checkNodeF3Status(ctx context.Context, node NodeConfig) error {
-	api, closer, err := ConnectToNode(ctx, node)
+func (m *NodeHealthMonitor) checkNodeF3Status(ctx context.Context, node connect.NodeConfig) error {
+	api, closer, err := connect.ConnectToNode(ctx, node)
 	if err != nil {
 		log.Printf("[ERROR] failed to connect to node %s: %v", node.Name, err)
 		return nil

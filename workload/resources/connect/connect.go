@@ -1,4 +1,4 @@
-package resources
+package connect
 
 import (
 	"context"
@@ -205,7 +205,7 @@ func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, curre
 
 		var err error
 		for attempt := 1; attempt <= maxRetries; attempt++ {
-			err = tryConnectToNode(ctx, currentNodeAPI, currentNodeConfig, nodeConfig)
+			err = TryConnectToNode(ctx, currentNodeAPI, currentNodeConfig, nodeConfig)
 			if err == nil {
 				break
 			}
@@ -243,7 +243,7 @@ func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, curre
 }
 
 // tryConnectToNode attempts a single connection between two nodes
-func tryConnectToNode(ctx context.Context, currentNodeAPI api.FullNode, currentNodeConfig NodeConfig, targetNodeConfig NodeConfig) error {
+func TryConnectToNode(ctx context.Context, currentNodeAPI api.FullNode, currentNodeConfig NodeConfig, targetNodeConfig NodeConfig) error {
 	otherNodeAPI, closer, err := ConnectToNode(ctx, targetNodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to target node: %v", err)

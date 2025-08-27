@@ -1,10 +1,11 @@
-package resources
+package consensus
 
 import (
 	"bytes"
 	"context"
 	"log"
 
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/connect"
 	"github.com/filecoin-project/go-state-types/builtin"
 	miner8 "github.com/filecoin-project/go-state-types/builtin/v8/miner"
 	"github.com/filecoin-project/lotus/api"
@@ -17,14 +18,14 @@ import (
 // falling back to the second if the first attempt fails. This is used to test the network's
 // response to malicious behavior.
 func SendConsensusFault(ctx context.Context) error {
-	config, err := LoadConfig("/opt/antithesis/resources/config.json")
+	config, err := connect.LoadConfig("/opt/antithesis/resources/config.json")
 	if err != nil {
 		log.Printf("[ERROR] Failed to load config: %v", err)
 		return nil
 	}
 
 	// Try with first miner
-	api1, closer1, err := ConnectToNode(ctx, config.Nodes[0])
+	api1, closer1, err := connect.ConnectToNode(ctx, config.Nodes[0])
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to lotus-1: %v", err)
 		return nil
@@ -112,7 +113,7 @@ func SendConsensusFault(ctx context.Context) error {
 	}
 
 	// Try with second miner
-	api2, closer2, err := ConnectToNode(ctx, config.Nodes[1])
+	api2, closer2, err := connect.ConnectToNode(ctx, config.Nodes[1])
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to lotus-2: %v", err)
 		return nil

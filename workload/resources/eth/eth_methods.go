@@ -1,4 +1,4 @@
-package resources
+package eth
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/connect"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
@@ -21,18 +23,18 @@ import (
 // retrieved via eth_getBlockByNumber and eth_getBlockByHash. It checks multiple block
 // properties including hashes, numbers, timestamps, and parent hashes for the last 30 blocks.
 func CheckEthMethods(ctx context.Context) error {
-	return RetryOperation(ctx, func() error {
-		config, err := LoadConfig("/opt/antithesis/resources/config.json")
+	return connect.RetryOperation(ctx, func() error {
+		config, err := connect.LoadConfig("/opt/antithesis/resources/config.json")
 		if err != nil {
 			log.Printf("[ERROR] Failed to load config: %v", err)
 			return nil
 		}
 
-		filteredNodes := FilterV1Nodes(config.Nodes)
+		filteredNodes := connect.FilterV1Nodes(config.Nodes)
 
 		// Check if we have enough epochs to avoid false positives
 		if len(filteredNodes) > 0 {
-			api, closer, err := ConnectToNode(ctx, filteredNodes[0])
+			api, closer, err := connect.ConnectToNode(ctx, filteredNodes[0])
 			if err != nil {
 				log.Printf("[ERROR] Failed to connect to node for epoch check: %v", err)
 				return nil
@@ -53,7 +55,7 @@ func CheckEthMethods(ctx context.Context) error {
 
 		for _, node := range filteredNodes {
 			log.Printf("[INFO] Checking ETH methods on node %s", node.Name)
-			api, closer, err := ConnectToNode(ctx, node)
+			api, closer, err := connect.ConnectToNode(ctx, node)
 			if err != nil {
 				log.Printf("[ERROR] Failed to connect to node %s: %v", node.Name, err)
 				return nil
@@ -70,7 +72,7 @@ func CheckEthMethods(ctx context.Context) error {
 			targetHeight := height - 30
 			for i := int64(height); i > int64(targetHeight); i-- {
 				// Use RetryOperation for each block check
-				err := RetryOperation(ctx, func() error {
+				err := connect.RetryOperation(ctx, func() error {
 					if _, err := api.ChainGetTipSetByHeight(ctx, abi.ChainEpoch(i), types.EmptyTSK); err != nil {
 						log.Printf("[ERROR] Failed to get tipset @%d from Lotus: %v", i, err)
 						return nil
@@ -198,12 +200,12 @@ func PerformEthMethodsCheck(ctx context.Context) error {
 }
 
 // SendEthLegacyTransaction sends ETH legacy transaction
-func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error {
+func SendEthLegacyTransaction(ctx context.Context, nodeConfig *connect.NodeConfig) error {
 	log.Printf("[INFO] Starting ETH legacy transaction check on node '%s'...", nodeConfig.Name)
 	key, ethAddr, deployer := NewAccount()
 	_, ethAddr2, _ := NewAccount()
 
-	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	api, closer, err := connect.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 		return nil
@@ -213,12 +215,12 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 	// Handle wallet initialization differently for Forest and Lotus nodes
 	if nodeConfig.Name == "Forest" {
 		// For Forest, we need to get funds from Lotus first
-		lotusNode := NodeConfig{
+		lotusNode := connect.NodeConfig{
 			Name:          "Lotus1",
 			RPCURL:        "http://10.20.20.24:1234/rpc/v1",
 			AuthTokenPath: "/root/devgen/lotus-1/jwt",
 		}
-		lotusApi, lotusCloser, err := ConnectToNode(ctx, lotusNode)
+		lotusApi, lotusCloser, err := connect.ConnectToNode(ctx, lotusNode)
 		if err != nil {
 			log.Printf("[ERROR] Failed to connect to Lotus node for Forest wallet initialization: %v", err)
 			return nil
@@ -226,7 +228,7 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 		defer lotusCloser()
 
 		// Initialize Forest wallets with funding from Lotus
-		if err := InitializeForestWallets(ctx, api, lotusApi, 1, types.FromFil(1000)); err != nil {
+		if err := resources.InitializeForestWallets(ctx, api, lotusApi, 1, types.FromFil(1000)); err != nil {
 			log.Printf("[ERROR] Failed to initialize Forest wallets: %v", err)
 			return nil
 		}
@@ -238,7 +240,7 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 			return nil
 		}
 
-		SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
+		resources.SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
 	} else {
 		// For Lotus nodes, use standard wallet initialization
 		defaultAddr, err := api.WalletDefaultAddress(ctx)
@@ -247,7 +249,7 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 			return nil
 		}
 
-		SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
+		resources.SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
 	}
 
 	time.Sleep(60 * time.Second)
@@ -310,11 +312,11 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 }
 
 // DeploySmartContract deploys a smart contract
-func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPath string) error {
+func DeploySmartContract(ctx context.Context, nodeConfig *connect.NodeConfig, contractPath string) error {
 	log.Printf("[INFO] Deploying smart contract from %s...", contractPath)
 
 	// Connect to Lotus node
-	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	api, closer, err := connect.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 		return nil
@@ -328,12 +330,12 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 	// Handle wallet initialization differently for Forest and Lotus nodes
 	if nodeConfig.Name == "Forest" {
 		// For Forest, we need to get funds from Lotus first
-		lotusNode := NodeConfig{
+		lotusNode := connect.NodeConfig{
 			Name:          "Lotus1",
 			RPCURL:        "http://10.20.20.24:1234/rpc/v1",
 			AuthTokenPath: "/root/devgen/lotus-1/jwt",
 		}
-		lotusApi, lotusCloser, err := ConnectToNode(ctx, lotusNode)
+		lotusApi, lotusCloser, err := connect.ConnectToNode(ctx, lotusNode)
 		if err != nil {
 			log.Printf("[ERROR] Failed to connect to Lotus node for Forest wallet initialization: %v", err)
 			return nil
@@ -341,7 +343,7 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 		defer lotusCloser()
 
 		// Initialize Forest wallets with funding from Lotus
-		if err := InitializeForestWallets(ctx, api, lotusApi, 1, types.FromFil(100)); err != nil {
+		if err := resources.InitializeForestWallets(ctx, api, lotusApi, 1, types.FromFil(100)); err != nil {
 			log.Printf("[ERROR] Failed to initialize Forest wallets: %v", err)
 			return nil
 		}
@@ -355,7 +357,7 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 
 		// Send funds to deployer account
 		log.Printf("[INFO] Sending funds to deployer account from Forest default wallet...")
-		err = SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
+		err = resources.SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
 		if err != nil {
 			log.Printf("[ERROR] Failed to send funds to deployer: %v", err)
 			return nil
@@ -370,7 +372,7 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 
 		// Send funds to deployer account
 		log.Printf("[INFO] Sending funds to deployer account...")
-		err = SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
+		err = resources.SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
 		if err != nil {
 			log.Printf("[ERROR] Failed to send funds to deployer: %v", err)
 			return nil

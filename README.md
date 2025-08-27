@@ -64,7 +64,11 @@ make help
 
 4. We should see the command successfully complete. You've now validated this test is ready to run on the Antithesis platform! (Note that SDK assertions won't be evaluated locally).
 
-5. When finished, run `docker-compose down` to stop all the running containers. Complete a local iteration cycle by running the `cleanup.sh` command.
+5. In your terminal, call the following script to cleanup existing data and complete the local execution cycle.
+
+```shell
+./cleanup.sh
+```
 
 ## Using Antithesis
 

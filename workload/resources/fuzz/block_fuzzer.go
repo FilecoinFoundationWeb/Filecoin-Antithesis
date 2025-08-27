@@ -1,4 +1,4 @@
-package resources
+package fuzz
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	mathrand "math/rand"
 	"time"
 
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/connect"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -432,18 +434,18 @@ func FuzzBlockSubmissionWithConfig(ctx context.Context, api api.FullNode, config
 }
 
 // PerformStressMaxMessageSize runs max message size stress test
-func PerformStressMaxMessageSize(ctx context.Context, nodeConfig *NodeConfig) error {
+func PerformStressMaxMessageSize(ctx context.Context, nodeConfig *connect.NodeConfig) error {
 	log.Printf("[INFO] Starting max message size stress test on node '%s'...", nodeConfig.Name)
 
-	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	api, closer, err := connect.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 		return nil
 	}
 	defer closer()
 
-	return RetryOperation(ctx, func() error {
-		err := SendMaxSizedMessage(ctx, api)
+	return connect.RetryOperation(ctx, func() error {
+		err := resources.SendMaxSizedMessage(ctx, api)
 		if err != nil {
 			log.Printf("[ERROR] Max message size stress test failed: %v", err)
 			return nil
@@ -455,17 +457,17 @@ func PerformStressMaxMessageSize(ctx context.Context, nodeConfig *NodeConfig) er
 }
 
 // PerformBlockFuzzing runs block fuzzing on a specified node
-func PerformBlockFuzzing(ctx context.Context, nodeConfig *NodeConfig) error {
+func PerformBlockFuzzing(ctx context.Context, nodeConfig *connect.NodeConfig) error {
 	log.Printf("[INFO] Starting block fuzzing on node '%s'...", nodeConfig.Name)
 
-	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	api, closer, err := connect.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 		return nil
 	}
 	defer closer()
 
-	return RetryOperation(ctx, func() error {
+	return connect.RetryOperation(ctx, func() error {
 		err := FuzzBlockSubmission(ctx, api)
 		if err != nil {
 			log.Printf("[WARN] Block fuzzing failed, will retry: %v", err)

@@ -1,9 +1,10 @@
-package resources
+package state
 
 import (
 	"context"
 	"log"
 
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/connect"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/lotus/api"
 )
@@ -109,17 +110,17 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 }
 
 // PerformStateCheck checks state consistency
-func PerformStateCheck(ctx context.Context, nodeConfig *NodeConfig) error {
+func PerformStateCheck(ctx context.Context, nodeConfig *connect.NodeConfig) error {
 	log.Printf("[INFO] Starting state consistency check on node '%s'...", nodeConfig.Name)
 
-	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	api, closer, err := connect.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 		return nil
 	}
 	defer closer()
 
-	return RetryOperation(ctx, func() error {
+	return connect.RetryOperation(ctx, func() error {
 		return StateMismatch(ctx, api)
 	}, "State consistency check operation")
 }

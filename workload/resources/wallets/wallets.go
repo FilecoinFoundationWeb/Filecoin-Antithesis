@@ -1,4 +1,4 @@
-package resources
+package wallets
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/connect"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -111,12 +112,12 @@ func CreateForestWallets(ctx context.Context, api api.FullNode, numWallets int, 
 		log.Printf("[ERROR] Failed to get balance: %v", err)
 		return nil
 	}
-	nodeconfig := NodeConfig{
+	nodeconfig := connect.NodeConfig{
 		Name:          "Forest",
 		RPCURL:        "http://lotus-1:1234/rpc/v1",
 		AuthTokenPath: "/root/devgen/lotus-1/jwt",
 	}
-	lotusapi, closer, err := ConnectToNode(ctx, nodeconfig)
+	lotusapi, closer, err := connect.ConnectToNode(ctx, nodeconfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node: %v", err)
 		return nil
@@ -452,12 +453,12 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 }
 
 // PerformCreateOperation creates wallets on a specified node
-func PerformCreateOperation(ctx context.Context, nodeConfig *NodeConfig, numWallets int, tokenAmount abi.TokenAmount) error {
+func PerformCreateOperation(ctx context.Context, nodeConfig *connect.NodeConfig, numWallets int, tokenAmount abi.TokenAmount) error {
 	log.Printf("Creating %d wallets on node '%s'...", numWallets, nodeConfig.Name)
 
 	// Retry connection up to 3 times
 	for retry := 0; retry < 3; retry++ {
-		api, closer, err := ConnectToNode(ctx, *nodeConfig)
+		api, closer, err := connect.ConnectToNode(ctx, *nodeConfig)
 		if err != nil {
 			log.Printf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 			return nil
@@ -490,17 +491,17 @@ func PerformCreateOperation(ctx context.Context, nodeConfig *NodeConfig, numWall
 }
 
 // PerformDeleteOperation deletes wallets on a specified node
-func PerformDeleteOperation(ctx context.Context, nodeConfig *NodeConfig) error {
+func PerformDeleteOperation(ctx context.Context, nodeConfig *connect.NodeConfig) error {
 	log.Printf("Deleting wallets on node '%s'...", nodeConfig.Name)
 
-	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	api, closer, err := connect.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 		return nil
 	}
 	defer closer()
 
-	return RetryOperation(ctx, func() error {
+	return connect.RetryOperation(ctx, func() error {
 		allWallets, err := GetAllWalletAddressesExceptGenesis(ctx, api)
 		if err != nil {
 			log.Printf("[ERROR] Failed to list wallets on node '%s': %v", nodeConfig.Name, err)

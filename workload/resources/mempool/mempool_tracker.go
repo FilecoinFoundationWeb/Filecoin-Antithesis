@@ -1,4 +1,4 @@
-package resources
+package mempool
 
 import (
 	"context"

@@ -6,11 +6,17 @@ import (
 	"time"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/chain"
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/connect"
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/consensus"
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/eth"
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/fuzz"
+	statepkg "github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/state"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/urfave/cli/v2"
 )
 
-var config *resources.Config
+var config *connect.Config
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
@@ -30,7 +36,7 @@ func main() {
 		Before: func(c *cli.Context) error {
 			// Load configuration
 			var err error
-			config, err = resources.LoadConfig(c.String("config"))
+			config, err = connect.LoadConfig(c.String("config"))
 			if err != nil {
 				log.Printf("[ERROR] Failed to load config: %v", err)
 				return nil
@@ -57,7 +63,7 @@ func main() {
 	}
 }
 
-func getNodeConfig(c *cli.Context) (*resources.NodeConfig, error) {
+func getNodeConfig(c *cli.Context) (*connect.NodeConfig, error) {
 	nodeName := c.String("node")
 	if nodeName == "" {
 		log.Printf("[ERROR] Node name is required")
@@ -101,7 +107,7 @@ func walletCommands() *cli.Command {
 						return err
 					}
 					if nodeConfig.Name == "Forest" {
-						api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+						api, closer, err := connect.ConnectToNode(c.Context, *nodeConfig)
 						if err != nil {
 							return err
 						}
@@ -123,17 +129,17 @@ func walletCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+					api, closer, err := connect.ConnectToNode(c.Context, *nodeConfig)
 					if err != nil {
 						return err
 					}
 					defer closer()
-					lotusNodeConfig := resources.NodeConfig{
+					lotusNodeConfig := connect.NodeConfig{
 						Name:          "Lotus1",
 						RPCURL:        "http://lotus-1:1234/rpc/v1",
 						AuthTokenPath: "/root/devgen/lotus-1/jwt",
 					}
-					lotusapi, closer, err := resources.ConnectToNode(c.Context, lotusNodeConfig)
+					lotusapi, closer, err := connect.ConnectToNode(c.Context, lotusNodeConfig)
 					if err != nil {
 						return err
 					}
@@ -182,15 +188,15 @@ func networkCommands() *cli.Command {
 						return err
 					}
 					log.Printf("Connecting node '%s' to other nodes...", nodeConfig.Name)
-					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+					api, closer, err := connect.ConnectToNode(c.Context, *nodeConfig)
 					if err != nil {
 						log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 						return nil
 					}
 					defer closer()
 
-					lotusNodes := resources.FilterV1Nodes(config.Nodes)
-					if err := resources.ConnectToOtherNodes(c.Context, api, *nodeConfig, lotusNodes); err != nil {
+					lotusNodes := connect.FilterV1Nodes(config.Nodes)
+					if err := connect.ConnectToOtherNodes(c.Context, api, *nodeConfig, lotusNodes); err != nil {
 						log.Printf("[ERROR] Failed to connect node '%s' to other nodes: %v", nodeConfig.Name, err)
 						return nil
 					}
@@ -210,14 +216,14 @@ func networkCommands() *cli.Command {
 						return err
 					}
 					log.Printf("Disconnecting node '%s' from other nodes...", nodeConfig.Name)
-					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+					api, closer, err := connect.ConnectToNode(c.Context, *nodeConfig)
 					if err != nil {
 						log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 						return nil
 					}
 					defer closer()
 
-					if err := resources.DisconnectFromOtherNodes(c.Context, api); err != nil {
+					if err := connect.DisconnectFromOtherNodes(c.Context, api); err != nil {
 						log.Printf("[ERROR] Failed to disconnect node '%s' from other nodes: %v", nodeConfig.Name, err)
 						return nil
 					}
@@ -241,7 +247,7 @@ func networkCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					return resources.PerformReorgOperation(c.Context, nodeConfig, c.Bool("check-consensus"))
+					return connect.PerformReorgOperation(c.Context, nodeConfig, c.Bool("check-consensus"))
 				},
 			},
 		},
@@ -392,7 +398,7 @@ func contractCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					return resources.PerformDeploySimpleCoin(c.Context, nodeConfig, simpleCoinPath)
+					return eth.PerformDeploySimpleCoin(c.Context, nodeConfig, simpleCoinPath)
 				},
 			},
 			{
@@ -406,7 +412,7 @@ func contractCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					return resources.PerformDeployMCopy(c.Context, nodeConfig, mcopyPath)
+					return eth.PerformDeployMCopy(c.Context, nodeConfig, mcopyPath)
 				},
 			},
 			{
@@ -420,7 +426,7 @@ func contractCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					return resources.PerformDeployTStore(c.Context, nodeConfig, tstoragePath)
+					return eth.PerformDeployTStore(c.Context, nodeConfig, tstoragePath)
 				},
 			},
 		},
@@ -443,22 +449,22 @@ func consensusCommands() *cli.Command {
 					},
 				},
 				Action: func(c *cli.Context) error {
-					filteredConfig := resources.FilterV1Nodes(config.Nodes)
-					return resources.PerformConsensusCheck(c.Context, &resources.Config{Nodes: filteredConfig}, c.Int64("height"))
+					filteredConfig := connect.FilterV1Nodes(config.Nodes)
+					return consensus.PerformConsensusCheck(c.Context, &connect.Config{Nodes: filteredConfig}, c.Int64("height"))
 				},
 			},
 			{
 				Name:  "fault",
 				Usage: "Send consensus fault",
 				Action: func(c *cli.Context) error {
-					return resources.PerformSendConsensusFault(c.Context)
+					return consensus.PerformSendConsensusFault(c.Context)
 				},
 			},
 			{
 				Name:  "finalized",
 				Usage: "Check finalized tipsets",
 				Action: func(c *cli.Context) error {
-					return resources.PerformCheckFinalizedTipsets(c.Context)
+					return consensus.PerformCheckFinalizedTipsets(c.Context)
 				},
 			},
 		},
@@ -634,7 +640,7 @@ func chainCommands() *cli.Command {
 				Name:  "backfill",
 				Usage: "Check chain index backfill",
 				Action: func(c *cli.Context) error {
-					return resources.PerformCheckBackfill(c.Context, config)
+					return chain.PerformCheckBackfill(c.Context, config)
 				},
 			},
 		},
@@ -663,7 +669,7 @@ func stateCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					return resources.PerformStateCheck(c.Context, nodeConfig)
+					return statepkg.PerformStateCheck(c.Context, nodeConfig)
 				},
 			},
 		},
@@ -692,7 +698,7 @@ func stressCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					return resources.PerformStressMaxMessageSize(c.Context, nodeConfig)
+					return fuzz.PerformStressMaxMessageSize(c.Context, nodeConfig)
 				},
 			},
 			{
@@ -716,7 +722,7 @@ func stressCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					return resources.PerformBlockFuzzing(c.Context, nodeConfig)
+					return fuzz.PerformBlockFuzzing(c.Context, nodeConfig)
 				},
 			},
 		},
@@ -738,7 +744,7 @@ func ethCommands() *cli.Command {
 				Name:  "check",
 				Usage: "Check ETH methods consistency",
 				Action: func(c *cli.Context) error {
-					return resources.PerformEthMethodsCheck(c.Context)
+					return eth.PerformEthMethodsCheck(c.Context)
 				},
 			},
 			{
@@ -752,7 +758,7 @@ func ethCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					return resources.SendEthLegacyTransaction(c.Context, nodeConfig)
+					return eth.SendEthLegacyTransaction(c.Context, nodeConfig)
 				},
 			},
 		},

@@ -1,4 +1,4 @@
-package resources
+package consensus
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/connect"
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/chain/types"
@@ -45,7 +46,7 @@ const (
 
 // NewConsensusChecker creates a new consensus checker instance for Lotus nodes
 // It initializes connections to both V1 and V2 API endpoints
-func NewConsensusChecker(ctx context.Context, nodes []NodeConfig) (*ConsensusChecker, error) {
+func NewConsensusChecker(ctx context.Context, nodes []connect.NodeConfig) (*ConsensusChecker, error) {
 	checker := &ConsensusChecker{
 		nodes: make(map[string]NodeInfo),
 	}
@@ -222,7 +223,7 @@ func (cc *ConsensusChecker) checkTipsetConsensus(ctx context.Context, height abi
 // CheckConsensus verifies that all nodes have consensus on tipsets for a range of heights
 // If no height is specified (height = 0), it chooses a random height between genesis and minHead-20
 func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.ChainEpoch) error {
-	return RetryOperation(ctx, func() error {
+	return connect.RetryOperation(ctx, func() error {
 		log.Printf("Starting consensus check between nodes")
 
 		// Validate height is not negative
@@ -332,7 +333,7 @@ func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.Chain
 }
 
 // PerformConsensusCheck checks consensus between nodes
-func PerformConsensusCheck(ctx context.Context, config *Config, height int64) error {
+func PerformConsensusCheck(ctx context.Context, config *connect.Config, height int64) error {
 	log.Printf("[INFO] Starting consensus check...")
 
 	checker, err := NewConsensusChecker(ctx, config.Nodes)
@@ -376,15 +377,15 @@ func PerformCheckFinalizedTipsets(ctx context.Context) error {
 	log.Printf("[INFO] Starting finalized tipset comparison...")
 
 	// Load configuration
-	config, err := LoadConfig("/opt/antithesis/resources/config.json")
+	config, err := connect.LoadConfig("/opt/antithesis/resources/config.json")
 	if err != nil {
 		log.Printf("[ERROR] Failed to load config: %v", err)
 		return nil
 	}
 
 	// Filter nodes to get V1 and V2 nodes separately
-	v1Nodes := FilterLotusNodesV1(config.Nodes)
-	v2Nodes := FilterLotusNodesWithV2(config.Nodes)
+	v1Nodes := connect.FilterLotusNodesV1(config.Nodes)
+	v2Nodes := connect.FilterLotusNodesWithV2(config.Nodes)
 
 	if len(v1Nodes) < 2 {
 		log.Printf("[ERROR] Need at least two Lotus V1 nodes for this test, found %d", len(v1Nodes))
@@ -396,14 +397,14 @@ func PerformCheckFinalizedTipsets(ctx context.Context) error {
 	}
 
 	// Connect to V1 nodes to get chain heads and find common height range
-	api1, closer1, err := ConnectToNode(ctx, v1Nodes[0])
+	api1, closer1, err := connect.ConnectToNode(ctx, v1Nodes[0])
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to %s: %v", v1Nodes[0].Name, err)
 		return nil
 	}
 	defer closer1()
 
-	api2, closer2, err := ConnectToNode(ctx, v1Nodes[1])
+	api2, closer2, err := connect.ConnectToNode(ctx, v1Nodes[1])
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to %s: %v", v1Nodes[1].Name, err)
 		return nil
@@ -458,14 +459,14 @@ func PerformCheckFinalizedTipsets(ctx context.Context) error {
 	log.Printf("[INFO] Selected height %d for finalized tipset comparison (range: %d-%d)", randomHeight, minHeight, maxHeight)
 
 	// Connect to V2 nodes for finalized tipset comparison
-	api11, closer11, err := ConnectToNodeV2(ctx, v2Nodes[0])
+	api11, closer11, err := connect.ConnectToNodeV2(ctx, v2Nodes[0])
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to %s: %v", v2Nodes[0].Name, err)
 		return nil
 	}
 	defer closer11()
 
-	api22, closer22, err := ConnectToNodeV2(ctx, v2Nodes[1])
+	api22, closer22, err := connect.ConnectToNodeV2(ctx, v2Nodes[1])
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to %s: %v", v2Nodes[1].Name, err)
 		return nil

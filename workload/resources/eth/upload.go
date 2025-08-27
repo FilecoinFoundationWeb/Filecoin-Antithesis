@@ -1,4 +1,4 @@
-package resources
+package eth
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources/connect"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
@@ -363,7 +364,7 @@ func SignLegacyHomesteadTransaction(tx *ethtypes.EthLegacyHomesteadTxArgs, privK
 }
 
 // PerformDeploySimpleCoin deploys SimpleCoin contract on a specified node
-func PerformDeploySimpleCoin(ctx context.Context, nodeConfig *NodeConfig, contractPath string) error {
+func PerformDeploySimpleCoin(ctx context.Context, nodeConfig *connect.NodeConfig, contractPath string) error {
 	log.Printf("[INFO] Deploying SimpleCoin contract on node %s from %s", nodeConfig.Name, contractPath)
 
 	// Verify contract file exists first
@@ -372,14 +373,14 @@ func PerformDeploySimpleCoin(ctx context.Context, nodeConfig *NodeConfig, contra
 		return nil
 	}
 
-	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	api, closer, err := connect.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 		return nil
 	}
 	defer closer()
 
-	return RetryOperation(ctx, func() error {
+	return connect.RetryOperation(ctx, func() error {
 		// Check if we have a default wallet address
 		defaultAddr, err := api.WalletDefaultAddress(ctx)
 		if err != nil || defaultAddr.Empty() {
@@ -460,17 +461,17 @@ func PerformDeploySimpleCoin(ctx context.Context, nodeConfig *NodeConfig, contra
 }
 
 // PerformDeployMCopy deploys MCopy contract on a specified node
-func PerformDeployMCopy(ctx context.Context, nodeConfig *NodeConfig, contractPath string) error {
+func PerformDeployMCopy(ctx context.Context, nodeConfig *connect.NodeConfig, contractPath string) error {
 	log.Printf("Deploying and invoking MCopy contract on node '%s'...", nodeConfig.Name)
 
-	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	api, closer, err := connect.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 		return nil
 	}
 	defer closer()
 
-	return RetryOperation(ctx, func() error {
+	return connect.RetryOperation(ctx, func() error {
 		fromAddr, contractAddr := DeployContractFromFilename(ctx, api, contractPath)
 
 		hexString := "000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000087465737464617461000000000000000000000000000000000000000000000000"
@@ -495,17 +496,17 @@ func PerformDeployMCopy(ctx context.Context, nodeConfig *NodeConfig, contractPat
 }
 
 // PerformDeployTStore deploys TStore contract on a specified node
-func PerformDeployTStore(ctx context.Context, nodeConfig *NodeConfig, contractPath string) error {
+func PerformDeployTStore(ctx context.Context, nodeConfig *connect.NodeConfig, contractPath string) error {
 	log.Printf("Deploying and invoking TStore contract on node '%s'...", nodeConfig.Name)
 
-	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	api, closer, err := connect.ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
 		return nil
 	}
 	defer closer()
 
-	return RetryOperation(ctx, func() error {
+	return connect.RetryOperation(ctx, func() error {
 		// Deploy the contract
 		fromAddr, contractAddr := DeployContractFromFilename(ctx, api, contractPath)
 		if fromAddr.Empty() || contractAddr.Empty() {

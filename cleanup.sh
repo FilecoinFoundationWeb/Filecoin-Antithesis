@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sudo rm -rf ./data/
+rm -rf ./data/
 
 mkdir ./data
 
