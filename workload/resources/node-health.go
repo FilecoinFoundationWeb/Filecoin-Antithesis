@@ -427,7 +427,17 @@ func (m *NodeHealthMonitor) checkNodeF3Status(ctx context.Context, node NodeConf
 		return nil
 	}
 	defer closer()
+	head, err := api.ChainHead(ctx)
+	if err != nil {
+		log.Printf("[ERROR] failed to get chain head for node %s: %v", node.Name, err)
+		return nil
+	}
 
+	log.Printf("[INFO] Node %s chain head: %d", node.Name, head.Height())
+	if head.Height() < 10 {
+		log.Printf("[INFO] Node %s chain head is less than 10, skipping F3 status check", node.Name)
+		return nil
+	}
 	// Try to call F3IsRunning method
 	// Note: This method might not exist on all API versions, so we'll handle the error gracefully
 	f3Running, err := api.F3IsRunning(ctx)
