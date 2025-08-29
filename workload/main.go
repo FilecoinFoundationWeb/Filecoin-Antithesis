@@ -541,7 +541,7 @@ func monitoringCommands() *cli.Command {
 					&cli.IntFlag{
 						Name:  "max-stalls",
 						Usage: "Maximum consecutive stalls before failing",
-						Value: 5,
+						Value: 10,
 					},
 				},
 				Action: func(c *cli.Context) error {
@@ -622,7 +622,7 @@ func monitoringCommands() *cli.Command {
 					&cli.IntFlag{
 						Name:  "max-consecutive-stalls",
 						Usage: "Maximum consecutive stalls before failing height progression check",
-						Value: 3,
+						Value: 10,
 					},
 				},
 				Action: func(c *cli.Context) error {
