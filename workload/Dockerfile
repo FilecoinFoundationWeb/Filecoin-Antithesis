@@ -6,11 +6,23 @@ FROM ubuntu:latest
 
 # Install necessary packages including Python and Go
 RUN apt-get update -y && \
-    apt-get install -y python3 python3-pip python3-requests python3-filelock curl jq gcc ntpdate && \
+    apt-get install -y python3 python3-pip python3-requests python3-filelock curl jq gcc ntpdate git && \
     ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && \
     curl -OL "https://golang.org/dl/go1.23.2.linux-${ARCH}.tar.gz" && \
     tar -C /usr/local -xzf "go1.23.2.linux-${ARCH}.tar.gz" && \
     rm "go1.23.2.linux-${ARCH}.tar.gz"
+
+# Install Solidity compiler (solc)
+RUN curl -L https://github.com/ethereum/solidity/releases/download/v0.8.24/solc-linux -o /usr/local/bin/solc && \
+    chmod +x /usr/local/bin/solc
+
+# Install Foundry (includes forge and cast)
+RUN curl -L https://foundry.paradigm.xyz | bash && \
+    . /root/.bashrc && \
+    foundryup
+
+# Add Foundry binaries to PATH
+ENV PATH="/root/.foundry/bin:${PATH}"
 
 # Install Antithesis Python SDK
 RUN pip install antithesis cffi --break-system-packages

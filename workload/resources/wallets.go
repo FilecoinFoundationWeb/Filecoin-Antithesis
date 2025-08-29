@@ -13,7 +13,6 @@ import (
 	"github.com/filecoin-project/go-state-types/builtin"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
-	"github.com/filecoin-project/lotus/chain/types/ethtypes"
 )
 
 // InitializeWallets creates wallets and funds them with a specified amount from the genesis wallet.
@@ -355,21 +354,7 @@ func DeleteWallets(ctx context.Context, api api.FullNode, walletsToDelete []addr
 
 // SendFundsToEthAddress sends funds from a Filecoin address to an ETH address
 // It handles address conversion and transaction creation
-func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.Address, ethAddr string) error {
-	// Remove 0x prefix if present
-	ea, err := ethtypes.ParseEthAddress(ethAddr)
-	if err != nil {
-		log.Printf("[ERROR] Failed to parse target address; address must be a valid FIL address or an ETH address: %v", err)
-		return nil
-	}
-	log.Printf("[INFO] ETH address: %s", ea)
-	// Convert to f4 address
-	to, err := ea.ToFilecoinAddress()
-	if err != nil {
-		log.Printf("[ERROR] Failed to convert eth address to filecoin address: %v", err)
-		return nil
-	}
-	log.Printf("[INFO] Filecoin address: %s", to)
+func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.Address, to address.Address) error {
 	// Create message
 	amountFIL, err := types.ParseFIL("1000")
 	if err != nil {
@@ -395,7 +380,6 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 			map[string]interface{}{
 				"from":           from.String(),
 				"to":             to.String(),
-				"eth_address":    ethAddr,
 				"error":          err.Error(),
 				"value":          amountFIL.String(),
 				"property":       "Message pool operation",
@@ -525,4 +509,27 @@ func PerformDeleteOperation(ctx context.Context, nodeConfig *NodeConfig) error {
 		log.Printf("Deleted %d wallets successfully on node '%s'", numToDelete, nodeConfig.Name)
 		return nil
 	}, "Delete wallets operation")
+}
+
+func CreateEthAddresses(ctx context.Context, api api.FullNode) error {
+
+	wallet, err := CreateWallet(ctx, api, types.KTDelegated)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create wallet: %v", err)
+		return nil
+	}
+	log.Printf("Wallet: %s", wallet)
+	log.Printf("Created wallet: %s", wallet)
+	defaultWallet, err := GetGenesisWallet(ctx, api)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get default wallet: %v", err)
+		return nil
+	}
+	err = SendFundsToEthAddress(ctx, api, defaultWallet, wallet)
+	if err != nil {
+		log.Printf("[ERROR] Failed to send funds to ETH address: %v", err)
+		return nil
+	}
+	log.Printf("Sent funds to ETH address: %s", wallet)
+	return nil
 }

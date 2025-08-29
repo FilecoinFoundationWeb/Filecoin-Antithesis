@@ -142,6 +142,25 @@ func walletCommands() *cli.Command {
 				},
 			},
 			{
+				Name:  "eth-addresses",
+				Usage: "Create ETH addresses",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+					if err != nil {
+						return err
+					}
+					defer closer()
+					return resources.CreateEthAddresses(c.Context, api)
+				},
+			},
+			{
 				Name:  "delete",
 				Usage: "Delete wallets",
 				Flags: []cli.Flag{
