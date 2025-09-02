@@ -2,8 +2,11 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
@@ -13,6 +16,7 @@ import (
 	"github.com/filecoin-project/go-state-types/builtin"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
+	"github.com/filecoin-project/lotus/chain/types/ethtypes"
 )
 
 // InitializeWallets creates wallets and funds them with a specified amount from the genesis wallet.
@@ -353,10 +357,23 @@ func DeleteWallets(ctx context.Context, api api.FullNode, walletsToDelete []addr
 }
 
 // SendFundsToEthAddress sends funds from a Filecoin address to an ETH address
-// It handles address conversion and transaction creation
-func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.Address, to address.Address) error {
+func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.Address, ethAddr string) error {
+	// Remove 0x prefix if present
+	ea, err := ethtypes.ParseEthAddress(ethAddr)
+	if err != nil {
+		log.Printf("[ERROR] Failed to parse target address; address must be a valid FIL address or an ETH address: %v", err)
+		return nil
+	}
+	fmt.Printf("ea: %s\n", ea)
+	// Convert to f4 address
+	to, err := ea.ToFilecoinAddress()
+	if err != nil {
+		log.Printf("[ERROR] Failed to convert eth address to filecoin address: %v", err)
+		return nil
+	}
+	fmt.Printf("to: %s\n", to)
 	// Create message
-	amountFIL, err := types.ParseFIL("1000")
+	amountFIL, err := types.ParseFIL("10000")
 	if err != nil {
 		log.Printf("[ERROR] Failed to parse amount: %v", err)
 		return nil
@@ -380,6 +397,7 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 			map[string]interface{}{
 				"from":           from.String(),
 				"to":             to.String(),
+				"eth_address":    ethAddr,
 				"error":          err.Error(),
 				"value":          amountFIL.String(),
 				"property":       "Message pool operation",
@@ -512,24 +530,112 @@ func PerformDeleteOperation(ctx context.Context, nodeConfig *NodeConfig) error {
 }
 
 func CreateEthAddresses(ctx context.Context, api api.FullNode) error {
+	// Create geth keystore directory
+	keystoreDir := "/opt/antithesis/shared/keystore"
 
-	wallet, err := CreateWallet(ctx, api, types.KTDelegated)
+	// Create the ETH keystore wallet
+	ethAddress, keystorePath, err := CreateEthKeystore(keystoreDir)
 	if err != nil {
-		log.Printf("[ERROR] Failed to create wallet: %v", err)
-		return nil
+		log.Printf("[ERROR] Failed to create ETH keystore: %v", err)
+		return err
 	}
-	log.Printf("Wallet: %s", wallet)
-	log.Printf("Created wallet: %s", wallet)
+
+	log.Printf("Created ETH keystore wallet: %s", ethAddress.Hex())
+	log.Printf("Keystore saved at: %s", keystorePath)
+
+	// Store wallet info in a file for later use
+	walletInfo := map[string]string{
+		"address":       ethAddress.Hex(),
+		"keystore_path": keystorePath,
+		"password":      "password123",
+		"f4_address":    "", // Will be populated after funding
+	}
+
+	walletInfoPath := "/opt/antithesis/shared/wallet_info.json"
+	walletInfoJSON, err := json.MarshalIndent(walletInfo, "", "  ")
+	if err != nil {
+		log.Printf("[ERROR] Failed to marshal wallet info: %v", err)
+		return err
+	}
+
+	if err := os.WriteFile(walletInfoPath, walletInfoJSON, 0644); err != nil {
+		log.Printf("[ERROR] Failed to write wallet info file: %v", err)
+		return err
+	}
+
+	log.Printf("Wallet info saved to: %s", walletInfoPath)
+
+	// Get genesis wallet to fund the ETH address
 	defaultWallet, err := GetGenesisWallet(ctx, api)
 	if err != nil {
-		log.Printf("[ERROR] Failed to get default wallet: %v", err)
-		return nil
+		log.Printf("[ERROR] Failed to get genesis wallet: %v", err)
+		return err
 	}
-	err = SendFundsToEthAddress(ctx, api, defaultWallet, wallet)
+
+	// Fund the ETH address directly from genesis wallet using EAM
+	// The SendFundsToEthAddress function handles the ETH address creation and funding
+	err = SendFundsToEthAddress(ctx, api, defaultWallet, ethAddress.Hex())
 	if err != nil {
-		log.Printf("[ERROR] Failed to send funds to ETH address: %v", err)
-		return nil
+		log.Printf("[ERROR] Failed to fund ETH address: %v", err)
+		return err
 	}
-	log.Printf("Sent funds to ETH address: %s", wallet)
+
+	log.Printf("Successfully funded ETH address with 1000 FIL via EAM")
+
+	log.Printf("Successfully created and funded ETH wallet: %s", ethAddress.Hex())
+	return nil
+}
+
+// CreateEthKeystoreWallet creates an ETH keystore wallet and funds it directly
+func CreateEthKeystoreWallet(ctx context.Context, api api.FullNode, keystoreDir string) error {
+	// Create the ETH keystore wallet
+	ethAddress, keystorePath, err := CreateEthKeystore(keystoreDir)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create ETH keystore: %v", err)
+		return err
+	}
+
+	log.Printf("Created ETH keystore wallet: %s", ethAddress.Hex())
+	log.Printf("Keystore saved at: %s", keystorePath)
+
+	// Store wallet info in a file for later use
+	walletInfo := map[string]string{
+		"address":       ethAddress.Hex(),
+		"keystore_path": keystorePath,
+		"password":      "password123",
+		"f4_address":    "", // Will be populated after funding
+	}
+
+	walletInfoPath := "/opt/antithesis/shared/wallet_info.json"
+	walletInfoJSON, err := json.MarshalIndent(walletInfo, "", "  ")
+	if err != nil {
+		log.Printf("[ERROR] Failed to marshal wallet info: %v", err)
+		return err
+	}
+
+	if err := os.WriteFile(walletInfoPath, walletInfoJSON, 0644); err != nil {
+		log.Printf("[ERROR] Failed to write wallet info file: %v", err)
+		return err
+	}
+
+	log.Printf("Wallet info saved to: %s", walletInfoPath)
+
+	// Get genesis wallet to fund the ETH address
+	defaultWallet, err := GetGenesisWallet(ctx, api)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get genesis wallet: %v", err)
+		return err
+	}
+
+	// Fund the ETH address directly from genesis wallet using EAM
+	// The SendFundsToEthAddress function handles the ETH address creation and funding
+	err = SendFundsToEthAddress(ctx, api, defaultWallet, ethAddress.Hex())
+	if err != nil {
+		log.Printf("[ERROR] Failed to fund ETH address: %v", err)
+		return err
+	}
+
+	log.Printf("Successfully funded ETH address with 1000 FIL via EAM")
+	log.Printf("Successfully created and funded ETH wallet: %s", ethAddress.Hex())
 	return nil
 }

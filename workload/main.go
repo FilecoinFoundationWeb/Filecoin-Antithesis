@@ -161,6 +161,33 @@ func walletCommands() *cli.Command {
 				},
 			},
 			{
+				Name:  "create-eth-keystore",
+				Usage: "Create ETH keystore wallet and fund it",
+				Flags: []cli.Flag{
+					nodeFlag,
+					&cli.StringFlag{
+						Name:    "keystore-dir",
+						Value:   "/opt/antithesis/keystore",
+						Usage:   "Directory to store the keystore file",
+						EnvVars: []string{"KEYSTORE_DIR"},
+					},
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+					if err != nil {
+						return err
+					}
+					defer closer()
+
+					keystoreDir := c.String("keystore-dir")
+					return resources.CreateEthKeystoreWallet(c.Context, api, keystoreDir)
+				},
+			},
+			{
 				Name:  "delete",
 				Usage: "Delete wallets",
 				Flags: []cli.Flag{

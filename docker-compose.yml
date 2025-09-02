@@ -73,6 +73,7 @@ services:
       - ./lotus/lotus_bench.sh:/opt/antithesis/test/v1/main/serial_driver_lotus_bench.sh
       - ./data/forest:${FOREST_DATA_DIR}
       - ./data/lotus-2:${LOTUS_2_DATA_DIR}
+      - ./data/shared:/opt/antithesis/shared
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
       - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
@@ -147,6 +148,7 @@ services:
       - ./data/lotus-2:${LOTUS_2_DATA_DIR}
       - ./data/forest:${FOREST_DATA_DIR}
       - ./lotus/start_scripts/lotus-2.sh:${LOTUS_2_DATA_DIR}/lotus-2.sh
+      - ./data/shared:/opt/antithesis/shared
     environment:
       - LOTUS_SHARK_HEIGHT=${SHARK_HEIGHT}
       - LOTUS_HYGGE_HEIGHT=${HYGGE_HEIGHT}
@@ -218,6 +220,7 @@ services:
       - ./data/forest:${FOREST_DATA_DIR}
       - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
       - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
+      - ./data/shared:/opt/antithesis/shared
     environment:
       - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${LOTUS_MINER_1_ACTOR_ADDRESS}
       - FOREST_GENESIS_NETWORK_VERSION=${GENESIS_NETWORK_VERSION}
@@ -288,6 +291,7 @@ services:
       - ./data/lotus-1:/root/devgen/lotus-1
       - ./data/lotus-2:/root/devgen/lotus-2
       - ./data/forest:/root/devgen/forest
+      - ./data/shared:/opt/antithesis/shared
     env_file:
       - .env
     networks:
