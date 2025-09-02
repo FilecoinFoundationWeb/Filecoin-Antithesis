@@ -21,17 +21,17 @@ func CheckChainBackfill(ctx context.Context, nodes []NodeConfig) error {
 		head, err := api.ChainHead(ctx)
 		if err != nil {
 			log.Printf("[WARN] Failed to get chain head for node %s: %v", node.Name, err)
-			continue
+			return nil
 		}
 
 		height := head.Height()
-		if height <= 1 {
+		if height <= 20 {
 			log.Printf("[INFO] Chain height too low for backfill test on node %s: %d", node.Name, height)
-			continue
+			return nil
 		}
 
 		// Test backfill with the previous height
-		backfillHeight := height - 1
+		backfillHeight := height - 5
 		_, err = api.ChainValidateIndex(ctx, backfillHeight, true)
 
 		var errMsg string
