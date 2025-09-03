@@ -451,6 +451,46 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 	return nil
 }
 
+func CreateEthKeystoreWallet(ctx context.Context, nodeConfig *NodeConfig, keystoreDir string) error {
+	log.Printf("Creating ETH keystore wallet for node: %s", nodeConfig.Name)
+	ethAddr, keystorePath, err := CreateEthKeystore(keystoreDir)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create ETH keystore wallet: %v", err)
+		return err
+	}
+	log.Printf("ETH keystore wallet created: %s", ethAddr)
+	log.Printf("ETH keystore wallet saved at: %s", keystorePath)
+	log.Printf("Keystore created for node: %s", nodeConfig.Name)
+
+	// Connect to the node to fund the ETH address
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return err
+	}
+	defer closer()
+
+	// Get a funded wallet to send from
+	fromWallet, err := GetGenesisWallet(ctx, api)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get genesis wallet for funding: %v", err)
+		return err
+	}
+
+	// Convert Ethereum address to string for SendFundsToEthAddress
+	ethAddrStr := ethAddr.Hex()
+	log.Printf("Funding ETH address %s from wallet %s", ethAddrStr, fromWallet)
+
+	err = SendFundsToEthAddress(ctx, api, fromWallet, ethAddrStr)
+	if err != nil {
+		log.Printf("[ERROR] Failed to fund ETH address: %v", err)
+		return err
+	}
+
+	log.Printf("Successfully funded ETH keystore wallet: %s", ethAddrStr)
+	return nil
+}
+
 // PerformCreateOperation creates wallets on a specified node
 func PerformCreateOperation(ctx context.Context, nodeConfig *NodeConfig, numWallets int, tokenAmount abi.TokenAmount) error {
 	log.Printf("Creating %d wallets on node '%s'...", numWallets, nodeConfig.Name)
