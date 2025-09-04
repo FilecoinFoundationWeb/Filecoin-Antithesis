@@ -37,6 +37,8 @@ done
 
 echo "Workload [entrypoint]: chainhead has reached block height ${INIT_BLOCK_HEIGHT}"
 
+/opt/antithesis/entrypoint/deploy-contracts.sh
+
 python3 -u /opt/antithesis/entrypoint/setup_complete.py
 
 sleep infinity

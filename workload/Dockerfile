@@ -33,11 +33,14 @@ ENV GOPATH="/go"
 WORKDIR /opt/antithesis
 
 
+# FEVM Hardhat Kit
 RUN git clone https://github.com/parthshah1/fevm-kit.git /opt/antithesis/projects/fevm-hardhat-kit
-RUN git clone https://github.com/parthshah1/stablecoin-contracts.git /opt/antithesis/projects/stablecoin-contracts
-
 WORKDIR /opt/antithesis/projects/fevm-hardhat-kit
+RUN yarn install
 
+# Filecoin Pay
+RUN git clone https://github.com/FilOzone/filecoin-pay.git /opt/antithesis/projects/filecoin-pay
+WORKDIR /opt/antithesis/projects/filecoin-pay
 RUN yarn install
 
 WORKDIR /opt/antithesis
