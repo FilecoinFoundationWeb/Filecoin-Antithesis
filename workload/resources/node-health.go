@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
@@ -40,6 +41,7 @@ type NodeHealthMonitor struct {
 	heightHistory     map[string][]abi.ChainEpoch
 	lastTipsetChange  map[string]time.Time
 	consecutiveStalls map[string]int
+	mu                sync.Mutex
 }
 
 // NewNodeHealthMonitor creates a new health monitor instance
@@ -250,14 +252,17 @@ func (m *NodeHealthMonitor) streamNodeUpdates(ctx context.Context, node NodeConf
 
 				lastReportedHeight = currentHeight
 
-				// Update last tipset change time
+				// Update last tipset change time and reset stall counter (guarded)
+				m.mu.Lock()
 				m.lastTipsetChange[node.Name] = time.Now()
-
-				// Reset stall counter on activity
 				m.consecutiveStalls[node.Name] = 0
+				m.mu.Unlock()
 			} else {
-				// Check if we've been stalled too long
-				if lastChange, exists := m.lastTipsetChange[node.Name]; exists {
+				// Check if we've been stalled too long (guarded read)
+				m.mu.Lock()
+				lastChange, exists := m.lastTipsetChange[node.Name]
+				m.mu.Unlock()
+				if exists {
 					if time.Since(lastChange) > monitorDuration {
 						assert.Always(false, "Node should be advancing", map[string]interface{}{
 							"current_height":       currentHeight,
@@ -324,35 +329,46 @@ func (m *NodeHealthMonitor) monitorHeightForNode(ctx context.Context, node NodeC
 			}
 
 			currentHeight := currentHead.Height()
+			m.mu.Lock()
 			m.heightHistory[node.Name] = append(m.heightHistory[node.Name], currentHeight)
 
 			// Keep only last 4 heights
 			if len(m.heightHistory[node.Name]) > 4 {
 				m.heightHistory[node.Name] = m.heightHistory[node.Name][len(m.heightHistory[node.Name])-4:]
 			}
+			m.mu.Unlock()
 
 			log.Printf("[INFO] Node %s height check %d: %d", node.Name, checkCount+1, currentHeight)
 
 			// Check if height has been the same for 4 consecutive polls
+			m.mu.Lock()
 			if len(m.heightHistory[node.Name]) == 4 {
-				heights := m.heightHistory[node.Name]
+				heights := append([]abi.ChainEpoch(nil), m.heightHistory[node.Name]...)
+				m.mu.Unlock()
 				if heights[0] == heights[1] && heights[1] == heights[2] && heights[2] == heights[3] {
+					m.mu.Lock()
 					m.consecutiveStalls[node.Name]++
+					stalls := m.consecutiveStalls[node.Name]
+					m.mu.Unlock()
 
-					if m.consecutiveStalls[node.Name] >= m.monitorConfig.MaxConsecutiveStalls {
+					if stalls >= m.monitorConfig.MaxConsecutiveStalls {
 						heightIncreasing := false
 						assert.Always(heightIncreasing, "Node height should be increasing", map[string]interface{}{
 							"node":               node.Name,
 							"height":             heights[0],
-							"consecutive_stalls": m.consecutiveStalls[node.Name],
+							"consecutive_stalls": stalls,
 							"property":           "Height progression",
 							"impact":             "Critical - indicates node is stalled",
 						})
 					}
 				} else {
 					// Reset stall counter on height change
+					m.mu.Lock()
 					m.consecutiveStalls[node.Name] = 0
+					m.mu.Unlock()
 				}
+			} else {
+				m.mu.Unlock()
 			}
 
 			checkCount++

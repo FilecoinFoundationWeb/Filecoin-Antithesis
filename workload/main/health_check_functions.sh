@@ -70,3 +70,32 @@ log_script_start() {
     exit_if_nodes_down
     echo "$(date): [$(basename $0)] All nodes healthy, proceeding..."
 } 
+
+# Return the PID file path used to indicate a running reorg singleton
+reorg_pid_file() {
+    echo "/tmp/singleton_driver_reorg.pid"
+}
+
+# Check if the reorg singleton is currently running
+is_reorg_running() {
+    local pid_file
+    pid_file="$(reorg_pid_file)"
+
+    if [ -f "$pid_file" ]; then
+        local pid
+        pid="$(cat "$pid_file" 2>/dev/null)"
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# Exit early (success) if reorg singleton is running
+exit_if_reorg_running() {
+    if is_reorg_running; then
+        echo "$(date): [$(basename $0)] Reorg singleton is running; skipping."
+        exit 0
+    fi
+}
