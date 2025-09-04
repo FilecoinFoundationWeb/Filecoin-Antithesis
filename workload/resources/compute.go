@@ -79,8 +79,9 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 		// Verify state consistency
 		if st.Root != checkTs.ParentState() {
 			assert.Always(st.Root == checkTs.ParentState(),
-				"[State Consistency] Computed state must match parent state",
+				"State computation: Computed state must match parent state - state computation error detected",
 				map[string]interface{}{
+					"operation":       "state_computation",
 					"exec_ts_height":  execTs.Height(),
 					"check_ts_height": checkTs.Height(),
 					"exec_ts_root":    st.Root.String(),

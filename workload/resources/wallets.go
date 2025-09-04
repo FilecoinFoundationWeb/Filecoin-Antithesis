@@ -196,8 +196,9 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 	sm, err := api.MpoolPushMessage(ctx, msg, nil)
 	if err != nil {
 		assert.Sometimes(true,
-			"[Message Push] Mpool push message.",
+			"Wallet transfer: Mpool push message should succeed - message push failure detected",
 			map[string]interface{}{
+				"operation":      "wallet_transfer",
 				"from":           from.String(),
 				"to":             to.String(),
 				"error":          err.Error(),
@@ -391,8 +392,9 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 	sm, err := api.MpoolPushMessage(ctx, msg, nil)
 	if err != nil {
 		assert.Sometimes(true,
-			"[Message Push] Mpool push message to ETH address.",
+			"ETH wallet transfer: Mpool push message to ETH address should succeed - message push failure detected",
 			map[string]interface{}{
+				"operation":      "eth_wallet_transfer",
 				"from":           from.String(),
 				"to":             to.String(),
 				"eth_address":    ethAddr,

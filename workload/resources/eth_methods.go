@@ -108,8 +108,9 @@ func CheckEthMethods(ctx context.Context) error {
 					}
 
 					assert.Always(equal,
-						"[Block Consistency] Blocks should be identical regardless of retrieval method",
+						"ETH block consistency: Blocks should be identical regardless of retrieval method - API inconsistency detected",
 						map[string]interface{}{
+							"operation":      "eth_block_consistency",
 							"height":         i,
 							"node":           node.Name,
 							"blockByNumber":  ethBlockA,
@@ -122,8 +123,9 @@ func CheckEthMethods(ctx context.Context) error {
 
 					// Additional specific field checks for better error reporting
 					assert.Always(ethBlockA.Hash == ethBlockB.Hash,
-						"[Block Hash] Block hashes must be identical",
+						"ETH block hash consistency: Block hashes must be identical - hash computation error detected",
 						map[string]interface{}{
+							"operation":     "eth_block_hash_consistency",
 							"height":        i,
 							"node":          node.Name,
 							"blockByNumber": ethBlockA.Hash,
@@ -134,8 +136,9 @@ func CheckEthMethods(ctx context.Context) error {
 						})
 
 					assert.Always(ethBlockA.Number == ethBlockB.Number,
-						"[Block Number] Block numbers must be identical",
+						"ETH block number consistency: Block numbers must be identical - block height mismatch detected",
 						map[string]interface{}{
+							"operation":     "eth_block_number_consistency",
 							"height":        i,
 							"node":          node.Name,
 							"blockByNumber": ethBlockA.Number,
@@ -146,8 +149,9 @@ func CheckEthMethods(ctx context.Context) error {
 						})
 
 					assert.Always(ethBlockA.ParentHash == ethBlockB.ParentHash,
-						"[Parent Hash] Parent hashes must be identical",
+						"ETH parent hash consistency: Parent hashes must be identical - chain linking error detected",
 						map[string]interface{}{
+							"operation":     "eth_parent_hash_consistency",
 							"height":        i,
 							"node":          node.Name,
 							"blockByNumber": ethBlockA.ParentHash,
@@ -158,8 +162,9 @@ func CheckEthMethods(ctx context.Context) error {
 						})
 
 					assert.Always(ethBlockA.Timestamp == ethBlockB.Timestamp,
-						"[Block Timestamp] Block timestamps must be identical",
+						"ETH timestamp consistency: Block timestamps must be identical - timestamp mismatch detected",
 						map[string]interface{}{
+							"operation":     "eth_timestamp_consistency",
 							"height":        i,
 							"node":          node.Name,
 							"blockByNumber": ethBlockA.Timestamp,
@@ -305,7 +310,10 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 	}
 
 	log.Printf("[INFO] ETH legacy transaction check completed successfully")
-	assert.Sometimes(receipt.Status == 1, "Transaction mined successfully", map[string]interface{}{"tx_hash": txHash})
+	assert.Sometimes(receipt.Status == 1, "ETH legacy transaction: Transaction should be mined successfully - mining failure detected", map[string]interface{}{
+		"operation": "eth_legacy_transaction",
+		"tx_hash":   txHash,
+	})
 	return nil
 }
 
@@ -442,7 +450,8 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 	txHash := SubmitTransaction(ctx, api, &tx)
 	log.Printf("[INFO] Transaction submitted with hash: %s", txHash)
 
-	assert.Sometimes(txHash != ethtypes.EmptyEthHash, "Transaction must be submitted successfully", map[string]interface{}{
+	assert.Sometimes(txHash != ethtypes.EmptyEthHash, "ETH contract deployment: Transaction must be submitted successfully - submission failure detected", map[string]interface{}{
+		"operation":   "eth_contract_deployment",
 		"tx_hash":     txHash.String(),
 		"deployer":    deployer.String(),
 		"requirement": "Transaction hash must not be empty",
@@ -465,6 +474,9 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 	}
 
 	// Assert transaction was mined successfully
-	assert.Sometimes(receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
+	assert.Sometimes(receipt.Status == 1, "ETH contract deployment: Transaction must be mined successfully - mining failure detected", map[string]interface{}{
+		"operation": "eth_contract_deployment",
+		"tx_hash":   txHash,
+	})
 	return nil
 }

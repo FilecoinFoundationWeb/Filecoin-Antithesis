@@ -46,7 +46,11 @@ func CheckChainBackfill(ctx context.Context, nodes []NodeConfig) error {
 			"impact":   "High - validates chain index consistency",
 			"details":  "Chain index validation ensures proper chain state tracking",
 		}
-		assert.Sometimes(err == nil, "[Chain Validation] Chain index validation should succeed", details)
+		assert.Sometimes(err == nil, "Chain index validation: Chain index validation should succeed - validation failure detected", map[string]interface{}{
+			"operation":   "chain_index_validation",
+			"requirement": "Chain index validation should succeed",
+			"details":     details,
+		})
 
 		if err == nil {
 			log.Printf("[INFO] Successfully validated chain index backfill for node %s at height %d", node.Name, backfillHeight)
@@ -75,7 +79,10 @@ func PerformCheckBackfill(ctx context.Context, config *Config) error {
 			log.Printf("[WARN] Chain backfill check failed, will retry: %v", err)
 			return err // Return original error for retry
 		}
-		assert.Sometimes(true, "Chain index backfill check completed.", map[string]interface{}{"requirement": "Chain index backfill check completed."})
+		assert.Sometimes(true, "Chain index backfill: Chain index backfill check completed successfully", map[string]interface{}{
+			"operation":   "chain_index_backfill",
+			"requirement": "Chain index backfill check completed.",
+		})
 		log.Println("[INFO] Chain index backfill check completed.")
 		return nil
 	}, "Chain index backfill check operation")

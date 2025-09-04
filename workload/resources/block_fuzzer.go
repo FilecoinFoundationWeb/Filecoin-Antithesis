@@ -415,8 +415,9 @@ func FuzzBlockSubmissionWithConfig(ctx context.Context, api api.FullNode, config
 
 		// The node should reject all these malformed blocks
 		assert.Always(err != nil,
-			"[Block Validation] Malformed block submission should be rejected",
+			"Block validation: Malformed block submission should be rejected - validation bypass detected",
 			map[string]interface{}{
+				"operation": "block_validation",
 				"test_case": testCaseName,
 				"error":     err,
 				"property":  "Block validation",
