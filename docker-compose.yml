@@ -85,6 +85,7 @@ services:
       - LOTUS_TUKTUK_HEIGHT=${TUKTUK_HEIGHT}
       - LOTUS_TEEP_HEIGHT=${TEEP_HEIGHT} 
       - LOTUS_1_IP=${LOTUS_1_IP}
+      - LOTUS_GOLDEN_WEEK_HEIGHT=${GOLDENWEEK_HEIGHT}
     env_file:
       - .env
     entrypoint: ["${LOTUS_1_DATA_DIR}/lotus-1.sh"]
@@ -124,6 +125,7 @@ services:
       - LOTUS_MINER_1_IP=${LOTUS_MINER_1_IP}
       - LOTUS_TUKTUK_HEIGHT=${TUKTUK_HEIGHT}
       - LOTUS_TEEP_HEIGHT=${TEEP_HEIGHT}
+      - LOTUS_GOLDEN_WEEK_HEIGHT=${GOLDENWEEK_HEIGHT}
     ports:
       - ${LOTUS_MINER_1_RPC_PORT}:${LOTUS_MINER_1_RPC_PORT}
     env_file:
@@ -160,6 +162,7 @@ services:
       - LOTUS_2_RPC_PORT=${LOTUS_2_RPC_PORT}
       - LOTUS_TUKTUK_HEIGHT=${TUKTUK_HEIGHT}
       - LOTUS_TEEP_HEIGHT=${TEEP_HEIGHT}
+      - LOTUS_GOLDEN_WEEK_HEIGHT=${GOLDENWEEK_HEIGHT}
     env_file:
       - .env
     entrypoint: ["${LOTUS_2_DATA_DIR}/lotus-2.sh"]
@@ -195,6 +198,7 @@ services:
       - LOTUS_MINER_2_IP=${LOTUS_MINER_2_IP}
       - LOTUS_TUKTUK_HEIGHT=${TUKTUK_HEIGHT}
       - LOTUS_TEEP_HEIGHT=${TEEP_HEIGHT}
+      - LOTUS_GOLDEN_WEEK_HEIGHT=${GOLDENWEEK_HEIGHT}
     ports:
       - ${LOTUS_MINER_2_RPC_PORT}:${LOTUS_MINER_2_RPC_PORT}
     env_file:
@@ -232,6 +236,7 @@ services:
       - FOREST_IP=${FOREST_IP}
       - FOREST_HEALTHZ_RPC_PORT=${FOREST_HEALTHZ_RPC_PORT}
       - FOREST_TEEP_HEIGHT=${TEEP_HEIGHT}
+      - FOREST_GOLDEN_WEEK_HEIGHT=${GOLDENWEEK_HEIGHT}
     ports:
       - ${FOREST_RPC_PORT}:${FOREST_RPC_PORT}
     env_file:
