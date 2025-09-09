@@ -1,8 +1,8 @@
 # drand + lotus are considered more stable dependencies
-drand_tag = v2.1.3
-lotus_tag = v1.33.0
+drand_tag = $(shell git ls-remote --tags https://github.com/drand/drand.git | grep -E 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1 | sed 's/.*refs\/tags\///')
+lotus_tag = $(shell git ls-remote https://github.com/filecoin-project/lotus.git HEAD | cut -f1)
 builder = docker
-forest_commit = 631e7b1c68c4175aaffde4dd6641268d1854e646
+forest_commit = $(shell git ls-remote https://github.com/ChainSafe/forest.git HEAD | cut -f1)
 
 # Architecture configuration - set TARGET_ARCH to build for specific architecture
 TARGET_ARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
@@ -11,19 +11,33 @@ DOCKER_PLATFORM = linux/$(TARGET_ARCH)
 # Simple build command that works with any architecture
 BUILD_CMD = docker build
 
+.PHONY: show-drand-tag
+show-drand-tag:
+	@echo "Drand tag: $(drand_tag)"
+
+.PHONY: show-lotus-tag
+show-lotus-tag:
+	@echo "Lotus tag: $(lotus_tag)"
+
+.PHONY: show-forest-commit
+show-forest-commit:
+	@echo "Forest commit: $(forest_commit)"
 .PHONY: build-forest
 build-forest:
 	@echo "Building forest for $(TARGET_ARCH) architecture..."
+	@echo "Forest commit: $(forest_commit)"
 	$(BUILD_CMD) --build-arg GIT_COMMIT=$(forest_commit) -t forest:latest -f forest/Dockerfile forest
 
 .PHONY: build-drand
 build-drand:
 	@echo "Building drand for $(TARGET_ARCH) architecture..."
+	@echo "Drand tag: $(drand_tag)"
 	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(drand_tag) -t drand:latest -f drand/Dockerfile drand
 
 .PHONY: build-lotus
 build-lotus:
 	@echo "Building lotus for $(TARGET_ARCH) architecture..."
+	@echo "Lotus tag: $(lotus_tag)"
 	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(lotus_tag) -t lotus:latest -f lotus/Dockerfile lotus
 
 .PHONY: build-workload
