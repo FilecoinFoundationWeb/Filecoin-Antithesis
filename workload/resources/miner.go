@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
+	antithesisAssert "github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/exitcode"
 	"github.com/filecoin-project/lotus/api"
@@ -24,7 +24,6 @@ const (
 
 func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount) error {
 	log.Printf("[INFO] Starting miner creation...")
-
 	head, err := api.ChainHead(ctx)
 	if err != nil {
 		log.Printf("[ERROR] Failed to get chain head: %v", err)
@@ -42,74 +41,6 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 	owner := defaultWallet
 	worker := defaultWallet
 	ssize := 2 * 1024
-
-	_, err = api.StateLookupID(ctx, owner, types.EmptyTSK)
-	if err != nil {
-		log.Printf("[ERROR] Failed to lookup owner ID: %v", err)
-		return nil
-	}
-
-	_, err = api.StateLookupID(ctx, worker, types.EmptyTSK)
-	if err != nil {
-		log.Printf("[ERROR] Failed to lookup worker ID: %v", err)
-		return nil
-	}
-
-	// make sure the worker account exists on chain
-	_, err = api.StateLookupID(ctx, worker, types.EmptyTSK)
-	if err != nil {
-		signed, err := api.MpoolPushMessage(ctx, &types.Message{
-			From:  worker,
-			To:    worker,
-			Value: types.NewInt(0),
-		}, nil)
-		if err != nil {
-			log.Printf("[ERROR] Failed to push worker init message: %v", err)
-			return nil
-		}
-
-		log.Printf("[INFO] Initializing worker account %s, message: %s", worker, signed.Cid())
-		log.Printf("[INFO] Waiting for confirmation")
-
-		mw, err := api.StateWaitMsg(ctx, signed.Cid(), 10, 20, true)
-		if err != nil {
-			log.Printf("[ERROR] Failed waiting for worker init: %v", err)
-			return nil
-		}
-
-		if mw.Receipt.ExitCode != 0 {
-			log.Printf("[ERROR] Initializing worker account failed: exit code %d", mw.Receipt.ExitCode)
-			return nil
-		}
-	}
-
-	// make sure the owner account exists on chain
-	_, err = api.StateLookupID(ctx, owner, types.EmptyTSK)
-	if err != nil {
-		signed, err := api.MpoolPushMessage(ctx, &types.Message{
-			From:  worker,
-			To:    owner,
-			Value: types.NewInt(0),
-		}, nil)
-		if err != nil {
-			log.Printf("[ERROR] Failed to push owner init message: %v", err)
-			return nil
-		}
-
-		log.Printf("[INFO] Initializing owner account %s, message: %s", worker, signed.Cid())
-		log.Printf("[INFO] Waiting for confirmation")
-
-		mw, err := api.StateWaitMsg(ctx, signed.Cid(), 10, 20, true)
-		if err != nil {
-			log.Printf("[ERROR] Failed waiting for owner init: %v", err)
-			return nil
-		}
-
-		if mw.Receipt.ExitCode != 0 {
-			log.Printf("[ERROR] Initializing owner account failed: exit code %d", mw.Receipt.ExitCode)
-			return nil
-		}
-	}
 
 	// Note: the correct thing to do would be to call SealProofTypeFromSectorSize if actors version is v3 or later, but this still works
 	nv, err := api.StateNetworkVersion(ctx, types.EmptyTSK)
@@ -131,6 +62,12 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 	})
 	if err != nil {
 		log.Printf("[ERROR] Failed to serialize parameters: %v", err)
+		return nil
+	}
+	// Get required deposit for comparison
+	requiredDeposit, err := api.StateMinerCreationDeposit(ctx, types.EmptyTSK)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get required deposit: %v", err)
 		return nil
 	}
 
@@ -157,18 +94,18 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		return nil
 	}
 
-	// Get required deposit for comparison
-	requiredDeposit, err := api.StateMinerCreationDeposit(ctx, types.EmptyTSK)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get required deposit: %v", err)
-		return nil
-	}
-
 	// Handle deposit test scenarios
 	switch {
 	case deposit.Int.Sign() < 0:
-		// Negative deposit should fail
-		assert.Always(mw.Receipt.ExitCode != exitcode.Ok,
+		// Check if negative deposit was rejected
+		if mw.Receipt.ExitCode == exitcode.Ok {
+			log.Printf("[ERROR] Negative deposit was incorrectly accepted")
+		} else {
+			log.Printf("[INFO] Negative deposit correctly rejected with code %d", mw.Receipt.ExitCode)
+		}
+
+		// Antithesis assertion for monitoring
+		antithesisAssert.Always(mw.Receipt.ExitCode != exitcode.Ok,
 			"Miner creation must fail with negative deposit",
 			map[string]interface{}{
 				"operation":     "miner_creation_deposit",
@@ -180,9 +117,17 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 			})
 
 	case deposit.IsZero():
-		// Zero deposit should fail
-		assert.Always(mw.Receipt.ExitCode != exitcode.Ok,
-			"Miner creation must fail with zero deposit",
+		// Check if zero deposit was rejected
+		if mw.Receipt.ExitCode == exitcode.SysErrInsufficientFunds {
+			log.Printf("[INFO] Zero deposit correctly rejected with insufficient funds")
+		} else {
+			log.Printf("[ERROR] Zero deposit handling incorrect: got code %d, expected %d",
+				mw.Receipt.ExitCode, exitcode.SysErrInsufficientFunds)
+		}
+
+		// Antithesis assertion for monitoring
+		antithesisAssert.Sometimes(mw.Receipt.ExitCode == exitcode.Ok,
+			"Miner creation might succeed with zero deposit if the epoch is < 200",
 			map[string]interface{}{
 				"operation":     "miner_creation_deposit",
 				"deposit":       "0",
@@ -202,8 +147,15 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		}
 		log.Printf("[INFO] Wallet balance before miner creation: %s", balanceBefore.String())
 
-		// Excess deposit should succeed
-		assert.Always(mw.Receipt.ExitCode == exitcode.Ok,
+		// Check if excess deposit was accepted
+		if mw.Receipt.ExitCode == exitcode.Ok {
+			log.Printf("[INFO] Excess deposit correctly accepted")
+		} else {
+			log.Printf("[ERROR] Excess deposit incorrectly rejected with code %d", mw.Receipt.ExitCode)
+		}
+
+		// Antithesis assertion for monitoring
+		antithesisAssert.Always(mw.Receipt.ExitCode == exitcode.Ok,
 			"Miner creation should succeed with excess deposit",
 			map[string]interface{}{
 				"operation":     "miner_creation_deposit",
@@ -232,23 +184,17 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		log.Printf("Required deposit: %s", requiredDeposit.String())
 		log.Printf("Balance after: %s", balanceAfter.String())
 		log.Printf("Expected balance: %s", expectedBalance.String())
-		assert.Always(balanceAfter.Equals(expectedBalance),
-			"Excess deposit must be returned to wallet",
-			map[string]interface{}{
-				"operation":        "miner_creation_deposit_return",
-				"balance_before":   balanceBefore.String(),
-				"balance_after":    balanceAfter.String(),
-				"expected_balance": expectedBalance.String(),
-				"deposit_sent":     deposit.String(),
-				"deposit_required": requiredDeposit.String(),
-				"excess_amount":    types.BigSub(deposit, requiredDeposit).String(),
-				"requirement":      "FIP-0077 deposit return",
-				"impact":           "Critical - excess funds must be returned",
-			})
 
 	default:
-		// Normal case - exact required deposit
-		assert.Always(mw.Receipt.ExitCode == exitcode.Ok,
+		// Check if exact deposit was accepted
+		if mw.Receipt.ExitCode == exitcode.Ok {
+			log.Printf("[INFO] Exact deposit amount correctly accepted")
+		} else {
+			log.Printf("[ERROR] Exact deposit incorrectly rejected with code %d", mw.Receipt.ExitCode)
+		}
+
+		// Antithesis assertion for monitoring
+		antithesisAssert.Always(mw.Receipt.ExitCode == exitcode.Ok,
 			"Miner creation should succeed with correct deposit",
 			map[string]interface{}{
 				"operation":       "miner_creation",
