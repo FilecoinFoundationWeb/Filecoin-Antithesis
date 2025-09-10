@@ -1,5 +1,4 @@
-
-#!/usr/bin/env bash
+#!/bin/bash
 
 export FOREST_DATA_DIR=/forest_data
 export TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
