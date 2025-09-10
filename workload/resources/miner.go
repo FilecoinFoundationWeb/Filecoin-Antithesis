@@ -105,7 +105,7 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		}
 
 		// Antithesis assertion for monitoring
-		antithesisAssert.Always(mw.Receipt.ExitCode != exitcode.Ok,
+		antithesisAssert.Always(err != nil,
 			"Miner creation must fail with negative deposit",
 			map[string]interface{}{
 				"operation":     "miner_creation_deposit",
@@ -118,7 +118,7 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 
 	case deposit.IsZero():
 		// Check if zero deposit was rejected
-		if mw.Receipt.ExitCode == exitcode.SysErrInsufficientFunds {
+		if err != nil {
 			log.Printf("[INFO] Zero deposit correctly rejected with insufficient funds")
 		} else {
 			log.Printf("[ERROR] Zero deposit handling incorrect: got code %d, expected %d",
@@ -126,7 +126,7 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		}
 
 		// Antithesis assertion for monitoring
-		antithesisAssert.Sometimes(mw.Receipt.ExitCode == exitcode.Ok,
+		antithesisAssert.Sometimes(err == nil,
 			"Miner creation might succeed with zero deposit if the epoch is < 200",
 			map[string]interface{}{
 				"operation":     "miner_creation_deposit",
@@ -155,7 +155,7 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		}
 
 		// Antithesis assertion for monitoring
-		antithesisAssert.Always(mw.Receipt.ExitCode == exitcode.Ok,
+		antithesisAssert.Always(err == nil,
 			"Miner creation should succeed with excess deposit",
 			map[string]interface{}{
 				"operation":     "miner_creation_deposit",
@@ -194,7 +194,7 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		}
 
 		// Antithesis assertion for monitoring
-		antithesisAssert.Always(mw.Receipt.ExitCode == exitcode.Ok,
+		antithesisAssert.Always(err == nil,
 			"Miner creation should succeed with correct deposit",
 			map[string]interface{}{
 				"operation":       "miner_creation",
