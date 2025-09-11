@@ -222,7 +222,7 @@ services:
       - ./data/forest:${FOREST_DATA_DIR}
       - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
       - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
-      - ./forest/forest_bench.sh:/opt/antithesis/test/v1/main/parallel_driver_forest_snapshot_validate.sh
+      - ./forest/forest_bench.sh:/opt/antithesis/test/v1/main/parallel_driver_forest_snapshot_generate.sh
       - ./forest/forest_validate_snapshots.sh:/opt/antithesis/test/v1/main/eventually_forest_snapshot_validate.sh
     environment:
       - FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES=${LOTUS_MINER_1_ACTOR_ADDRESS}
