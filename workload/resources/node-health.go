@@ -28,7 +28,7 @@ func DefaultHealthMonitorConfig() *HealthMonitorConfig {
 		EnableHeightProgression: true,
 		EnablePeerCount:         true,
 		EnableF3Status:          true,
-		MonitorDuration:         30 * time.Second,
+		MonitorDuration:         180 * time.Second,
 		HeightCheckInterval:     7 * time.Second,
 		MaxConsecutiveStalls:    3,
 	}

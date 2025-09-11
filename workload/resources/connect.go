@@ -94,7 +94,7 @@ func ConnectToNode(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, fu
 	)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		api, closer, err = tryConnect(ctx, nodeConfig)
+		api, closer, err = ConnectToNodeV1(ctx, nodeConfig)
 		if err == nil {
 			return api, closer, nil
 		}
@@ -124,8 +124,8 @@ func ConnectToNode(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, fu
 	return nil, nil, nil
 }
 
-// tryConnect attempts a single connection to the node using the V1 RPC API
-func tryConnect(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(), error) {
+// ConnectToNodeV1 attempts a single connection to the node using the V1 RPC API
+func ConnectToNodeV1(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(), error) {
 	authToken, err := ioutil.ReadFile(nodeConfig.AuthTokenPath)
 	if err != nil {
 		log.Printf("[ERROR] Failed to read auth token for node %s: %v", nodeConfig.Name, err)
@@ -167,35 +167,6 @@ func NewFullNodeRPCV2(ctx context.Context, addr string, requestHeader http.Heade
 	return &res, closer, err
 }
 
-// IsNodeConnected checks if a node has any active peer connections
-func IsNodeConnected(ctx context.Context, nodeAPI api.FullNode) (bool, error) {
-	peers, err := nodeAPI.NetPeers(ctx)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get peer list: %v", err)
-		return false, nil
-	}
-	return len(peers) > 0, nil
-}
-
-// EnsureNodesConnected verifies that a node is connected to peers and attempts to establish connections if not
-func EnsureNodesConnected(ctx context.Context, currentNodeAPI api.FullNode, currentNodeConfig NodeConfig, allNodes []NodeConfig) (bool, error) {
-	connected, err := IsNodeConnected(ctx, currentNodeAPI)
-	if err != nil {
-		return false, err
-	}
-
-	if connected {
-		return true, nil
-	}
-
-	err = ConnectToOtherNodes(ctx, currentNodeAPI, currentNodeConfig, allNodes)
-	if err != nil {
-		return false, err
-	}
-
-	return IsNodeConnected(ctx, currentNodeAPI)
-}
-
 // ConnectToOtherNodes connects the current node to all other nodes in the config with retries
 func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, currentNodeConfig NodeConfig, allNodes []NodeConfig) error {
 	for _, nodeConfig := range allNodes {
@@ -205,7 +176,7 @@ func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, curre
 
 		var err error
 		for attempt := 1; attempt <= maxRetries; attempt++ {
-			err = tryConnectToNode(ctx, currentNodeAPI, currentNodeConfig, nodeConfig)
+			err = tryConnectToNode(ctx, currentNodeAPI, nodeConfig)
 			if err == nil {
 				break
 			}
@@ -243,7 +214,7 @@ func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, curre
 }
 
 // tryConnectToNode attempts a single connection between two nodes
-func tryConnectToNode(ctx context.Context, currentNodeAPI api.FullNode, currentNodeConfig NodeConfig, targetNodeConfig NodeConfig) error {
+func tryConnectToNode(ctx context.Context, currentNodeAPI api.FullNode, targetNodeConfig NodeConfig) error {
 	otherNodeAPI, closer, err := ConnectToNode(ctx, targetNodeConfig)
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to target node: %v", err)
