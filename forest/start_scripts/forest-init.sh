@@ -1,30 +1,51 @@
 #!/bin/bash
-set -euo pipefail
+set -xeuo pipefail
 
-# Function to check if DRAND server is healthy
-check_drand_server() {
-  local response_code
-  response_code=$(curl -s -o /dev/null -w "%{http_code}" "$DRAND_SERVER/info")
-  
-  if [ "$response_code" != "200" ]; then
-    echo "Error: DRAND server is not ready (HTTP $response_code)"
-    return 1
-  fi
-  return 0
+# Function to wait for chain info with timeout
+wait_for_chain_info() {
+    local chain_info_file="${LOTUS_1_DATA_DIR}/chain_info"
+    local timeout=300  # 5 minutes timeout
+    local start_time=$(date +%s)
+    
+    echo "Waiting for chain info file at: $chain_info_file"
+    while [ ! -f "$chain_info_file" ] || [ ! -s "$chain_info_file" ]; do
+        if [ $(($(date +%s) - start_time)) -gt "$timeout" ]; then
+            echo "Error: Timeout waiting for chain info file"
+            return 1
+        fi
+        echo "Chain info file not ready, waiting..."
+        sleep 5
+    done
+    
+    # Validate JSON format
+    if ! jq empty "$chain_info_file" 2>/dev/null; then
+        echo "Error: Invalid JSON in chain info file"
+        return 1
+    fi
+    
+    echo "Chain info file is ready and valid"
+    return 0
 }
 
-sleep 10
+# Wait for chain info to be available
+if ! wait_for_chain_info; then
+    echo "Failed to get chain info within timeout"
+    exit 1
+fi
 
-DRAND_SERVER="http://10.20.20.21"
-
-echo "Waiting for DRAND server to be ready..."
-while ! check_drand_server; do
-  sleep 5
-done
-echo "DRAND server is ready"
-  
-json=$(curl -s "$DRAND_SERVER/info")
-formatted_json=$(jq --arg server "$DRAND_SERVER" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$json")
+# Read and format chain info for Forest
+json=$(cat "${LOTUS_1_DATA_DIR}/chain_info")
+formatted_json=$(jq '{
+    servers: ["http://10.20.20.21"],
+    chain_info: {
+        public_key: .public_key,
+        period: .period,
+        genesis_time: .genesis_time,
+        hash: .hash,
+        groupHash: .groupHash
+    },
+    network_type: "Quicknet"
+}' <<<"$json")
 echo "formatted_json: $formatted_json"
 export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
 export FOREST_F3_BOOTSTRAP_EPOCH=10

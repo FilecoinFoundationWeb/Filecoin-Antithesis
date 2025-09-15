@@ -38,8 +38,8 @@ if [ "$INIT_MODE" = "true" ]; then
     done
 fi
 
-curl 10.20.20.21/info | jq -c > chain_info
-export DRAND_CHAIN_INFO=chain_info
+curl 10.20.20.21/info | jq -c > ${LOTUS_1_DATA_DIR}/chain_info
+export DRAND_CHAIN_INFO=${LOTUS_1_DATA_DIR}/chain_info
 
 lotus --version
 
