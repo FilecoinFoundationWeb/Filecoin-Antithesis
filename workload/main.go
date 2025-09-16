@@ -425,6 +425,20 @@ func contractCommands() *cli.Command {
 					return resources.PerformDeployTStore(c.Context, nodeConfig, tstoragePath)
 				},
 			},
+			{
+				Name:  "deploy-blsprecompile",
+				Usage: "Deploy BLSPreCompile contract",
+				Flags: []cli.Flag{
+					nodeFlag,
+				},
+				Action: func(c *cli.Context) error {
+					nodeConfig, err := getNodeConfig(c)
+					if err != nil {
+						return err
+					}
+					return resources.DeployBLSPreCompile(c.Context, nodeConfig)
+				},
+			},
 		},
 	}
 }
