@@ -83,7 +83,6 @@ jobs:
           images: drand:v2.0.4;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 12 hr nightly run"
-          email_recipients: "filecoin-notifications.0607b605acbba4a098334f1cf7aad48b.show-sender.prefer-html@streams.zulipchat.com"
           additional_parameters: |-
             custom.duration=12
             antithesis.source=main
@@ -108,7 +107,6 @@ jobs:
           images: drand:v2.0.4;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 12 hr nightly run #2"
-          email_recipients: "filecoin-notifications.0607b605acbba4a098334f1cf7aad48b.show-sender.prefer-html@streams.zulipchat.com"
           additional_parameters: |-
             custom.duration=12
             antithesis.source=main
@@ -133,7 +131,6 @@ jobs:
           images: drand:v2.0.4;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 3 hr noon run"
-          email_recipients: "filecoin-notifications.0607b605acbba4a098334f1cf7aad48b.show-sender.prefer-html@streams.zulipchat.com"
           additional_parameters: |-
             custom.duration=3
             antithesis.source=short
