@@ -19,8 +19,8 @@ else
 fi
 
 # Always get fresh chain info
-curl 10.20.20.21/info | jq -c > chain_info
-export DRAND_CHAIN_INFO=chain_info
+curl 10.20.20.21/info | jq -c > ${LOTUS_2_DATA_DIR}/chain_info
+export DRAND_CHAIN_INFO=${LOTUS_2_DATA_DIR}/chain_info
 
 lotus --version
 
