@@ -1,0 +1,46 @@
+name: Get Logs
+
+on:
+  workflow_dispatch:
+    inputs:
+      session_id:
+        type: string
+        required: true
+        description: The session id of a test. Found at the bottom of a report.
+      input_hash:
+        type: string
+        required: true
+        description: The input hash of a moment.
+      vtime:
+        type: string
+        required: true
+        description: The vtime of a moment.
+      email:
+        type: string
+        required: true
+        description: The email(s) to receive the log viewer. Separate multiple emails with a comma. (example input: john@email.com;anna@email.com)
+      deepest_future:
+        type: boolean
+        required: false
+        default: false
+        description: Get the deepest future for your moment.
+
+# Declare default permissions as read only.
+permissions: read-all
+
+jobs:
+  get_logs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: antithesishq/antithesis-trigger-action@6c0a27302c0a3cd97d87d40bd6704e673abed4bb # v0.9
+        with:
+          notebook_name: get_logs
+          tenant: cobalt-bunny
+          username: filecoin
+          password: ${{ secrets.ANTITHESIS_PASSWORD }}
+          email_recipients: ${{ inputs.email }}
+          additional_parameters: |-
+            custom.id = ${{ inputs.session_id }}
+            custom.input_hash = ${{ inputs.input_hash }}
+            custom.vtime = ${{ inputs.vtime }}
+            custom.get_longest = ${{ inputs.deepest_future }}
