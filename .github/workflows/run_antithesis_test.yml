@@ -20,7 +20,7 @@ on:
       drand:
         type: string
         required: true
-        default: 'v2.0.4'
+        default: 'latest'
         description: The drand image tag used for the test run
       forest:
         type: string
@@ -80,7 +80,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:v2.0.4;forest:latest;lotus:latest;workload:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 12 hr nightly run"
           additional_parameters: |-
@@ -104,7 +104,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:v2.0.4;forest:latest;lotus:latest;workload:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 12 hr nightly run #2"
           additional_parameters: |-
@@ -128,7 +128,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:v2.0.4;forest:latest;lotus:latest;workload:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 3 hr noon run"
           additional_parameters: |-
