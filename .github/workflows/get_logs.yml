@@ -25,12 +25,12 @@ on:
         default: false
         description: Get the deepest future for your moment.
 
-# Declare default permissions as read only.
-permissions: read-all
-
 jobs:
   get-logs:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: antithesishq/antithesis-trigger-action@6c0a27302c0a3cd97d87d40bd6704e673abed4bb # v0.9
         with:
