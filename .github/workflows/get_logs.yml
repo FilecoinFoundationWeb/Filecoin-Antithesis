@@ -18,7 +18,7 @@ on:
       email:
         type: string
         required: true
-        description: The email(s) to receive the log viewer. Separate multiple emails with a comma. (example input: john@email.com;anna@email.com)
+        description: The email(s) to receive the log viewer. Separate multiple emails with a comma. (example input- john@email.com;anna@email.com)
       deepest_future:
         type: boolean
         required: false
