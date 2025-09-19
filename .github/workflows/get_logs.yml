@@ -38,6 +38,7 @@ jobs:
           tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
+          github_token: ${{ secrets.GH_PAT }}
           email_recipients: ${{ inputs.email }}
           additional_parameters: |-
             custom.id = ${{ inputs.session_id }}
