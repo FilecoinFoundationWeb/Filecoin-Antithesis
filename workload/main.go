@@ -47,7 +47,6 @@ func main() {
 			chainCommands(),
 			stateCommands(),
 			stressCommands(),
-			rpcCommands(),
 			ethCommands(),
 		},
 	}
@@ -107,9 +106,9 @@ func walletCommands() *cli.Command {
 							return err
 						}
 						defer closer()
-						return resources.CreateForestWallets(c.Context, api, c.Int("count"), abi.NewTokenAmount(100000000000000))
+						return resources.CreateForestWallets(c.Context, api, c.Int("count"), abi.NewTokenAmount(1000000000000))
 					} else {
-						return resources.PerformCreateOperation(c.Context, nodeConfig, c.Int("count"), abi.NewTokenAmount(1000000000000000))
+						return resources.PerformCreateOperation(c.Context, nodeConfig, c.Int("count"), abi.NewTokenAmount(1000000000000))
 					}
 				},
 			},
@@ -139,7 +138,7 @@ func walletCommands() *cli.Command {
 						return err
 					}
 					defer closer()
-					return resources.InitializeForestWallets(c.Context, api, lotusapi, 1, abi.NewTokenAmount(10000000000000000))
+					return resources.InitializeForestWallets(c.Context, api, lotusapi, 1, abi.NewTokenAmount(1000000000000000000))
 				},
 			},
 			{
@@ -190,7 +189,7 @@ func networkCommands() *cli.Command {
 					}
 					defer closer()
 
-					lotusNodes := resources.FilterLotusNodes(config.Nodes)
+					lotusNodes := resources.FilterV1Nodes(config.Nodes)
 					if err := resources.ConnectToOtherNodes(c.Context, api, *nodeConfig, lotusNodes); err != nil {
 						log.Printf("[ERROR] Failed to connect node '%s' to other nodes: %v", nodeConfig.Name, err)
 						return nil
@@ -444,7 +443,8 @@ func consensusCommands() *cli.Command {
 					},
 				},
 				Action: func(c *cli.Context) error {
-					return resources.PerformConsensusCheck(c.Context, config, c.Int64("height"))
+					filteredConfig := resources.FilterV1Nodes(config.Nodes)
+					return resources.PerformConsensusCheck(c.Context, &resources.Config{Nodes: filteredConfig}, c.Int64("height"))
 				},
 			},
 			{
@@ -484,6 +484,143 @@ func monitoringCommands() *cli.Command {
 					return resources.CheckF3Running()
 				},
 			},
+			{
+				Name:  "chain-notify",
+				Usage: "Monitor chain notifications for tipset changes",
+				Flags: []cli.Flag{
+					&cli.DurationFlag{
+						Name:  "duration",
+						Usage: "Duration to monitor (e.g., 30s, 1m, 2m)",
+						Value: 30 * time.Second,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					monitorConfig := &resources.HealthMonitorConfig{
+						EnableChainNotify:       true,
+						EnableHeightProgression: false,
+						EnablePeerCount:         false,
+						EnableF3Status:          false,
+						MonitorDuration:         c.Duration("duration"),
+					}
+					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
+				},
+			},
+			{
+				Name:  "height-progression",
+				Usage: "Monitor height progression for all nodes",
+				Flags: []cli.Flag{
+					&cli.DurationFlag{
+						Name:  "duration",
+						Usage: "Duration to monitor (e.g., 30s, 1m, 2m)",
+						Value: 30 * time.Second,
+					},
+					&cli.DurationFlag{
+						Name:  "interval",
+						Usage: "Interval between height checks (e.g., 5s, 7s, 10s)",
+						Value: 7 * time.Second,
+					},
+					&cli.IntFlag{
+						Name:  "max-stalls",
+						Usage: "Maximum consecutive stalls before failing",
+						Value: 10,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					monitorConfig := &resources.HealthMonitorConfig{
+						EnableChainNotify:       false,
+						EnableHeightProgression: true,
+						EnablePeerCount:         false,
+						EnableF3Status:          false,
+						MonitorDuration:         c.Duration("duration"),
+						HeightCheckInterval:     c.Duration("interval"),
+						MaxConsecutiveStalls:    c.Int("max-stalls"),
+					}
+					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
+				},
+			},
+
+			{
+				Name:  "peer-count",
+				Usage: "Check peer count for all nodes",
+				Action: func(c *cli.Context) error {
+					monitorConfig := &resources.HealthMonitorConfig{
+						EnableChainNotify:       false,
+						EnableHeightProgression: false,
+						EnablePeerCount:         true,
+						EnableF3Status:          false,
+					}
+					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
+				},
+			},
+			{
+				Name:  "f3-status",
+				Usage: "Check F3 running status for all nodes",
+				Action: func(c *cli.Context) error {
+					monitorConfig := &resources.HealthMonitorConfig{
+						EnableChainNotify:       false,
+						EnableHeightProgression: false,
+						EnablePeerCount:         false,
+						EnableF3Status:          true,
+					}
+					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
+				},
+			},
+			{
+				Name:  "comprehensive",
+				Usage: "Perform comprehensive health check with all monitoring features",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "chain-notify",
+						Usage: "Enable chain notify monitoring (tipset changes)",
+						Value: true,
+					},
+					&cli.BoolFlag{
+						Name:  "height-progression",
+						Usage: "Enable height progression monitoring",
+						Value: true,
+					},
+
+					&cli.BoolFlag{
+						Name:  "peer-count",
+						Usage: "Enable peer count monitoring",
+						Value: true,
+					},
+					&cli.BoolFlag{
+						Name:  "f3-status",
+						Usage: "Enable F3 running status checks",
+						Value: true,
+					},
+					&cli.DurationFlag{
+						Name:  "monitor-duration",
+						Usage: "Duration to monitor for chain notify and height progression (e.g., 30s, 1m, 2m)",
+						Value: 30 * time.Second,
+					},
+					&cli.DurationFlag{
+						Name:  "height-check-interval",
+						Usage: "Interval between height checks (e.g., 5s, 7s, 10s)",
+						Value: 7 * time.Second,
+					},
+					&cli.IntFlag{
+						Name:  "max-consecutive-stalls",
+						Usage: "Maximum consecutive stalls before failing height progression check",
+						Value: 10,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					// Create a custom config for the health monitor
+					monitorConfig := &resources.HealthMonitorConfig{
+						EnableChainNotify:       c.Bool("chain-notify"),
+						EnableHeightProgression: c.Bool("height-progression"),
+						EnablePeerCount:         c.Bool("peer-count"),
+						EnableF3Status:          c.Bool("f3-status"),
+						MonitorDuration:         c.Duration("monitor-duration"),
+						HeightCheckInterval:     c.Duration("height-check-interval"),
+						MaxConsecutiveStalls:    c.Int("max-consecutive-stalls"),
+					}
+
+					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
+				},
+			},
 		},
 	}
 }
@@ -498,13 +635,6 @@ func chainCommands() *cli.Command {
 				Usage: "Check chain index backfill",
 				Action: func(c *cli.Context) error {
 					return resources.PerformCheckBackfill(c.Context, config)
-				},
-			},
-			{
-				Name:  "jsonrpc",
-				Usage: "Test JSON-RPC",
-				Action: func(c *cli.Context) error {
-					return resources.TestJsonRPC(c.Context)
 				},
 			},
 		},
@@ -587,30 +717,6 @@ func stressCommands() *cli.Command {
 						return err
 					}
 					return resources.PerformBlockFuzzing(c.Context, nodeConfig)
-				},
-			},
-		},
-	}
-}
-
-func rpcCommands() *cli.Command {
-	return &cli.Command{
-		Name:  "rpc",
-		Usage: "RPC operations",
-		Subcommands: []*cli.Command{
-			{
-				Name:  "benchmark",
-				Usage: "Run RPC benchmark tests",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "url",
-						Usage:    "RPC endpoint URL",
-						Required: true,
-					},
-				},
-				Action: func(c *cli.Context) error {
-					resources.CallV2API(c.String("url"))
-					return nil
 				},
 			},
 		},

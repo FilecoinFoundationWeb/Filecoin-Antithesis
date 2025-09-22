@@ -242,8 +242,11 @@ func CheckF3Running() error {
 		}
 
 		log.Printf("[INFO] F3 is running on %s: %v", url, response.Result)
-		assert.Sometimes(response.Result, fmt.Sprintf("F3 is running on %s", url),
-			map[string]interface{}{"requirement": fmt.Sprintf("F3 is running on %s", url)})
+		assert.Sometimes(response.Result, fmt.Sprintf("F3 status check: F3 should be running on %s - F3 service failure detected", url),
+			map[string]interface{}{
+				"operation":   "f3_status_check",
+				"requirement": fmt.Sprintf("F3 is running on %s", url),
+			})
 	}
 	return nil
 }

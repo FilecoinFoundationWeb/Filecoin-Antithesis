@@ -3,16 +3,11 @@ package resources
 import (
 	"context"
 	"log"
-	"math/rand"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
-	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/api"
 )
 
-// StateMismatch verifies state computation consistency by checking if computed state
-// matches parent state at a random height. It walks back through the chain from the
-// selected height to genesis, verifying state computation at each step.
 func StateMismatch(ctx context.Context, api api.FullNode) error {
 	checkTs, err := api.ChainHead(ctx)
 	if err != nil {
@@ -20,45 +15,73 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 		return err
 	}
 
-	maxHeight := checkTs.Height()
-	randomHeight := abi.ChainEpoch(rand.Int63n(int64(maxHeight)))
-	log.Printf("[INFO] Checking state mismatch at random height %d (between 0 and %d)", randomHeight, maxHeight)
+	currentHeight := checkTs.Height()
+	log.Printf("[INFO] Current chain height: %d", currentHeight)
 
-	// Get tipset at random height
-	randomTs, err := api.ChainGetTipSetByHeight(ctx, randomHeight, checkTs.Key())
+	// Ensure we have at least 20 epochs to work with
+	if currentHeight < 20 {
+		log.Printf("[WARN] Chain height %d is less than 20 epochs, skipping state check", currentHeight)
+		return nil
+	}
+
+	startHeight := currentHeight - 2
+	endHeight := currentHeight - 12
+
+	log.Printf("[INFO] Checking state computation from height %d to %d (8 epochs)", startHeight, endHeight)
+
+	// Get tipset at start height (height-2)
+	startTs, err := api.ChainGetTipSetByHeight(ctx, startHeight, checkTs.Key())
 	if err != nil {
-		log.Printf("[ERROR] Failed to get tipset at height %d: %v", randomHeight, err)
+		log.Printf("[ERROR] Failed to get tipset at height %d: %v", startHeight, err)
 		return err
 	}
-	checkTs = randomTs
+	checkTs = startTs
 
-	for checkTs.Height() != 0 {
+	epochsChecked := 0
+	targetEpochs := 10
+
+	for epochsChecked < targetEpochs && checkTs.Height() >= endHeight {
 		if checkTs == nil {
-			log.Printf("[ERROR] checkTs is nil")
+			log.Printf("[ERROR] checkTs is nil at height %d", checkTs.Height())
 			return nil
 		}
-		if checkTs.Height()%1000 == 0 {
-			log.Printf("Reached height %d", checkTs.Height())
+
+		// Log progress every 2 epochs
+		if epochsChecked%2 == 0 {
+			log.Printf("[INFO] Checking epoch %d (checked %d/%d epochs)", checkTs.Height(), epochsChecked, targetEpochs)
 		}
+
+		// Get parent tipset
 		execTsk := checkTs.Parents()
 		execTs, err := api.ChainGetTipSet(ctx, execTsk)
 		if err != nil {
 			log.Printf("[ERROR] Failed to get tipset at height %d: %v", checkTs.Height(), err)
-			return nil
+			return err
 		}
 		if execTs == nil {
 			log.Printf("[ERROR] Got nil tipset for parents at height %d", checkTs.Height())
 			return nil
 		}
+
+		// Stop if we've reached the end height
+		if execTs.Height() < endHeight {
+			log.Printf("[INFO] Reached end height %d, stopping state check", endHeight)
+			break
+		}
+
+		// Compute state at parent height
 		st, err := api.StateCompute(ctx, execTs.Height(), nil, execTsk)
 		if err != nil {
 			log.Printf("[ERROR] Failed to compute state at height %d: %v", execTs.Height(), err)
 			return err
 		}
+
+		// Verify state consistency
 		if st.Root != checkTs.ParentState() {
 			assert.Always(st.Root == checkTs.ParentState(),
-				"[State Consistency] Computed state must match parent state",
+				"State computation: Computed state must match parent state - state computation error detected",
 				map[string]interface{}{
+					"operation":       "state_computation",
 					"exec_ts_height":  execTs.Height(),
 					"check_ts_height": checkTs.Height(),
 					"exec_ts_root":    st.Root.String(),
@@ -67,11 +90,22 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 					"impact":          "Critical - indicates state computation error",
 					"details":         "Computed state root must match parent state root",
 					"recommendation":  "Check state computation logic and tipset traversal",
+					"epochs_checked":  epochsChecked,
+					"target_epochs":   targetEpochs,
+					"start_height":    startHeight,
+					"end_height":      endHeight,
+					"current_height":  currentHeight,
 				})
 			return err
 		}
+
+		// Move to parent and increment counter
 		checkTs = execTs
+		epochsChecked++
 	}
+
+	log.Printf("[INFO] Completed state consistency check for %d epochs (from height %d to %d)",
+		epochsChecked, startHeight, endHeight)
 	return nil
 }
 

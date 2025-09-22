@@ -27,9 +27,11 @@ json=$(curl -s "$DRAND_SERVER/info")
 formatted_json=$(jq --arg server "$DRAND_SERVER" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$json")
 echo "formatted_json: $formatted_json"
 export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
-export FOREST_F3_BOOTSTRAP_EPOCH=5
-export FOREST_F3_FINALITY=2
+export FOREST_F3_BOOTSTRAP_EPOCH=10
+export FOREST_F3_FINALITY=5
 export FOREST_CHAIN_INDEXER_ENABLED=true
+export FOREST_BLOCK_DELAY_SECS=4
+export FOREST_PROPAGATION_DELAY_SECS=1
 NETWORK_NAME=$(jq -r '.NetworkName' "${LOTUS_1_DATA_DIR}/localnet.json")
 export NETWORK_NAME=$NETWORK_NAME
 forest --version
@@ -67,8 +69,6 @@ forest-cli net listen | head -n1 > "${FOREST_DATA_DIR}/forest-listen-addr"
 echo "forest: connecting to lotus nodes…"
 forest-cli net connect "$(cat "${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr")"
 forest-cli net connect "$(cat "${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr")"
-forest-wallet --remote-wallet import "${LOTUS_1_DATA_DIR}"/key  || true
-forest-wallet --remote-wallet import "${LOTUS_2_DATA_DIR}"/key || true
 
 # Ensure the Forest node is fully synced before proceeding
 forest-cli sync wait

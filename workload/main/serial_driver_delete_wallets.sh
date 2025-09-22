@@ -29,4 +29,3 @@ random_node=$(select_random_node)
 
 echo "Deleting wallets on $random_node"
 $APP_BINARY wallet delete --node "$random_node"
-

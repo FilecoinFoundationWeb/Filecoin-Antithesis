@@ -122,13 +122,7 @@ func (cc *ConsensusChecker) makeRPCRequest(ctx context.Context, nodeInfo NodeInf
 // getChainHead gets the current chain head for a node
 // It handles both V1 and V2 API versions
 func (cc *ConsensusChecker) getChainHead(ctx context.Context, nodeInfo NodeInfo) (abi.ChainEpoch, error) {
-	// Use different method names for V1 and V2 APIs
-	methodName := "Filecoin.ChainHead"
-	if strings.Contains(nodeInfo.RPCURL, "/rpc/v2") {
-		methodName = "Filecoin.ChainGetHead"
-	}
-
-	resp, err := cc.makeRPCRequest(ctx, nodeInfo, methodName, []interface{}{})
+	resp, err := cc.makeRPCRequest(ctx, nodeInfo, "Filecoin.ChainHead", []interface{}{})
 	if err != nil {
 		return 0, err
 	}
@@ -316,8 +310,9 @@ func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.Chain
 
 			// After all retries, make the final assertion
 			assert.Always(consensusReached,
-				"[Consensus Check] All nodes must agree on the same tipset",
+				"Consensus check: All nodes must agree on the same tipset - network fork or consensus failure detected",
 				map[string]interface{}{
+					"operation":      "consensus_agreement",
 					"height":         currentHeight,
 					"tipset_keys":    tipsetKeys,
 					"property":       "Chain consensus",
@@ -499,8 +494,9 @@ func PerformCheckFinalizedTipsets(ctx context.Context) error {
 		}
 		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts2.Cids(), v2Nodes[1].Name, i)
 
-		assert.Always(ts1.Equals(ts2), "Chain synchronization test: Finalized tipset should always match",
+		assert.Always(ts1.Equals(ts2), "Chain synchronization: Finalized tipsets should match between nodes - chain divergence detected",
 			map[string]interface{}{
+				"operation":   "chain_synchronization",
 				"requirement": "Chain synchronization",
 				"ts1":         ts1.Cids(),
 				"ts2":         ts2.Cids(),

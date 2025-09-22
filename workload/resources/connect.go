@@ -308,7 +308,7 @@ func SimulateReorg(ctx context.Context, nodeAPI api.FullNode) error {
 	}
 
 	// Wait for a few minutes before reconnecting
-	reconnectDelay := 2 * time.Minute
+	reconnectDelay := 5 * time.Minute
 	log.Printf("[INFO] Waiting %v before reconnecting to peers...", reconnectDelay)
 
 	select {

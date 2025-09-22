@@ -16,8 +16,22 @@ import (
 // It randomly selects transaction amounts, cooldown periods, and source/destination wallets
 // to simulate various transaction patterns and test network behavior under load
 func SpamTransactions(ctx context.Context, apis []api.FullNode, wallets [][]address.Address, numTransactions int) error {
-	if len(wallets) < 2 || len(wallets[0]) < 1 || len(wallets[1]) < 1 {
-		fmt.Printf("not enough wallets to spam transactions; need wallets on both nodes")
+	if len(apis) == 0 || len(wallets) == 0 {
+		fmt.Printf("No APIs or wallets available for spamming transactions")
+		return nil
+	}
+
+	// Check if we have at least one node with wallets
+	hasWallets := false
+	for _, nodeWallets := range wallets {
+		if len(nodeWallets) > 0 {
+			hasWallets = true
+			break
+		}
+	}
+
+	if !hasWallets {
+		fmt.Printf("No wallets available on any node for spamming transactions")
 		return nil
 	}
 
@@ -32,6 +46,12 @@ func SpamTransactions(ctx context.Context, apis []api.FullNode, wallets [][]addr
 		fromNodeIndex := rand.Intn(len(apis))
 		toNodeIndex := rand.Intn(len(apis))
 
+		// Check if wallets exist for both nodes
+		if len(wallets[fromNodeIndex]) == 0 || len(wallets[toNodeIndex]) == 0 {
+			log.Printf("Skipping transaction #%d: No wallets available on one or both nodes", i+1)
+			continue
+		}
+
 		from := wallets[fromNodeIndex][rand.Intn(len(wallets[fromNodeIndex]))]
 		to := wallets[toNodeIndex][rand.Intn(len(wallets[toNodeIndex]))]
 
@@ -39,7 +59,7 @@ func SpamTransactions(ctx context.Context, apis []api.FullNode, wallets [][]addr
 			continue
 		}
 
-		amount := abi.NewTokenAmount(int64(rand.Intn(1) + 1)) // Random amount up to 50 FIL
+		amount := abi.NewTokenAmount(int64(rand.Intn(10) + 1)) // Random amount 1-10 FIL
 
 		balance, err := apis[fromNodeIndex].WalletBalance(ctx, from)
 		if err != nil {

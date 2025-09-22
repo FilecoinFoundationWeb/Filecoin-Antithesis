@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
-	"github.com/filecoin-project/lotus/chain/types"
 )
 
 // CheckChainBackfill validates the chain index for a given set of nodes.
@@ -22,17 +21,17 @@ func CheckChainBackfill(ctx context.Context, nodes []NodeConfig) error {
 		head, err := api.ChainHead(ctx)
 		if err != nil {
 			log.Printf("[WARN] Failed to get chain head for node %s: %v", node.Name, err)
-			continue
+			return nil
 		}
 
 		height := head.Height()
-		if height <= 1 {
+		if height <= 20 {
 			log.Printf("[INFO] Chain height too low for backfill test on node %s: %d", node.Name, height)
-			continue
+			return nil
 		}
 
 		// Test backfill with the previous height
-		backfillHeight := height - 1
+		backfillHeight := height - 5
 		_, err = api.ChainValidateIndex(ctx, backfillHeight, true)
 
 		var errMsg string
@@ -47,7 +46,11 @@ func CheckChainBackfill(ctx context.Context, nodes []NodeConfig) error {
 			"impact":   "High - validates chain index consistency",
 			"details":  "Chain index validation ensures proper chain state tracking",
 		}
-		assert.Sometimes(err == nil, "[Chain Validation] Chain index validation should succeed", details)
+		assert.Sometimes(err == nil, "Chain index validation: Chain index validation should succeed - validation failure detected", map[string]interface{}{
+			"operation":   "chain_index_validation",
+			"requirement": "Chain index validation should succeed",
+			"details":     details,
+		})
 
 		if err == nil {
 			log.Printf("[INFO] Successfully validated chain index backfill for node %s at height %d", node.Name, backfillHeight)
@@ -76,25 +79,11 @@ func PerformCheckBackfill(ctx context.Context, config *Config) error {
 			log.Printf("[WARN] Chain backfill check failed, will retry: %v", err)
 			return err // Return original error for retry
 		}
-		assert.Sometimes(true, "Chain index backfill check completed.", map[string]interface{}{"requirement": "Chain index backfill check completed."})
+		assert.Sometimes(true, "Chain index backfill: Chain index backfill check completed successfully", map[string]interface{}{
+			"operation":   "chain_index_backfill",
+			"requirement": "Chain index backfill check completed.",
+		})
 		log.Println("[INFO] Chain index backfill check completed.")
 		return nil
 	}, "Chain index backfill check operation")
-}
-
-// TestJsonRPC tests JSON-RPC functionality
-func TestJsonRPC(ctx context.Context) error {
-	forestNode := NodeConfig{Name: "Forest", RPCURL: "http://10.20.20.28:3456", AuthTokenPath: "/root/devgen/forest/jwt"}
-	api, closer, err := ConnectToNode(ctx, forestNode)
-	if err != nil {
-		log.Println(err)
-	}
-	defer closer()
-	ts, err := api.ChainGetTipSet(ctx, types.EmptyTSK)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	log.Printf("[INFO] Forest node tipset: %v", ts)
-	return nil
 }

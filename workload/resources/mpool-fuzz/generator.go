@@ -18,10 +18,10 @@ func CreateBaseMessage(from, to address.Address, _ uint64) *types.Message {
 	return &types.Message{
 		From:       from,
 		To:         to,
-		Value:      types.NewInt(100000000000000), // 0.0001 FIL in attoFIL
+		Value:      types.NewInt(1000000), // 0.0001 FIL in attoFIL
 		GasLimit:   1000000,
-		GasFeeCap:  types.NewInt(1000000000), // 1 nanoFIL in attoFIL
-		GasPremium: types.NewInt(1000000000), // 1 nanoFIL in attoFIL
+		GasFeeCap:  types.NewInt(100000), // 1 nanoFIL in attoFIL
+		GasPremium: types.NewInt(100000), // 1 nanoFIL in attoFIL
 		Method:     0,
 		Params:     nil,
 	}
@@ -65,7 +65,8 @@ func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid, mu
 		}
 	}
 
-	assert.Sometimes(!foundOnChain, "No mutated messages should be found on chain", map[string]interface{}{
+	assert.Sometimes(!foundOnChain, "Mempool fuzz validation: No mutated messages should be found on chain - invalid message mining detected", map[string]interface{}{
+		"operation":      "mpool_fuzz_validation",
 		"total_messages": len(msgCids),
 		"requirement":    "Invalid messages should never be mined",
 	})

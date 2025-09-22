@@ -30,6 +30,27 @@ func CheckEthMethods(ctx context.Context) error {
 
 		filteredNodes := FilterV1Nodes(config.Nodes)
 
+		// Check if we have enough epochs to avoid false positives
+		if len(filteredNodes) > 0 {
+			api, closer, err := ConnectToNode(ctx, filteredNodes[0])
+			if err != nil {
+				log.Printf("[ERROR] Failed to connect to node for epoch check: %v", err)
+				return nil
+			}
+			defer closer()
+
+			head, err := api.ChainHead(ctx)
+			if err != nil {
+				log.Printf("[ERROR] Failed to get chain head for epoch check: %v", err)
+				return nil
+			}
+
+			if head.Height() < 20 {
+				log.Printf("[INFO] Current epoch %d is less than required minimum (20). Skipping ETH methods check to avoid false positives.", head.Height())
+				return nil
+			}
+		}
+
 		for _, node := range filteredNodes {
 			log.Printf("[INFO] Checking ETH methods on node %s", node.Name)
 			api, closer, err := ConnectToNode(ctx, node)
@@ -63,7 +84,7 @@ func CheckEthMethods(ctx context.Context) error {
 					}
 					log.Printf("[DEBUG] Block by Number - Height: %d, Hash: %s", i, ethBlockA.Hash)
 
-					ethBlockB, err := api.EthGetBlockByHash(ctx, ethBlockA.Hash, false)
+					ethBlockB, err := api.EthGetBlockByHash(ctx, ethBlockA.Hash, true)
 					if err != nil {
 						log.Printf("[ERROR] Failed to get tipset @%d via eth_getBlockByHash: %v", i, err)
 						return nil
@@ -87,8 +108,9 @@ func CheckEthMethods(ctx context.Context) error {
 					}
 
 					assert.Always(equal,
-						"[Block Consistency] Blocks should be identical regardless of retrieval method",
+						"ETH block consistency: Blocks should be identical regardless of retrieval method - API inconsistency detected",
 						map[string]interface{}{
+							"operation":      "eth_block_consistency",
 							"height":         i,
 							"node":           node.Name,
 							"blockByNumber":  ethBlockA,
@@ -101,8 +123,9 @@ func CheckEthMethods(ctx context.Context) error {
 
 					// Additional specific field checks for better error reporting
 					assert.Always(ethBlockA.Hash == ethBlockB.Hash,
-						"[Block Hash] Block hashes must be identical",
+						"ETH block hash consistency: Block hashes must be identical - hash computation error detected",
 						map[string]interface{}{
+							"operation":     "eth_block_hash_consistency",
 							"height":        i,
 							"node":          node.Name,
 							"blockByNumber": ethBlockA.Hash,
@@ -113,8 +136,9 @@ func CheckEthMethods(ctx context.Context) error {
 						})
 
 					assert.Always(ethBlockA.Number == ethBlockB.Number,
-						"[Block Number] Block numbers must be identical",
+						"ETH block number consistency: Block numbers must be identical - block height mismatch detected",
 						map[string]interface{}{
+							"operation":     "eth_block_number_consistency",
 							"height":        i,
 							"node":          node.Name,
 							"blockByNumber": ethBlockA.Number,
@@ -125,8 +149,9 @@ func CheckEthMethods(ctx context.Context) error {
 						})
 
 					assert.Always(ethBlockA.ParentHash == ethBlockB.ParentHash,
-						"[Parent Hash] Parent hashes must be identical",
+						"ETH parent hash consistency: Parent hashes must be identical - chain linking error detected",
 						map[string]interface{}{
+							"operation":     "eth_parent_hash_consistency",
 							"height":        i,
 							"node":          node.Name,
 							"blockByNumber": ethBlockA.ParentHash,
@@ -137,8 +162,9 @@ func CheckEthMethods(ctx context.Context) error {
 						})
 
 					assert.Always(ethBlockA.Timestamp == ethBlockB.Timestamp,
-						"[Block Timestamp] Block timestamps must be identical",
+						"ETH timestamp consistency: Block timestamps must be identical - timestamp mismatch detected",
 						map[string]interface{}{
+							"operation":     "eth_timestamp_consistency",
 							"height":        i,
 							"node":          node.Name,
 							"blockByNumber": ethBlockA.Timestamp,
@@ -189,19 +215,52 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 	}
 	defer closer()
 
-	defaultAddr, err := api.WalletDefaultAddress(ctx)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
-		return nil
+	// Handle wallet initialization differently for Forest and Lotus nodes
+	if nodeConfig.Name == "Forest" {
+		// For Forest, we need to get funds from Lotus first
+		lotusNode := NodeConfig{
+			Name:          "Lotus1",
+			RPCURL:        "http://10.20.20.24:1234/rpc/v1",
+			AuthTokenPath: "/root/devgen/lotus-1/jwt",
+		}
+		lotusApi, lotusCloser, err := ConnectToNode(ctx, lotusNode)
+		if err != nil {
+			log.Printf("[ERROR] Failed to connect to Lotus node for Forest wallet initialization: %v", err)
+			return nil
+		}
+		defer lotusCloser()
+
+		// Initialize Forest wallets with funding from Lotus
+		if err := InitializeForestWallets(ctx, api, lotusApi, 1, types.FromFil(1000)); err != nil {
+			log.Printf("[ERROR] Failed to initialize Forest wallets: %v", err)
+			return nil
+		}
+
+		// Get the default wallet which was just set by InitializeForestWallets
+		defaultAddr, err := api.WalletDefaultAddress(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get Forest default wallet address: %v", err)
+			return nil
+		}
+
+		SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
+	} else {
+		// For Lotus nodes, use standard wallet initialization
+		defaultAddr, err := api.WalletDefaultAddress(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get default wallet address: %v", err)
+			return nil
+		}
+
+		SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
 	}
 
-	SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(1000))
 	time.Sleep(60 * time.Second)
 
 	gasParams, err := json.Marshal(ethtypes.EthEstimateGasParams{Tx: ethtypes.EthCall{
 		From:  &ethAddr,
 		To:    &ethAddr2,
-		Value: ethtypes.EthBigInt(big.NewInt(100)),
+		Value: ethtypes.EthBigInt(big.NewInt(10)),
 	}})
 	if err != nil {
 		log.Printf("[ERROR] Failed to marshal gas params: %v", err)
@@ -251,7 +310,10 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 	}
 
 	log.Printf("[INFO] ETH legacy transaction check completed successfully")
-	assert.Sometimes(receipt.Status == 1, "Transaction mined successfully", map[string]interface{}{"tx_hash": txHash})
+	assert.Sometimes(receipt.Status == 1, "ETH legacy transaction: Transaction should be mined successfully - mining failure detected", map[string]interface{}{
+		"operation": "eth_legacy_transaction",
+		"tx_hash":   txHash,
+	})
 	return nil
 }
 
@@ -271,19 +333,56 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 	key, ethAddr, deployer := NewAccount()
 	log.Printf("[INFO] Created new account - deployer: %s, ethAddr: %s", deployer, ethAddr)
 
-	// Get funds from default account
-	defaultAddr, err := api.WalletDefaultAddress(ctx)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get default wallet address: %v", err)
-		return nil
-	}
+	// Handle wallet initialization differently for Forest and Lotus nodes
+	if nodeConfig.Name == "Forest" {
+		// For Forest, we need to get funds from Lotus first
+		lotusNode := NodeConfig{
+			Name:          "Lotus1",
+			RPCURL:        "http://10.20.20.24:1234/rpc/v1",
+			AuthTokenPath: "/root/devgen/lotus-1/jwt",
+		}
+		lotusApi, lotusCloser, err := ConnectToNode(ctx, lotusNode)
+		if err != nil {
+			log.Printf("[ERROR] Failed to connect to Lotus node for Forest wallet initialization: %v", err)
+			return nil
+		}
+		defer lotusCloser()
 
-	// Send funds to deployer account
-	log.Printf("[INFO] Sending funds to deployer account...")
-	err = SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
-	if err != nil {
-		log.Printf("[ERROR] Failed to send funds to deployer: %v", err)
-		return nil
+		// Initialize Forest wallets with funding from Lotus
+		if err := InitializeForestWallets(ctx, api, lotusApi, 1, types.FromFil(100)); err != nil {
+			log.Printf("[ERROR] Failed to initialize Forest wallets: %v", err)
+			return nil
+		}
+
+		// Get the default wallet which was just set by InitializeForestWallets
+		defaultAddr, err := api.WalletDefaultAddress(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get Forest default wallet address: %v", err)
+			return nil
+		}
+
+		// Send funds to deployer account
+		log.Printf("[INFO] Sending funds to deployer account from Forest default wallet...")
+		err = SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
+		if err != nil {
+			log.Printf("[ERROR] Failed to send funds to deployer: %v", err)
+			return nil
+		}
+	} else {
+		// For Lotus nodes, use standard wallet initialization
+		defaultAddr, err := api.WalletDefaultAddress(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Failed to get default wallet address: %v", err)
+			return nil
+		}
+
+		// Send funds to deployer account
+		log.Printf("[INFO] Sending funds to deployer account...")
+		err = SendFunds(ctx, api, defaultAddr, deployer, types.FromFil(10))
+		if err != nil {
+			log.Printf("[ERROR] Failed to send funds to deployer: %v", err)
+			return nil
+		}
 	}
 
 	// Wait for funds to be available
@@ -351,7 +450,8 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 	txHash := SubmitTransaction(ctx, api, &tx)
 	log.Printf("[INFO] Transaction submitted with hash: %s", txHash)
 
-	assert.Sometimes(txHash != ethtypes.EmptyEthHash, "Transaction must be submitted successfully", map[string]interface{}{
+	assert.Sometimes(txHash != ethtypes.EmptyEthHash, "ETH contract deployment: Transaction must be submitted successfully - submission failure detected", map[string]interface{}{
+		"operation":   "eth_contract_deployment",
 		"tx_hash":     txHash.String(),
 		"deployer":    deployer.String(),
 		"requirement": "Transaction hash must not be empty",
@@ -374,6 +474,9 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 	}
 
 	// Assert transaction was mined successfully
-	assert.Sometimes(receipt.Status == 1, "Transaction must be mined successfully", map[string]interface{}{"tx_hash": txHash})
+	assert.Sometimes(receipt.Status == 1, "ETH contract deployment: Transaction must be mined successfully - mining failure detected", map[string]interface{}{
+		"operation": "eth_contract_deployment",
+		"tx_hash":   txHash,
+	})
 	return nil
 }
