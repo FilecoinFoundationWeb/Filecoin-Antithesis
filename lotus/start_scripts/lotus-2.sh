@@ -66,7 +66,13 @@ fi
 lotus wait-api
 echo "lotus-2: finished waiting for API, proceeding with network setup."
 
-lotus net listen > ${LOTUS_2_DATA_DIR}/ipv4addr
+# Only save net listen output during initialization
+if [ "$INIT_MODE" = "true" ]; then
+    echo "lotus-2: listening for peers (initialization mode)..."
+    lotus net listen > ${LOTUS_2_DATA_DIR}/ipv4addr
+else
+    echo "lotus-2: reusing existing ipv4addr from previous initialization"
+fi
 cat ${LOTUS_2_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr
 lotus net id > ${LOTUS_2_DATA_DIR}/p2pID
 lotus auth create-token --perm admin > ${LOTUS_2_DATA_DIR}/jwt

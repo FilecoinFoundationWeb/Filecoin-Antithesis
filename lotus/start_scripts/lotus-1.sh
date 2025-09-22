@@ -79,6 +79,8 @@ if [ "$INIT_MODE" = "true" ]; then
     
     # Start daemon with genesis creation
     lotus daemon --lotus-make-genesis=${LOTUS_1_DATA_DIR}/devgen.car --genesis-template=${LOTUS_1_DATA_DIR}/localnet.json --bootstrap=false --config=${LOTUS_1_DATA_DIR}/config.toml&
+
+
 else
     echo "lotus-1: Running in daemon-only mode..."
     # Start daemon without genesis creation
@@ -89,7 +91,13 @@ fi
 lotus wait-api
 echo "lotus-1: finished waiting for API, proceeding with network setup."
 
-lotus net listen > ${LOTUS_1_DATA_DIR}/ipv4addr
+# Only save net listen output during initialization
+if [ "$INIT_MODE" = "true" ]; then
+    echo "lotus-1: listening for peers (initialization mode)..."
+    lotus net listen > ${LOTUS_1_DATA_DIR}/ipv4addr
+else
+    echo "lotus-1: reusing existing ipv4addr from previous initialization"
+fi
 cat ${LOTUS_1_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr
 lotus net id > ${LOTUS_1_DATA_DIR}/p2pID
 lotus auth create-token --perm admin > ${LOTUS_1_DATA_DIR}/jwt

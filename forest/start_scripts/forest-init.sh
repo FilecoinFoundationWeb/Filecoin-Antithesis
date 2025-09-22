@@ -88,8 +88,8 @@ echo "forest: collecting network info…"
 
 forest-cli net listen | head -n1 > "${FOREST_DATA_DIR}/forest-listen-addr"
 echo "forest: connecting to lotus nodes…"
-forest-cli net connect "$(cat "${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr")"
-forest-cli net connect "$(cat "${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr")"
+forest-cli net connect "$(cat "${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr")" || true
+forest-cli net connect "$(cat "${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr")" || true
 
 # Ensure the Forest node is fully synced before proceeding
 forest-cli sync wait
