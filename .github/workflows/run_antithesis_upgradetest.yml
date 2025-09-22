@@ -50,7 +50,7 @@ on:
       upgrade_image:
         type: string
         required: false
-        default: 'no-image-given'
+        default: ''
         description: The image used for the upgrade test run'
       upgrade_tag:
         type: string
