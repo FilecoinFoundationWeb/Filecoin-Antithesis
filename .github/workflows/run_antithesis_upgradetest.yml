@@ -74,7 +74,7 @@ jobs:
           github_token: ${{ secrets.GH_PAT }}
           images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }}
           config_image: config:${{ github.event.inputs.config }}
-          description: "Manual Test"
+          description: "Manual Upgrade Test"
           email_recipients: ${{ github.event.inputs.emails }}
           additional_parameters: |-
             custom.duration=${{ github.event.inputs.duration }}
