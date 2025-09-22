@@ -1,4 +1,4 @@
-name: Run Antithesis Test
+name: Run Antithesis Upgrade Test
 
 on: 
   schedule:
