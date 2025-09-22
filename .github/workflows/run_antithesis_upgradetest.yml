@@ -1,11 +1,6 @@
 name: Run Antithesis Upgrade Test
 
 on: 
-  schedule:
-    # 8 PM EST, midnight EST, noon EST
-    - cron: '0 0 * * *'
-    - cron: '0 1 * * *'
-    - cron: '0 16 * * *'
   workflow_dispatch:
     inputs:
       duration:
