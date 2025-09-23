@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Source common functions
-source /opt/antithesis/test/v1/main/health_check_functions.sh
 
 # List of test nodes
 NODES=("Lotus1" "Lotus2")
