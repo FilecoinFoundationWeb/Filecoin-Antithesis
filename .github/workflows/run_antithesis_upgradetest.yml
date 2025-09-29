@@ -1,0 +1,78 @@
+name: Run Antithesis Upgrade Test
+
+on: 
+  workflow_dispatch:
+    inputs:
+      duration:
+        type: string
+        required: true
+        default: '1'
+        description: Duration to the test run
+      emails:
+        type: string
+        required: true
+        description: Email receipents
+      drand:
+        type: string
+        required: true
+        default: 'latest'
+        description: The drand image tag used for the test run
+      forest:
+        type: string
+        required: true
+        default: 'latest'
+        description: The forest image tag used for the test run
+      lotus:
+        type: string
+        required: true
+        default: 'latest'
+        description: The lotus image tag used for the test run
+      workload:
+        type: string
+        required: true
+        default: 'latest'
+        description: The workload image tag used for the test run
+      config:
+        type: string
+        required: true
+        default: 'latest'
+        description: The config image tag used for the test run'
+      upgrade_test:
+        type: boolean
+        required: false
+        default: false
+        description: Enable to run an upgrade test for the specified container
+      upgrade_image:
+        type: string
+        required: false
+        default: ''
+        description: The image used for the upgrade test run'
+      upgrade_tag:
+        type: string
+        required: false
+        default: 'latest'
+        description: The image tag used for the upgrade test run'
+jobs:
+  manual_run:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: antithesishq/antithesis-trigger-action@main
+        with:
+          notebook_name: forest
+          tenant: cobalt-bunny
+          username: filecoin
+          password: ${{ secrets.ANTITHESIS_PASSWORD }}
+          github_token: ${{ secrets.GH_PAT }}
+          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }}
+          config_image: config:${{ github.event.inputs.config }}
+          description: "Manual Upgrade Test"
+          email_recipients: ${{ github.event.inputs.emails }}
+          additional_parameters: |-
+            custom.duration=${{ github.event.inputs.duration }}
+            custom.upgrade_test=${{ github.event.inputs.upgrade_test }}
+            custom.upgrade_test.image=${{ github.event.inputs.upgrade_image }}
+            custom.upgrade_test.new_tag=${{ github.event.inputs.upgrade_tag }}
