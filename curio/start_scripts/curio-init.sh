@@ -25,7 +25,7 @@ if [ ! -f "$CURIO_REPO_PATH"/.init.curio ]; then
   if [ ! -f "$CURIO_REPO_PATH"/.init.setup ]; then
     DEFAULT_WALLET=$(lotus wallet default)
     echo Create a new miner actor ...
-    lotus-shed miner create "$DEFAULT_WALLET" "$DEFAULT_WALLET" "$DEFAULT_WALLET" 2KiB
+	sptool --actor t01000 actor new-miner --owner $DEFAULT_WALLET --worker $DEFAULT_WALLET --from $DEFAULT_WALLET --sector-size 2KiB --confidence 1
     touch "$CURIO_REPO_PATH"/.init.setup
     lotus wallet export "$DEFAULT_WALLET" >"$CURIO_REPO_PATH"/default.key
   fi
@@ -53,20 +53,9 @@ if [ ! -f "$CURIO_REPO_PATH"/.init.curio ]; then
   kill -15 $CURIO_PID || kill -9 $CURIO_PID
   echo Done
 fi
-
-TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
-FULLNODE_API_INFO=$TOKEN:/dns/forest/tcp/${FOREST_RPC_PORT}/http
-export FULLNODE_API_INFO
-
-# Only import wallet if it hasn't been imported yet
 if [ -f "$CURIO_REPO_PATH"/default.key ]; then
-    # Check if the wallet is already imported by trying to list it
-    if ! lotus wallet list | grep -q "$(cat "$CURIO_REPO_PATH"/default.key | jq -r '.Address')"; then
-        echo "Importing wallet key..."
-        lotus wallet import "$CURIO_REPO_PATH"/default.key
-    else
-        echo "Wallet already imported, skipping import step"
-    fi
+    echo "Importing wallet key..."
+    lotus wallet import "$CURIO_REPO_PATH"/default.key || true
 fi
 
 echo Starting curio node ...
