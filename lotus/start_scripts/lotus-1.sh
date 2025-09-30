@@ -38,15 +38,15 @@ if [ "$INIT_MODE" = "true" ]; then
     done
 fi
 
-curl 10.20.20.21/info | jq -c > chain_info
-export DRAND_CHAIN_INFO=chain_info
+curl 10.20.20.21/info | jq -c > ${LOTUS_1_DATA_DIR}/chain_info
+export DRAND_CHAIN_INFO=${LOTUS_1_DATA_DIR}/chain_info
 
 lotus --version
 
 # Function to connect to peers with retries
 connect_to_peers() {
     max_attempts=5
-    for peer in "${LOTUS_2_DATA_DIR}/ipv4addr" "${FOREST_DATA_DIR}/forest-listen-addr"; do
+    for peer in "${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr" "${FOREST_DATA_DIR}/forest-listen-addr"; do
         if [ -f "$peer" ]; then
             attempt=1
             while [ $attempt -le $max_attempts ]; do
@@ -57,7 +57,7 @@ connect_to_peers() {
                 fi
                 echo "lotus-1: Failed to connect to peer from $peer"
                 attempt=$((attempt + 1))
-                sleep 5
+                sleep 10
             done
         else
             echo "lotus-1: Peer address file $peer not found"
@@ -79,6 +79,8 @@ if [ "$INIT_MODE" = "true" ]; then
     
     # Start daemon with genesis creation
     lotus daemon --lotus-make-genesis=${LOTUS_1_DATA_DIR}/devgen.car --genesis-template=${LOTUS_1_DATA_DIR}/localnet.json --bootstrap=false --config=${LOTUS_1_DATA_DIR}/config.toml&
+
+
 else
     echo "lotus-1: Running in daemon-only mode..."
     # Start daemon without genesis creation
@@ -89,10 +91,16 @@ fi
 lotus wait-api
 echo "lotus-1: finished waiting for API, proceeding with network setup."
 
+# Only save net listen output during initialization
+if [ "$INIT_MODE" = "true" ]; then
+    echo "lotus-1: listening for peers (initialization mode)..."
+    lotus auth create-token --perm admin > ${LOTUS_1_DATA_DIR}/jwt
+else
+    echo "lotus-1: reusing existing ipv4addr from previous initialization"
+fi
 lotus net listen > ${LOTUS_1_DATA_DIR}/ipv4addr
 cat ${LOTUS_1_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr
 lotus net id > ${LOTUS_1_DATA_DIR}/p2pID
-lotus auth create-token --perm admin > ${LOTUS_1_DATA_DIR}/jwt
 
 # Connect to peers with retries
 connect_to_peers
