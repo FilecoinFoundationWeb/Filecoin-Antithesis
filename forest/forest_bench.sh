@@ -1,9 +1,19 @@
 #!/bin/bash
 
+LOCK_FILE="/tmp/forest_bench.lock"
+
+if [ -f "$LOCK_FILE" ]; then
+    echo "Forest bench is already running (lock file exists: $LOCK_FILE). Exiting."
+    exit 0
+fi
+
+echo $$ > "$LOCK_FILE"
+
+trap "rm -f $LOCK_FILE" EXIT
+
 export TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
 export FULLNODE_API_INFO=$TOKEN:/ip4/${FOREST_IP}/tcp/${FOREST_RPC_PORT}/http
 
-# Get chain head and extract the epoch number from brackets
 CHAIN_HEAD_OUTPUT=$(forest-cli chain head 2>/dev/null)
 current_epoch=$(echo "$CHAIN_HEAD_OUTPUT" | grep -o '\[[0-9]*\]' | grep -o '[0-9]*')
 
@@ -17,7 +27,6 @@ if (( current_epoch < 30 )); then
   exit 0
 fi
 
-# Check if snapshots directory exists, create if not
 SNAPSHOTS_DIR="${FOREST_DATA_DIR}/snapshots"
 if [ -f "$SNAPSHOTS_DIR" ]; then
   echo "Snapshots path exists as a file. Removing file: $SNAPSHOTS_DIR"
@@ -29,9 +38,3 @@ if [ ! -d "$SNAPSHOTS_DIR" ]; then
 fi
 
 forest-cli snapshot export --format v2 --output-path ${FOREST_DATA_DIR}/snapshots/
-
-
-
-
-
-
