@@ -3,9 +3,9 @@ x-templates:
   filecoin_service: &filecoin_service
     env_file: .env
     volumes:
-      - ./data/lotus-1:${LOTUS_1_DATA_DIR}
-      - ./data/forest:${FOREST_DATA_DIR}
-      - ./data/lotus-2:${LOTUS_2_DATA_DIR}
+      - ./data/lotus0:${LOTUS_0_DATA_DIR}
+      - ./data/forest:${FOREST_0_DATA_DIR}
+      - ./data/lotus1:${LOTUS_1_DATA_DIR}
       - ./shared/configs:${SHARED_CONFIGS}
   needs_drand0_started: &needs_drand0_started
     depends_on:
@@ -58,8 +58,8 @@ services:
   lotus0:
     <<: [*filecoin_service]
     container_name: lotus0
-    image: lotus
-    entrypoint: ["./scripts/setup-lotus.sh", "0"]
+    image: lotus:latest
+    entrypoint: ["./scripts/start-lotus.sh", "0"]
     networks:
       antithesis-net:
         ipv4_address: ${LOTUS_0_IP}
@@ -79,9 +79,9 @@ services:
 
   lotus1:
     <<: [*filecoin_service]
-    image: lotus
+    image: lotus:latest
     container_name: lotus1
-    entrypoint: ["./scripts/setup-lotus.sh", "1"]
+    entrypoint: ["./scripts/start-lotus.sh", "1"]
     networks:
       antithesis-net:
         ipv4_address: ${LOTUS_1_IP}

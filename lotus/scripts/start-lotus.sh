@@ -3,10 +3,10 @@
 no="$1"
 
 lotus_path="LOTUS_${no}_PATH"
-LOTUS_PATH="${!lotus_path}"
+export LOTUS_PATH="${!lotus_path}"
 
 lotus_data_dir="LOTUS_${no}_DATA_DIR"
-LOTUS_DATA_DIR="${!lotus_data_dir}"
+export LOTUS_DATA_DIR="${!lotus_data_dir}"
 
 lotus_ip="LOTUS_${no}_IP"
 LOTUS_IP="${!lotus_ip}"
@@ -16,13 +16,14 @@ LOTUS_RPC_PORT="${!lotus_rpc_port}"
 
 
 # Common environment setup, delete all these? what are these even used for?
-# export LOTUS_F3_BOOTSTRAP_EPOCH=21
-# export LOTUS_PATH=${LOTUS_PATH}
-# export LOTUS_MINER_PATH=${LOTUS_MINER_1_PATH}
-# export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
-# export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
-# export CGO_CFLAGS="-D__BLST_PORTABLE__"
-# export LOTUS_CHAININDEXER_ENABLEINDEXER=true
+export LOTUS_F3_BOOTSTRAP_EPOCH=21
+export LOTUS_MINER_PATH=${LOTUS_MINER_1_PATH}
+export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
+
+
+export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
+export CGO_CFLAGS="-D__BLST_PORTABLE__"
+export LOTUS_CHAININDEXER_ENABLEINDEXER=true
 
 
 # check if initialization is needed
@@ -35,16 +36,26 @@ else
 fi
 
 
+#TODO: I don't think this works. DRAND_CHAIN_INFO is empty and I think that results in errors later on. How can we curl something to check that drand is ready? I dont know.. I think we had a sleep 5 seconds before, maybe that will work, but that also bad practice
 # get a fresh chain info
 if [ "$INIT_MODE" = "true" ]; then
     retries=10
     while [ "$retries" -gt 0 ]; do
-        chain_info=$(curl -s ${DRAND_1_IP}/info)
-        if echo "$chain_info" | jq -c . >/dev/null 2>&1; then
-            echo "$chain_info" > chain_info
+        curl 10.20.20.21/info | jq -c
+        chain_info_status=$?
+        if [ $chain_info_status -eq 0 ];
+        then
+            echo "---------------"
+            echo "${chain_info_status}"
+            echo "---------------"
+
+            $chain_info_status > chain_info
             export DRAND_CHAIN_INFO=chain_info
-            echo "lotus${no}: chain_info is ready!"
-            echo "lotus${no}: continuing startup..."
+            
+            echo "---------------"
+            echo "${DRAND_CHAIN_INFO}"
+            echo "---------------"
+
             break
         fi
         sleep 3
@@ -76,7 +87,8 @@ if [ "$INIT_MODE" = "true" ]; then
     # Start daemon with genesis creation. Only make genesis config if lotus0 is initializing
     if [ "$no" -eq 0 ]; then
         echo "Lotus$no: starting darmon with genesis"
-        lotus --repo="${LOTUS_PATH}" daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml&
+        #lotus --repo="${LOTUS_PATH}" daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml&
+        lotus daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml&
     else
         echo "Lotus$no: starting regular lotus daemon"
         lotus --repo="${LOTUS_PATH}" daemon --bootstrap=false --config=config.toml&
@@ -100,7 +112,7 @@ lotus auth create-token --perm admin > ${LOTUS_DATA_DIR}/lotus${no}-jwt
 
 # Connect to peers with retries
 retries=5
-for peer in "${LOTUS_DATA_DIR}/lotus${no}-ipv4addr" "${FOREST_DATA_DIR}/forest-listen-addr"; do
+for peer in "${LOTUS_DATA_DIR}/lotus${no}-ipv4addr" "${FOREST_0_DATA_DIR}/forest-listen-addr"; do
     if [ -f "$peer" ]; then
         attempt=1
         while [ $attempt -le $retries ]; do

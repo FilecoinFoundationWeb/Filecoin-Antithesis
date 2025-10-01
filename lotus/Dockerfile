@@ -57,7 +57,7 @@ COPY lotus-config.toml.template config.toml.template
 COPY scripts/lotus-miner-1.sh ./scripts/lotus-miner-1.sh
 COPY scripts/lotus-miner-2.sh ./scripts/lotus-miner-2.sh
 COPY scripts/lotus_bench.sh /opt/antithesis/test/v1/main/serial_driver_lotus_bench.sh
-COPY scripts/setup-lotus.sh ./scripts/setup-lotus.sh
+COPY scripts/start-lotus.sh ./scripts/start-lotus.sh
 COPY scripts/setup-genesis.sh ./scripts/setup-genesis.sh
 
 # sleep infinity
