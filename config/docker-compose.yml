@@ -7,18 +7,20 @@ x-templates:
       - ./data/forest:${FOREST_DATA_DIR}
       - ./data/lotus-2:${LOTUS_2_DATA_DIR}
       - ./shared/configs:${SHARED_CONFIGS}
-  setup_genesis: &setup_genesis
-    entrypoint: ["./scripts/setup-genesis.sh", "1"]
+  needs_drand0_started: &needs_drand0_started
+    depends_on:
+      drand0:
+        condition: service_started
 
 services:
   drand0:
     <<: [*filecoin_service]
     container_name: drand0
-    image: drand:${DRAND_TAG:-latest}
+    image: drand
     entrypoint: ./start-drand0.sh
     networks:
       antithesis-net:
-        ipv4_address: ${DRAND_1_IP}
+        ipv4_address: ${DRAND0_IP}
     healthcheck:
       test: drand util ping http://10.20.20.21:8080
       interval: 5s
@@ -26,16 +28,13 @@ services:
       retries: 10
 
   drand1:
-    <<: [*filecoin_service]
+    <<: [*filecoin_service, *needs_drand0_started]
     container_name: drand1
-    image: drand:${DRAND_TAG:-latest}
+    image: drand
     entrypoint: ./start-drand1.sh
     networks:
       antithesis-net:
-        ipv4_address: ${DRAND_2_IP}
-    depends_on:
-      drand0: 
-        condition: service_started
+        ipv4_address: ${DRAND1_IP}
     healthcheck:
       test: drand util ping http://10.20.20.22:8080
       interval: 5s
@@ -43,29 +42,27 @@ services:
       retries: 10
 
   drand2:
-    <<: [*filecoin_service]
+    <<: [*filecoin_service, *needs_drand0_started]
     container_name: drand2
-    image: drand:${DRAND_TAG:-latest}
+    image: drand
     entrypoint: ./start-drand2.sh
     networks:
       antithesis-net:
-        ipv4_address: ${DRAND_3_IP}
-    depends_on:
-      drand0: 
-        condition: service_started
+        ipv4_address: ${DRAND2_IP}
     healthcheck:
       test: drand util ping http://10.20.20.23:8080
       interval: 5s
       timeout: 2s
       retries: 10
 
-  lotus-1:
-    <<: [*filecoin_service, *setup_genesis]
-    container_name: lotus-1
-    image: lotus:${LOTUS_TAG:-latest}
+  lotus0:
+    <<: [*filecoin_service]
+    container_name: lotus0
+    image: lotus
+    entrypoint: ["./scripts/setup-lotus.sh", "0"]
     networks:
       antithesis-net:
-        ipv4_address: ${LOTUS_1_IP}
+        ipv4_address: ${LOTUS_0_IP}
     depends_on:
       drand0: 
         condition: service_healthy
@@ -80,31 +77,16 @@ services:
       timeout: 2s
       retries: 10
 
-  lotus-miner-1:
+  lotus1:
     <<: [*filecoin_service]
-    image: lotus:${LOTUS_TAG:-latest}
-    container_name: lotus-miner-1
-    ports:
-      - ${LOTUS_MINER_1_RPC_PORT}:${LOTUS_MINER_1_RPC_PORT}
-    restart: on-failure
-    entrypoint: ["./scripts/lotus-miner-1.sh"]
+    image: lotus
+    container_name: lotus1
+    entrypoint: ["./scripts/setup-lotus.sh", "1"]
     networks:
       antithesis-net:
-        ipv4_address: ${LOTUS_MINER_1_IP}
+        ipv4_address: ${LOTUS_1_IP}
     depends_on:
-      lotus-1: 
-        condition: service_healthy
-   
-  lotus-2:
-    <<: [*filecoin_service]
-    image: lotus:${LOTUS_TAG:-latest}
-    container_name: lotus-2
-    entrypoint: ["./scripts/lotus.sh", "2"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${LOTUS_2_IP}
-    depends_on:
-      lotus-1: 
+      lotus0: 
         condition: service_healthy
     healthcheck:
       test: curl --fail http://10.20.20.26:1235/health/livez
@@ -113,35 +95,48 @@ services:
       timeout: 2s
       retries: 10
 
-  lotus-miner-2:
+  lotus-miner0:
     <<: [*filecoin_service]
-    image: lotus:${LOTUS_TAG:-latest}
-    container_name: lotus-miner-2
+    image: lotus
+    container_name: lotus-miner0
     ports:
-      - ${LOTUS_MINER_2_RPC_PORT}:${LOTUS_MINER_2_RPC_PORT}
+      - ${LOTUS_MINER_0_RPC_PORT}:${LOTUS_MINER_0_RPC_PORT}
+    restart: on-failure
+    entrypoint: ["./scripts/lotus-miner-1.sh"]
+    networks:
+      antithesis-net:
+        ipv4_address: ${LOTUS_MINER_0_IP}
+    depends_on:
+      lotus0: 
+        condition: service_healthy
+
+  lotus-miner1:
+    <<: [*filecoin_service]
+    image: lotus
+    container_name: lotus-miner1
+    ports:
+      - ${LOTUS_MINER_1_RPC_PORT}:${LOTUS_MINER_1_RPC_PORT}
     restart: on-failure
     entrypoint: ["./scripts/lotus-miner-2.sh"]
     networks:
       antithesis-net:
-        ipv4_address: ${LOTUS_MINER_2_IP}
+        ipv4_address: ${LOTUS_MINER_1_IP}
     depends_on:
-      lotus-2: 
+      lotus1: 
         condition: service_healthy
 
-  forest:
+  forest0:
     <<: [*filecoin_service]
-    image: forest:${FOREST_COMMIT:-latest}
-    container_name: forest
-      # - ./forest/forest_config.toml.tpl:/forest/forest_config.toml.tpl
-      # - ./forest/start_scripts/forest-init.sh:${FOREST_DATA_DIR}/forest-init.sh
+    image: forest
+    container_name: forest0
     ports:
-      - ${FOREST_RPC_PORT}:${FOREST_RPC_PORT}    
-    entrypoint: ["${FOREST_DATA_DIR}/forest-init.sh"]
+      - ${FOREST_0_RPC_PORT}:${FOREST_0_RPC_PORT}    
+    entrypoint: ["./scripts/start-forest.sh"]
     networks:
       antithesis-net:
-        ipv4_address: ${FOREST_IP}
+        ipv4_address: ${FOREST_0_IP}
     depends_on:
-      lotus-2: 
+      lotus1: 
         condition: service_healthy
     healthcheck:
       test: curl --fail http://10.20.20.28:2346/livez?verbose
@@ -152,13 +147,13 @@ services:
 
   workload:
     <<: [*filecoin_service]
-    image: workload:latest
+    image: workload
     container_name: workload
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.30
     depends_on:
-      lotus-2:
+      lotus1:
         condition: service_healthy
 
 networks:

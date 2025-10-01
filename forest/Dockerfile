@@ -65,5 +65,7 @@ RUN forest-tool fetch-params --keys
 ENV FOREST_ACTOR_BUNDLE_PATH="/var/tmp/forest_actor_bundle.car.zst"
 RUN forest-tool state-migration actor-bundle $FOREST_ACTOR_BUNDLE_PATH
 
+COPY ./scripts/start-forest.sh ./scripts/start-forest.sh
+
 # Step 8: Keep the container alive
 ENTRYPOINT ["sleep", "infinity"]

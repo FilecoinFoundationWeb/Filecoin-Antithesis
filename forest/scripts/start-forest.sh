@@ -35,28 +35,28 @@ export FOREST_PROPAGATION_DELAY_SECS=1
 NETWORK_NAME=$(jq -r '.NetworkName' "${SHARED_CONFIGS}/localnet.json")
 export NETWORK_NAME=$NETWORK_NAME
 forest --version
-cp /forest/forest_config.toml.tpl "${FOREST_DATA_DIR}/forest_config.toml"
-echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
+cp /forest/forest_config.toml.tpl "${FOREST_0_DATA_DIR}/forest_config.toml"
+echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_0_DATA_DIR}/forest_config.toml"
 
 # Perform basic initialization of the Forest node, including generating the admin token.
-forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
-       --config "${FOREST_DATA_DIR}/forest_config.toml" \
-       --save-token "${FOREST_DATA_DIR}/jwt" \
+forest --genesis "${SHARED_CONFIGS}/devgen.car" \
+       --config "${FOREST_0_DATA_DIR}/forest_config.toml" \
+       --save-token "${FOREST_0_DATA_DIR}/jwt" \
        --no-healthcheck \
        --skip-load-actors \
        --exit-after-init
 
-forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
-       --config "${FOREST_DATA_DIR}/forest_config.toml" \
-       --rpc-address "${FOREST_IP}:${FOREST_RPC_PORT}" \
-       --p2p-listen-address "/ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT}" \
-       --healthcheck-address "${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT}" \
+forest --genesis "${Shared_configs}/devgen.car" \
+       --config "${FOREST_0_DATA_DIR}/forest_config.toml" \
+       --rpc-address "${FOREST_0_IP}:${FOREST_0_RPC_PORT}" \
+       --p2p-listen-address "/ip4/${FOREST_0_IP}/tcp/${FOREST_0_P2P_PORT}" \
+       --healthcheck-address "${FOREST_0_IP}:${FOREST_0_HEALTHZ_RPC_PORT}" \
        --skip-load-actors &
 
 # Admin token is required for connection commands and wallet management.
-TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
+TOKEN=$(cat "${FOREST_0_DATA_DIR}/jwt")
 export TOKEN
-FULLNODE_API_INFO=$TOKEN:/ip4/${FOREST_IP}/tcp/${FOREST_RPC_PORT}/http
+FULLNODE_API_INFO=$TOKEN:/ip4/${FOREST_0_IP}/tcp/${FOREST_0_RPC_PORT}/http
 export FULLNODE_API_INFO
 
 echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
@@ -65,14 +65,14 @@ echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 forest-cli wait-api
 echo "forest: collecting network info…"
 
-forest-cli net listen | head -n1 > "${FOREST_DATA_DIR}/forest-listen-addr"
+forest-cli net listen | head -n1 > "${FOREST_0_DATA_DIR}/forest-listen-addr"
 echo "forest: connecting to lotus nodes…"
-forest-cli net connect "$(cat "${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr")"
-forest-cli net connect "$(cat "${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr")"
+forest-cli net connect "$(cat "${LOTUS_0_DATA_DIR}/lotus0-ipv4addr")"
+forest-cli net connect "$(cat "${LOTUS_1_DATA_DIR}/lotus1-ipv4addr")"
 
 # Ensure the Forest node is fully synced before proceeding
 forest-cli sync wait
 forest-cli sync status
-forest-cli healthcheck healthy --healthcheck-port "${FOREST_HEALTHZ_RPC_PORT}"
+forest-cli healthcheck healthy --healthcheck-port "${FOREST_0_HEALTHZ_RPC_PORT}"
 echo "forest: ready."
 sleep infinity

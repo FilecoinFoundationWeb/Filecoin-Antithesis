@@ -1,28 +1,28 @@
 {
   "t01000": {
     "ID": "t01000",
-    "Owner": "t3xfomlechsiinee2hlwqwzdebwvqfft5yrk4dolzvfryg43dr2tq5kdy267nhuzxzcveb35fce6as357txtyq",
-    "Worker": "t3xfomlechsiinee2hlwqwzdebwvqfft5yrk4dolzvfryg43dr2tq5kdy267nhuzxzcveb35fce6as357txtyq",
-    "PeerId": "12D3KooWNP8GS4gLgDa3YRBsh82onVo2AdD5FgHKZYpTd6sZp5Ps",
+    "Owner": "t3xcz7ww5tkhwjdzwktcu7ryhovmjquweu2parxcxl7ljbeujjz7nrkt5duowl4mytwunu6v7bxsr3nrjvbkeq",
+    "Worker": "t3xcz7ww5tkhwjdzwktcu7ryhovmjquweu2parxcxl7ljbeujjz7nrkt5duowl4mytwunu6v7bxsr3nrjvbkeq",
+    "PeerId": "12D3KooWHWMxeyDqPC8hPfQ3vfapNJH85zFp4k4gDsRU8vGNBQoo",
     "MarketBalance": "0",
     "PowerBalance": "0",
     "SectorSize": 2048,
     "Sectors": [
       {
         "CommR": {
-          "/": "bagboea4b5abcarbikgyigymnbdd3rqsoxlo4logh23ndpc6phkkvavbkaunm3mil"
+          "/": "bagboea4b5abca5u25esyd4a5qfhw22enp6zfywz4vonjkcl7chx5uvbwc2els73o"
         },
         "CommD": {
-          "/": "baga6ea4seaqnyhliujkofc2umqszlfifyga22odsqbtxsqo5m5pwxj7hkd7n2ja"
+          "/": "baga6ea4seaqjtdcbujq27xnlykqogsodnp2om5pfht6vl3olt44f4b755ptc2gy"
         },
         "SectorID": 0,
         "Deal": {
           "PieceCID": {
-            "/": "baga6ea4seaqnyhliujkofc2umqszlfifyga22odsqbtxsqo5m5pwxj7hkd7n2ja"
+            "/": "baga6ea4seaqjtdcbujq27xnlykqogsodnp2om5pfht6vl3olt44f4b755ptc2gy"
           },
           "PieceSize": 2048,
           "VerifiedDeal": false,
-          "Client": "t3xfomlechsiinee2hlwqwzdebwvqfft5yrk4dolzvfryg43dr2tq5kdy267nhuzxzcveb35fce6as357txtyq",
+          "Client": "t3xcz7ww5tkhwjdzwktcu7ryhovmjquweu2parxcxl7ljbeujjz7nrkt5duowl4mytwunu6v7bxsr3nrjvbkeq",
           "Provider": "t01000",
           "Label": "0",
           "StartEpoch": 0,
@@ -33,25 +33,25 @@
         },
         "DealClientKey": {
           "Type": "bls",
-          "PrivateKey": "uevicjys4w2j4oytwQpip2mCczNmoUTtI6cXxIhP+QU="
+          "PrivateKey": "Hu0dd4cnY9tIkc1tkFCS8hLSrnWqk0tomUyejiYTCzI="
         },
         "ProofType": 5
       },
       {
         "CommR": {
-          "/": "bagboea4b5abcbkdytv4m3juz5o6lpaj7zwmhlextibf6rep7fc7kna7xtezlddyk"
+          "/": "bagboea4b5abcaedgag5gz3wwocpdhvgxm5t4hljhepxahuca44lacwx7tpfamqi3"
         },
         "CommD": {
-          "/": "baga6ea4seaqko4oroi7ephnoddkooqafeslheymae73m44jelqk2c34ymb4muea"
+          "/": "baga6ea4seaqhx4qt6cwfhmqdiedxae4xhomuqrkiddoshnrqlv7675yrygqpsgq"
         },
         "SectorID": 1,
         "Deal": {
           "PieceCID": {
-            "/": "baga6ea4seaqko4oroi7ephnoddkooqafeslheymae73m44jelqk2c34ymb4muea"
+            "/": "baga6ea4seaqhx4qt6cwfhmqdiedxae4xhomuqrkiddoshnrqlv7675yrygqpsgq"
           },
           "PieceSize": 2048,
           "VerifiedDeal": false,
-          "Client": "t3xfomlechsiinee2hlwqwzdebwvqfft5yrk4dolzvfryg43dr2tq5kdy267nhuzxzcveb35fce6as357txtyq",
+          "Client": "t3xcz7ww5tkhwjdzwktcu7ryhovmjquweu2parxcxl7ljbeujjz7nrkt5duowl4mytwunu6v7bxsr3nrjvbkeq",
           "Provider": "t01000",
           "Label": "1",
           "StartEpoch": 0,
@@ -62,7 +62,7 @@
         },
         "DealClientKey": {
           "Type": "bls",
-          "PrivateKey": "uevicjys4w2j4oytwQpip2mCczNmoUTtI6cXxIhP+QU="
+          "PrivateKey": "Hu0dd4cnY9tIkc1tkFCS8hLSrnWqk0tomUyejiYTCzI="
         },
         "ProofType": 5
       }
@@ -70,28 +70,28 @@
   },
   "t01001": {
     "ID": "t01001",
-    "Owner": "t3qslyui62vaah3zveebqx2lguabyszryedb4x2tklijgszignjlh2ayezhazsgoooeatqg73is6gtwl5yz3za",
-    "Worker": "t3qslyui62vaah3zveebqx2lguabyszryedb4x2tklijgszignjlh2ayezhazsgoooeatqg73is6gtwl5yz3za",
-    "PeerId": "12D3KooWEHaYyHvhj1mPU6qgGbW9YESsvabQyyFKUJovcMpiMBB8",
+    "Owner": "t3qbe6rfldyzklk5vwnripj3mdkvbkpdf6zzobol4yshvq3udocb3jif2bkpjuisirlrobkpkfkvepc6lga6qq",
+    "Worker": "t3qbe6rfldyzklk5vwnripj3mdkvbkpdf6zzobol4yshvq3udocb3jif2bkpjuisirlrobkpkfkvepc6lga6qq",
+    "PeerId": "12D3KooWAKVkpxVFxXfPDTbWkYzVSxshkuHRyXdMi3LtEgDTSRuM",
     "MarketBalance": "0",
     "PowerBalance": "0",
     "SectorSize": 2048,
     "Sectors": [
       {
         "CommR": {
-          "/": "bagboea4b5abcaz3bzknk3tpl56hed2hvtiyjeghzyvniwoz4oioiczuhi34r2etg"
+          "/": "bagboea4b5abcbp773xtmb44nf37pfougc6kltsqopmalserkydgdzlr7ge6jkbjc"
         },
         "CommD": {
-          "/": "baga6ea4seaqhvomc6gde72tddtw35qlzjoq7dx6fqdge4qswpvysae75w4cymna"
+          "/": "baga6ea4seaqf2q6zxgmvz3tf7mpt5srq2l6a5cs62e7wzvtx2waxmhmpxv5t4bq"
         },
         "SectorID": 0,
         "Deal": {
           "PieceCID": {
-            "/": "baga6ea4seaqhvomc6gde72tddtw35qlzjoq7dx6fqdge4qswpvysae75w4cymna"
+            "/": "baga6ea4seaqf2q6zxgmvz3tf7mpt5srq2l6a5cs62e7wzvtx2waxmhmpxv5t4bq"
           },
           "PieceSize": 2048,
           "VerifiedDeal": false,
-          "Client": "t3qslyui62vaah3zveebqx2lguabyszryedb4x2tklijgszignjlh2ayezhazsgoooeatqg73is6gtwl5yz3za",
+          "Client": "t3qbe6rfldyzklk5vwnripj3mdkvbkpdf6zzobol4yshvq3udocb3jif2bkpjuisirlrobkpkfkvepc6lga6qq",
           "Provider": "t01001",
           "Label": "0",
           "StartEpoch": 0,
@@ -102,25 +102,25 @@
         },
         "DealClientKey": {
           "Type": "bls",
-          "PrivateKey": "Z4kjML6bAMyDRj38gq7VxtpleUM02vvrq092olRUqRc="
+          "PrivateKey": "Q6471+h36tTkyAjdb/MHI0W9XO0ks9gc8GHJJRcxmRs="
         },
         "ProofType": 5
       },
       {
         "CommR": {
-          "/": "bagboea4b5abcbps36gmunvscjuoeuvvh7xioj4crntlkx77kdmdid5vydrjdkwq6"
+          "/": "bagboea4b5abcbc5vveegxkzkmdxenkari57og4l6witf64du5a5bwj3x4xofg3tl"
         },
         "CommD": {
-          "/": "baga6ea4seaqlsnacqqjvcmfjzqhbd2eeqrfwkaipgmvjnbka3be4mt5jc56tsla"
+          "/": "baga6ea4seaqfmm6234cluw5cfrnp56qe72ctk4sdxpvmf4bhv3bfi6tkgoczgha"
         },
         "SectorID": 1,
         "Deal": {
           "PieceCID": {
-            "/": "baga6ea4seaqlsnacqqjvcmfjzqhbd2eeqrfwkaipgmvjnbka3be4mt5jc56tsla"
+            "/": "baga6ea4seaqfmm6234cluw5cfrnp56qe72ctk4sdxpvmf4bhv3bfi6tkgoczgha"
           },
           "PieceSize": 2048,
           "VerifiedDeal": false,
-          "Client": "t3qslyui62vaah3zveebqx2lguabyszryedb4x2tklijgszignjlh2ayezhazsgoooeatqg73is6gtwl5yz3za",
+          "Client": "t3qbe6rfldyzklk5vwnripj3mdkvbkpdf6zzobol4yshvq3udocb3jif2bkpjuisirlrobkpkfkvepc6lga6qq",
           "Provider": "t01001",
           "Label": "1",
           "StartEpoch": 0,
@@ -131,7 +131,7 @@
         },
         "DealClientKey": {
           "Type": "bls",
-          "PrivateKey": "Z4kjML6bAMyDRj38gq7VxtpleUM02vvrq092olRUqRc="
+          "PrivateKey": "Q6471+h36tTkyAjdb/MHI0W9XO0ks9gc8GHJJRcxmRs="
         },
         "ProofType": 5
       }

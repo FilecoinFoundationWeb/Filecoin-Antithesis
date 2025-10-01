@@ -1,7 +1,5 @@
 #!/bin/bash
 
-no="$1"
-
 NUM_MINERS="${NUM_MINERS:-0}"
 SECTOR_SIZE="${SECTOR_SIZE:-2KiB}"
 NETWORK_NAME="${NETWORK_NAME:-2k}"
@@ -31,5 +29,3 @@ lotus-seed aggregate-manifests "${manifest_files[@]}" > ${SHARED_CONFIGS}/manife
 lotus-seed genesis add-miner ${SHARED_CONFIGS}/localnet.json ${SHARED_CONFIGS}/manifest.json
 
 echo "Genesis setup complete for $NUM_MINERS miner(s)."
-
-./scripts/lotus.sh ${no}
