@@ -289,12 +289,13 @@ services:
 
   #Workload service
   workload:
-    image: workload:latest
+    image: workload:filwizard
     container_name: workload
     volumes:
       - ./data/lotus-1:/root/devgen/lotus-1
       - ./data/lotus-2:/root/devgen/lotus-2
       - ./data/forest:/root/devgen/forest
+      - ./data/curio:/root/devgen/curio
     env_file:
       - .env
     networks:

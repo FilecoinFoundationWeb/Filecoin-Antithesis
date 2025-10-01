@@ -20,7 +20,7 @@ echo "Current system time: $current_time"
 RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.26:1235/rpc/v0}"
 
 # Waiting for the chain head to pass a certain height
-INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-10}"
+INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-5}"
 BLOCK_HEIGHT_REACHED=0
 
 echo "Workload [entrypoint]: waiting for block height to reach ${INIT_BLOCK_HEIGHT}"
@@ -36,7 +36,8 @@ do
 done
 
 echo "Workload [entrypoint]: chainhead has reached block height ${INIT_BLOCK_HEIGHT}"
-
+export FILECOIN_RPC="http://lotus-1:1234/rpc/v1"
+export FILECOIN_TOKEN=$(cat /root/devgen/lotus-1/jwt)
+#filwizard contract deploy-local --config config/contracts.json --workspace ./workspace --rpc-url "$FILECOIN_RPC" --create-deployer --bindings
 python3 -u /opt/antithesis/entrypoint/setup_complete.py
-
 sleep infinity

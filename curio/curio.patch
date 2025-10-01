@@ -1,0 +1,197 @@
+diff --git a/curio/Dockerfile b/curio/Dockerfile
+index 3726db5..624ffc3 100644
+--- a/curio/Dockerfile
++++ b/curio/Dockerfile
+@@ -38,9 +38,10 @@ RUN set -eux; \
+     rustc --version;
+ 
+ RUN git clone https://github.com/filecoin-project/curio.git /opt/curio
+-
+ WORKDIR /opt/curio
+-RUN git checkout main
++RUN git checkout pdpv0
++COPY ./curio.patch ./curio.patch
++RUN git apply curio.patch
+ 
+ ### make configurable filecoin-ffi build
+ ARG FFI_BUILD_FROM_SOURCE=0
+diff --git a/curio/start_scripts/curio-init.sh b/curio/start_scripts/curio-init.sh
+index 494f831..7ddbf14 100755
+--- a/curio/start_scripts/curio-init.sh
++++ b/curio/start_scripts/curio-init.sh
+@@ -20,62 +20,135 @@ done
+ echo All ready. Lets go
+ myip=`nslookup curio | grep -v "#" | grep Address | awk '{print $2}'`
+ 
+-if [ ! -f "$CURIO_REPO_PATH"/.init.curio ]; then
+-
+-  if [ ! -f "$CURIO_REPO_PATH"/.init.setup ]; then
+-    DEFAULT_WALLET=$(lotus wallet default)
+-    echo Create a new miner actor ...
+-	sptool --actor t01000 actor new-miner --owner $DEFAULT_WALLET --worker $DEFAULT_WALLET --from $DEFAULT_WALLET --sector-size 2KiB --confidence 1
+-    touch "$CURIO_REPO_PATH"/.init.setup
+-    lotus wallet export "$DEFAULT_WALLET" >"$CURIO_REPO_PATH"/default.key
++if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
++  echo Wait for lotus-miner is ready ...
++  lotus wait-api
++
++  if [ ! -f $CURIO_REPO_PATH/.init.setup ]; then
++    export DEFAULT_WALLET=`lotus wallet default`
++    echo DEFAULT_WALLET=$DEFAULT_WALLET
++     echo Create a new miner actor ...
++    lotus-shed miner create $DEFAULT_WALLET $DEFAULT_WALLET $DEFAULT_WALLET 2KiB
++    touch $CURIO_REPO_PATH/.init.setup
+   fi
+ 
+-  if [ ! -f "$CURIO_REPO_PATH"/.init.config ]; then
++  if [ ! -f $CURIO_REPO_PATH/.init.config ]; then
+     newminer=`lotus state list-miners | grep -E -v 't01000|t01001'`
+     echo "New Miner is $newminer"
+     echo Initiating a new Curio cluster ...
+-    curio config new-cluster "$newminer"
+-    touch "$CURIO_REPO_PATH"/.init.config
++    curio config new-cluster $newminer
++    echo Creating market config...
++    curio config get base | sed -e 's/#Miners = \[\]/Miners = ["'"$newminer"'"]/g' | curio config set --title base
++    
++    # Set up base layer configuration
++    CONFIG_CONTENT='[HTTP]
++      Enable = true
++      DelegateTLS = true
++      DomainName = "curio"
++      ListenAddress = "0.0.0.0:80"
++
++    [Subsystems]
++      EnableCommP = true
++      EnableParkPiece = true
++      EnablePDP = true
++      EnableMoveStorage = true
++      EnableDealMarket = true
++      EnableWebGui = true
++      GuiAddress = "0.0.0.0:4701"
++    '
++    echo "$CONFIG_CONTENT" | curio config create --title pdp-only
++    touch $CURIO_REPO_PATH/.init.config
+   fi
+ 
+-  echo Starting Curio node to attach storage ...
+-  curio run --nosync --layers seal,post,gui &
++  if [ -f /root/devgen/contracts/verifier-proxy.addr ]; then
++    echo "Verifier proxy address file exists."
++    export CURIO_PDP_VERIFIER_ADDRESS=$(cat /root/devgen/contracts/verifier-proxy.addr)
++    echo "CURIO_PDP_VERIFIER_ADDRESS=$CURIO_PDP_VERIFIER_ADDRESS"
++  else
++    echo "Verifier proxy address file does not exist."
++  fi
++
++  # Add storage attachment
++  echo "Starting Curio node to attach storage..."
++  curio run --nosync --layers seal,post,pdp-only,gui &
+   CURIO_PID=$!
+-  sleep 60
+-  until curio cli --machine "$myip":12300 wait-api; do
++  sleep 20
++  
++  until curio cli --machine $myip:12300 wait-api; do
+     echo "Waiting for the curio CLI to become ready..."
+     sleep 5
+   done
+-  curio cli --machine "$myip":12300 storage attach --init --seal --store "$CURIO_REPO_PATH"
+-  touch "$CURIO_REPO_PATH"/.init.curio
+-  echo Stopping Curio node ...
+-  echo Try to stop curio...
++  
++  curio cli --machine $myip:12300 storage attach --init --seal --store $CURIO_REPO_PATH
++  
++  echo "Stopping temporary Curio node..."
+   kill -15 $CURIO_PID || kill -9 $CURIO_PID
+-  echo Done
+-fi
+-if [ -f "$CURIO_REPO_PATH"/default.key ]; then
+-    echo "Importing wallet key..."
+-    lotus wallet import "$CURIO_REPO_PATH"/default.key || true
++
++  touch $CURIO_REPO_PATH/.init.curio
+ fi
+ 
+-echo Starting curio node ...
+-curio run --nosync --name devnet --layers seal,post,gui &
+-CURIO_PID=$!
++# Setup PDP service if not already done
++if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
++  echo "Setting up PDP service..."
++  
++  # Start Curio node first
++  echo "Starting Curio node for PDP setup..."
++  curio run --nosync --layers seal,post,pdp-only,gui &
++  CURIO_PID=$!
++    sleep 20
++  # Wait for the node to be ready using curio cli
++  echo "Waiting for Curio API to be ready..."
++  until curio cli --machine $myip:12300 wait-api; do
++    echo "Waiting for the curio CLI to become ready..."
++    sleep 5
++  done
++  
++  # Create service secret and save public key
++  echo "Creating PDP service secret..."
++  cd $CURIO_REPO_PATH
++  pdptool create-service-secret > pdp_service_key.txt
+ 
+-# Wait a moment for curio to start
+-sleep 10
++  # Extract public key from the output and properly format it
++  PUB_KEY=$(cat pdp_service_key.txt | sed -n '/Public Key:/,/-----END PUBLIC KEY-----/p' | grep -v "Public Key:" | sed 's/^[[:space:]]*//')
++  echo "Public Key (formatted):"
++  echo "$PUB_KEY"
+ 
+-# Get the miner ID if not already set
+-if [ -z "$newminer" ]; then
+-    newminer=$(lotus state list-miners | grep -E -v 't01000|t01001' | head -1)
+-    echo "Using miner: $newminer"
+-fi
++  # Get and format private key
++  echo "Preparing private key..."
++  PRIVATE_KEY_HEX=$(lotus wallet export $DEFAULT_WALLET | xxd -r -p | jq -r '.PrivateKey' | base64 -d | xxd -p -c 32)
++  echo "Importing PDP private key..."
++  sleep 30
++  
++  # Import the private key using RPC
++  echo "Importing private key via RPC..."
++  curl -X POST -H "Content-Type: application/json" \
++    -d "{\"jsonrpc\":\"2.0\",\"method\":\"CurioWeb.ImportPDPKey\",\"params\":[\"$PRIVATE_KEY_HEX\"],\"id\":1}" \
++    http://${myip}:4701/api/webrpc/v0
++
++  # Create PDP service using RPC
++  echo "Creating PDP service via RPC..."
++  # Escape newlines for JSON
++  JSON_PUB_KEY=$(echo "$PUB_KEY" | awk '{printf "%s\\n", $0}' | sed 's/\\n$//')
++  curl -X POST -H "Content-Type: application/json" \
++    -d "{\"jsonrpc\":\"2.0\",\"method\":\"CurioWeb.AddPDPService\",\"params\":[\"pdp\",\"$JSON_PUB_KEY\"],\"id\":2}" \
++    http://${myip}:4701/api/webrpc/v0
+ 
+-# Start sealing
+-echo "Starting sealing process..."
+-curio seal start --now --cc --actor "$newminer"
++  # Create JWT token
++  echo "Creating JWT token..."
++  pdptool create-jwt-token pdp | grep -v "JWT Token:" > jwt_token.txt
++  cp /var/lib/curio/jwt_token.txt /root/devgen/contracts/jwt_token.txt
+ 
+-# Keep the script running
+-wait $CURIO_PID
++  # Test connectivity to the PDP service endpoint
++  echo "Testing PDP connectivity..."
++  pdptool ping --service-url http://curio:80 --service-name pdp
+ 
++  # Stop temporary Curio node
++  echo "Stopping temporary Curio node..."
++  kill -15 $CURIO_PID || kill -9 $CURIO_PID
++
++  touch $CURIO_REPO_PATH/.init.pdp
++  echo "PDP service setup complete"
++fi
+ 
++echo Starting curio node ...
++exec curio run --nosync --name devnet --layers seal,post,pdp-only,gui
+\ No newline at end of file

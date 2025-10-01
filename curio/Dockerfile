@@ -38,9 +38,10 @@ RUN set -eux; \
     rustc --version;
 
 RUN git clone https://github.com/filecoin-project/curio.git /opt/curio
-
 WORKDIR /opt/curio
-RUN git checkout main
+RUN git checkout pdpv0
+COPY ./curio.patch ./curio.patch
+RUN git apply curio.patch
 
 ### make configurable filecoin-ffi build
 ARG FFI_BUILD_FROM_SOURCE=0

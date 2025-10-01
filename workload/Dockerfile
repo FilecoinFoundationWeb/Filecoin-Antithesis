@@ -26,54 +26,35 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
 
 # Add Foundry to PATH
 ENV PATH="/root/.foundry/bin:${PATH}"
-
-# Install Antithesis Python SDK
 RUN pip install antithesis cffi --break-system-packages
 
-# Set up Go environment
+# Set Go environment
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/go"
+ENV PATH="$GOPATH/bin:$PATH"
 
-# Create directories for Go code
+# Install Hardhat (as some projects might need it)
+RUN npm install -g hardhat
+
+# Install Solidity compiler
+RUN npm install -g solc
+
+# Install abigen using Go (instead of problematic PPA)
+RUN go install github.com/ethereum/go-ethereum/cmd/abigen@latest
+
+# Clone and build filwizard
+RUN git clone https://github.com/parthshah1/filwizard /opt/antithesis
+
+# Set working directory
 WORKDIR /opt/antithesis
-
-# Copy the necessary Go files and resources
+RUN git pull origin nonce-fix
+RUN git checkout nonce-fix
 COPY ./entrypoint ./entrypoint
-COPY ./resources ./resources
-COPY go.mod ./go.mod
-COPY go.sum ./go.sum
-COPY main.go ./main.go
 COPY ./main ./test/v1/main
-
-# Make all files in ./test/v1/main executable
-RUN chmod +x ./test/v1/main/*
-
-# Download Go dependencies
-RUN go mod download
-
-# Build the Go application
-ENV CGO_ENABLED=1
-RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') go build -o ./app ./main.go
-
-RUN rm ./main.go
-RUN
-# Clone and build mpool-tx
-RUN git clone https://github.com/parthshah1/mpool-tx.git ./mpool-tx 
-WORKDIR /opt/antithesis/mpool-tx
-RUN git checkout api-assertions
-RUN go mod tidy && make build
-# Install mpool-tx binary
-RUN cp ./mpool-tx /usr/local/bin/mpool-tx
-RUN chmod +x /usr/local/bin/mpool-tx
-
-# Verify installation and run config setup
-RUN mpool-tx --version || echo "mpool-tx installed"
-
-# Install abigen (go-ethereum tools)
-RUN go install github.com/ethereum/go-ethereum/cmd/abigen@latest && \
-    ln -s /go/bin/abigen /usr/local/bin/abigen
-
-# Reset working directory
-WORKDIR /opt/antithesis
-
+# Build filwizard
+RUN make build
+RUN cp ./filwizard /usr/local/bin/filwizard
+RUN filwizard contract clone-config --config config/contracts.json --workspace ./workspace 
+# Default command
+CMD ["filwizard"]
 ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]
