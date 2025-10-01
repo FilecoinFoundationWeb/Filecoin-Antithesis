@@ -32,7 +32,7 @@ export FOREST_F3_FINALITY=5
 export FOREST_CHAIN_INDEXER_ENABLED=true
 export FOREST_BLOCK_DELAY_SECS=4
 export FOREST_PROPAGATION_DELAY_SECS=1
-NETWORK_NAME=$(jq -r '.NetworkName' "${LOTUS_1_DATA_DIR}/localnet.json")
+NETWORK_NAME=$(jq -r '.NetworkName' "${SHARED_CONFIGS}/localnet.json")
 export NETWORK_NAME=$NETWORK_NAME
 forest --version
 cp /forest/forest_config.toml.tpl "${FOREST_DATA_DIR}/forest_config.toml"

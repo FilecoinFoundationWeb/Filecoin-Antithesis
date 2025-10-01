@@ -1,0 +1,18 @@
+--- a/Makefile
++++ b/Makefile
+@@ -123,6 +123,7 @@ interopnet:
+ 	$(MAKE) interopnet-lotus interopnet-lotus-miner interopnet-lotus-worker interopnet-lotus-seed interopnet-lotus-shed
+ .PHONY: interopnet
+ 
++lotus: GOFLAGS+=-race
+ lotus: $(BUILD_DEPS)  ## Build the main Lotus binary
+ 	rm -f lotus
+ 	$(GOCC) build $(GOFLAGS) -o lotus ./cmd/lotus
+@@ -130,6 +131,7 @@ lotus: $(BUILD_DEPS)  ## Build the main Lotus binary
+ .PHONY: lotus
+ BINS+=lotus
+ 
++lotus-miner: GOFLAGS+=-race
+ lotus-miner: $(BUILD_DEPS)  ## Build the Lotus miner binary
+ 	rm -f lotus-miner
+ 	$(GOCC) build $(GOFLAGS) -o lotus-miner ./cmd/lotus-miner

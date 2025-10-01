@@ -25,3 +25,7 @@ RUN rm -rf /drand
 
 RUN make build_insecure
 RUN cp drand /usr/local/bin/drand
+
+COPY scripts/start-drand0.sh ./start-drand0.sh
+COPY scripts/start-drand1.sh ./start-drand1.sh
+COPY scripts/start-drand2.sh ./start-drand2.sh

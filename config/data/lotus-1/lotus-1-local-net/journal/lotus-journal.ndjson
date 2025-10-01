@@ -1,0 +1,1 @@
+{"System":"process","Event":"udp-buffer-size","Timestamp":"2025-10-01T18:40:33.774472768Z","Data":{"Type":"raised","Message":{"current_size":212992,"help":"See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.","message":"UDP buffer size is low","wanted_size":2097152},"Time":"2025-10-01T18:40:33.774471618Z"}}

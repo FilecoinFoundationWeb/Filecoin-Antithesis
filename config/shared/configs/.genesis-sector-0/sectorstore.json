@@ -1,0 +1,13 @@
+{
+  "ID": "25335f3f-9c7d-465a-890c-4f1228233a22",
+  "Weight": 0,
+  "CanSeal": false,
+  "CanStore": false,
+  "MaxStorage": 0,
+  "Groups": null,
+  "AllowTo": null,
+  "AllowTypes": null,
+  "DenyTypes": null,
+  "AllowMiners": null,
+  "DenyMiners": null
+}
