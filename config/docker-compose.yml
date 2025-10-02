@@ -4,7 +4,7 @@ x-templates:
     env_file: .env
     volumes:
       - ./data/lotus0:${LOTUS_0_DATA_DIR}
-      - ./data/forest:${FOREST_0_DATA_DIR}
+      - ./data/forest0:${FOREST_0_DATA_DIR}
       - ./data/lotus1:${LOTUS_1_DATA_DIR}
       - ./shared/configs:${SHARED_CONFIGS}
   needs_drand0_started: &needs_drand0_started
@@ -97,12 +97,12 @@ services:
 
   lotus-miner0:
     <<: [*filecoin_service]
-    image: lotus
+    image: lotus:latest
     container_name: lotus-miner0
     ports:
       - ${LOTUS_MINER_0_RPC_PORT}:${LOTUS_MINER_0_RPC_PORT}
     restart: on-failure
-    entrypoint: ["./scripts/lotus-miner-1.sh"]
+    entrypoint: ["./scripts/start-lotus-miner.sh", "0"]
     networks:
       antithesis-net:
         ipv4_address: ${LOTUS_MINER_0_IP}
@@ -112,12 +112,12 @@ services:
 
   lotus-miner1:
     <<: [*filecoin_service]
-    image: lotus
+    image: lotus:latest
     container_name: lotus-miner1
     ports:
       - ${LOTUS_MINER_1_RPC_PORT}:${LOTUS_MINER_1_RPC_PORT}
     restart: on-failure
-    entrypoint: ["./scripts/lotus-miner-2.sh"]
+    entrypoint: ["./scripts/start-lotus-miner.sh", "1"]
     networks:
       antithesis-net:
         ipv4_address: ${LOTUS_MINER_1_IP}
@@ -127,16 +127,16 @@ services:
 
   forest0:
     <<: [*filecoin_service]
-    image: forest
+    image: forest:latest
     container_name: forest0
     ports:
-      - ${FOREST_0_RPC_PORT}:${FOREST_0_RPC_PORT}    
+      - ${FOREST_0_RPC_PORT}:${FOREST_0_RPC_PORT}
     entrypoint: ["./scripts/start-forest.sh"]
     networks:
       antithesis-net:
         ipv4_address: ${FOREST_0_IP}
     depends_on:
-      lotus1: 
+      lotus0: 
         condition: service_healthy
     healthcheck:
       test: curl --fail http://10.20.20.28:2346/livez?verbose

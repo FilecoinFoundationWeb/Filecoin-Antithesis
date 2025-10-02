@@ -2,28 +2,29 @@
 
 no="$1"
 
-lotus_path="LOTUS_${no}_PATH"
-export LOTUS_PATH="${!lotus_path}"
-
 lotus_data_dir="LOTUS_${no}_DATA_DIR"
 export LOTUS_DATA_DIR="${!lotus_data_dir}"
 
 lotus_ip="LOTUS_${no}_IP"
-LOTUS_IP="${!lotus_ip}"
+export LOTUS_IP="${!lotus_ip}"
 
 lotus_rpc_port="LOTUS_${no}_RPC_PORT"
-LOTUS_RPC_PORT="${!lotus_rpc_port}"
+export LOTUS_RPC_PORT="${!lotus_rpc_port}"
 
-
-# Common environment setup, delete all these? what are these even used for?
 export LOTUS_F3_BOOTSTRAP_EPOCH=21
-export LOTUS_MINER_PATH=${LOTUS_MINER_1_PATH}
+export LOTUS_CHAININDEXER_ENABLEINDEXER=true
+export DRAND0_IP=${DRAND0_IP}
+
+# required via docs:
+lotus_path="LOTUS_${no}_PATH"
+export LOTUS_PATH="${!lotus_path}"
+
+lotus_miner_path="LOTUS_MINER_${no}_PATH"
+export LOTUS_MINER_PATH="${!lotus_miner_path}"
+
 export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
-
-
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
-export LOTUS_CHAININDEXER_ENABLEINDEXER=true
 
 
 # check if initialization is needed
@@ -36,36 +37,28 @@ else
 fi
 
 
-#TODO: I don't think this works. DRAND_CHAIN_INFO is empty and I think that results in errors later on. How can we curl something to check that drand is ready? I dont know.. I think we had a sleep 5 seconds before, maybe that will work, but that also bad practice
-# get a fresh chain info
-if [ "$INIT_MODE" = "true" ]; then
-    retries=10
-    while [ "$retries" -gt 0 ]; do
-        curl 10.20.20.21/info | jq -c
-        chain_info_status=$?
-        if [ $chain_info_status -eq 0 ];
-        then
-            echo "---------------"
-            echo "${chain_info_status}"
-            echo "---------------"
+# get drand info
+echo "polling drand0 (${DRAND_IP}) until a valid JSON response is received..."
 
-            $chain_info_status > chain_info
-            export DRAND_CHAIN_INFO=chain_info
-            
-            echo "---------------"
-            echo "${DRAND_CHAIN_INFO}"
-            echo "---------------"
+OUTPUT_FILE="chain_info.json"
+while true; do
+    # -s suppresses progress bar from curl and --fail causes curl to fail on HTTP errors
+    response=$(curl -s --fail "http://${DRAND0_IP}/info")
 
-            break
-        fi
-        sleep 3
-        retries=$(( tries - 1 ))
-        echo "lotus${no}: $retries connection attempts remaining..."
-    done
-fi
+    if echo "$response" | jq -e '.public_key?' >/dev/null 2>&1; then
+        echo "$response" > "$OUTPUT_FILE"
+        export DRAND_CHAIN_INFO=$(jq -c . "$OUTPUT_FILE")
+        break
+    else
+        echo "No valid response yet... retrying in 2 seconds."
+        sleep 2
+    fi
+done
 
+echo "Compact drand chain info:"
+echo "$DRAND_CHAIN_INFO"
 
-# Initialization steps
+# initialization steps
 if [ "$INIT_MODE" = "true" ]; then
     echo "lotus${no}: Running in initialization mode..."
     
@@ -80,21 +73,22 @@ if [ "$INIT_MODE" = "true" ]; then
     # saving the network name
     cat ${SHARED_CONFIGS}/localnet.json | jq -r '.NetworkName' > ${LOTUS_DATA_DIR}/network_name
     
-    # Set log levels for initialization
+    # set log levels for initialization
     lotus log set-level --system panic-reporter --system incrt --system bitswap-client --system table --system pubsub --system test-logger --system routedhost --system f3/internal/caching --system engine --system badgerbs --system chainstore --system genesis --system messagesigner --system sqlite --system providers --system miner --system f3/certexchange --system cliutil --system lotus-tracer --system fullnode --system gen --system tarutil --system ipns --system websocket-transport --system cli --system stores --system paramfetch --system amt --system splitstore --system blockservice --system webrtc-transport-pion --system build --system ctladdr --system pstoremanager --system quic-utils --system repo --system wallet-ledger --system lock --system dht.pb --system blankhost --system mocknet --system chainindex --system hello --system httpreader --system build/buildtypes --system tracing --system advmgr --system webrtc-udpmux --system paych --system healthcheck --system beacon --system statetree --system bundle --system connmgr --system swarm2 --system chainxchg --system chain --system harmonydb --system peerstore --system net/identify --system autonatv2 --system relay --system fsjournal --system peermgr --system builder --system alerting --system webtransport --system bs:peermgr --system merkledag --system discovery-backoff --system basichost --system disputer --system storageminer --system backupds --system rpcenc --system pathresolv --system peerstore/ds --system sub --system bs:sess --system consensus-common --system f3/manifest-provider --system wallet --system api_proxy --system wdpost --system eventlog --system types --system autonat --system p2p-circuit --system bitswap-server --system actors --system modules --system bitswap --system ulimit --system pubsub/timecache --system slashsvc --system quic-transport --system p2pnode --system payment-channel-settler --system partialfile --system cborrrpc --system nat --system sectors --system canonical-log --system f3/ohshitstore --system diversityFilter --system f3 --system ffiwrapper --system main --system f3/gpbft --system bs:sprmgr --system dht/RtRefreshManager --system drand --system f3/wal --system blockstore --system routing/composable --system bitswap_network --system rand --system market_adapter --system fsutil --system evtsm --system autorelay --system preseal --system node --system system --system p2p-holepunch --system messagepool --system watchdog --system metrics-prometheus --system ping --system reuseport-transport --system resources --system dht/netsize --system fil-consensus --system metrics --system events --system p2p-config --system dht --system net/conngater --system vm --system auth --system webrtc-transport --system badger --system rcmgr --system tcp-tpt --system retry --system upgrader --system statemgr --system conngater --system f3/blssig --system rpc warn
     lotus log set-level --system panic-reporter --system incrt --system bitswap-client --system table --system pubsub --system test-logger --system routedhost --system f3/internal/caching --system engine --system badgerbs --system chainstore --system genesis --system messagesigner --system sqlite --system providers --system miner --system f3/certexchange --system cliutil --system lotus-tracer --system fullnode --system gen --system tarutil --system ipns --system websocket-transport --system cli --system stores --system paramfetch --system amt --system splitstore --system blockservice --system webrtc-transport-pion --system build --system ctladdr --system pstoremanager --system quic-utils --system repo --system wallet-ledger --system lock --system dht.pb --system blankhost --system mocknet --system chainindex --system hello --system httpreader --system build/buildtypes --system tracing --system advmgr --system webrtc-udpmux --system paych --system healthcheck --system beacon --system statetree --system bundle --system connmgr --system swarm2 --system chainxchg --system chain --system harmonydb --system peerstore --system net/identify --system autonatv2 --system relay --system fsjournal --system peermgr --system builder --system alerting --system webtransport --system bs:peermgr --system merkledag --system discovery-backoff --system basichost --system disputer --system storageminer --system backupds --system rpcenc --system pathresolv --system peerstore/ds --system sub --system bs:sess --system consensus-common --system f3/manifest-provider --system wallet --system api_proxy --system wdpost --system eventlog --system types --system autonat --system p2p-circuit --system bitswap-server --system actors --system modules --system bitswap --system ulimit --system pubsub/timecache --system slashsvc --system quic-transport --system p2pnode --system payment-channel-settler --system partialfile --system cborrrpc --system nat --system sectors --system canonical-log --system f3/ohshitstore --system diversityFilter --system f3 --system ffiwrapper --system main --system f3/gpbft --system bs:sprmgr --system dht/RtRefreshManager --system drand --system f3/wal --system blockstore --system routing/composable --system bitswap_network --system rand --system market_adapter --system fsutil --system evtsm --system autorelay --system preseal --system node --system system --system p2p-holepunch --system messagepool --system watchdog --system metrics-prometheus --system ping --system reuseport-transport --system resources --system dht/netsize --system fil-consensus --system metrics --system events --system p2p-config --system dht --system net/conngater --system vm --system auth --system webrtc-transport --system badger --system rcmgr --system tcp-tpt --system retry --system upgrader --system statemgr --system conngater --system f3/blssig --system rpc error
     
-    # Start daemon with genesis creation. Only make genesis config if lotus0 is initializing
+    # start daemon with genesis creation. only make genesis config if lotus0 is initializing
     if [ "$no" -eq 0 ]; then
-        echo "Lotus$no: starting darmon with genesis"
-        #lotus --repo="${LOTUS_PATH}" daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml&
-        lotus daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml&
+        echo "Lotus$no: starting daemon with genesis"
+
+        # is this flaky?
+        lotus --repo="${LOTUS_PATH}" daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml&
     else
-        echo "Lotus$no: starting regular lotus daemon"
-        lotus --repo="${LOTUS_PATH}" daemon --bootstrap=false --config=config.toml&
+        echo "Lotus$no: starting daemon with genesis"
+        lotus --repo="${LOTUS_PATH}" daemon --genesis=${SHARED_CONFIGS}/devgen.car --bootstrap=false --config=config.toml&
     fi
 else
-    echo "lotus${no}: running in daemon-only mode..."
+    echo "lotus${no}: running in daemon-only without genesis"
     lotus --repo="${LOTUS_PATH}" daemon --bootstrap=false --config=config.toml&
 fi
 
@@ -111,7 +105,7 @@ lotus auth create-token --perm admin > ${LOTUS_DATA_DIR}/lotus${no}-jwt
 
 
 # Connect to peers with retries
-retries=5
+retries=6
 for peer in "${LOTUS_DATA_DIR}/lotus${no}-ipv4addr" "${FOREST_0_DATA_DIR}/forest-listen-addr"; do
     if [ -f "$peer" ]; then
         attempt=1

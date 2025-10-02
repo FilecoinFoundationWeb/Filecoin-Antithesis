@@ -1,10 +1,9 @@
 #!/bin/bash
-set -euo pipefail
 
 # Function to check if DRAND server is healthy
 check_drand_server() {
   local response_code
-  response_code=$(curl -s -o /dev/null -w "%{http_code}" "$DRAND_SERVER/info")
+  response_code=$(curl -s -o /dev/null -w "%{http_code}" "http://${DRAND0_IP}/info")
   
   if [ "$response_code" != "200" ]; then
     echo "Error: DRAND server is not ready (HTTP $response_code)"
@@ -13,18 +12,17 @@ check_drand_server() {
   return 0
 }
 
-sleep 10
-
-DRAND_SERVER="http://10.20.20.21"
+DRAND_SERVER="http://${DRAND0_IP}"
 
 echo "Waiting for DRAND server to be ready..."
 while ! check_drand_server; do
   sleep 5
 done
 echo "DRAND server is ready"
-  
-json=$(curl -s "$DRAND_SERVER/info")
+
+json=$(curl -s "http://${DRAND0_IP}/info")
 formatted_json=$(jq --arg server "$DRAND_SERVER" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$json")
+
 echo "formatted_json: $formatted_json"
 export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
 export FOREST_F3_BOOTSTRAP_EPOCH=10
