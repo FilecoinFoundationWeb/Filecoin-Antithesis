@@ -38,7 +38,7 @@ fi
 
 
 # get drand info
-echo "polling drand0 (${DRAND_IP}) until a valid JSON response is received..."
+echo "polling drand0 (${DRAND0_IP}) until a valid JSON response is received..."
 
 OUTPUT_FILE="chain_info.json"
 while true; do
