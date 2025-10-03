@@ -47,8 +47,7 @@ RUN git clone https://github.com/parthshah1/filwizard /opt/antithesis
 
 # Set working directory
 WORKDIR /opt/antithesis
-RUN git pull origin nonce-fix
-RUN git checkout nonce-fix
+RUN git checkout main
 COPY ./entrypoint ./entrypoint
 COPY ./main ./test/v1/main
 # Build filwizard
