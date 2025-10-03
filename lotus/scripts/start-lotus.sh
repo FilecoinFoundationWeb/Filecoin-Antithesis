@@ -34,8 +34,8 @@ fi
 
 echo "lotus${no}: Fetching drand chain info from ${DRAND0_IP}..."
 
-tries=10
-while [ "$tries" -gt 0 ]; do
+retries=10
+while [ "$retries" -gt 0 ]; do
     response=$(curl -s --fail "http://${DRAND0_IP}/info" 2>&1)
     
     if [ $? -eq 0 ] && echo "$response" | jq -e '.public_key?' >/dev/null 2>&1; then
@@ -45,7 +45,7 @@ while [ "$tries" -gt 0 ]; do
         break
     else
         sleep 2
-        tries=$(( tries - 1 ))
+        retries=$(( retries - 1 ))
     fi
 done
 
@@ -53,6 +53,7 @@ if [ ! -f "chain_info" ]; then
     echo "lotus${no}: ERROR - Failed to get drand chain info"
     exit 1
 fi
+
 if [ "$INIT_MODE" = "true" ]; then
     sed "s/\${LOTUS_IP}/$LOTUS_IP/g; s/\${LOTUS_RPC_PORT}/$LOTUS_RPC_PORT/g" config.toml.template > config.toml
 
