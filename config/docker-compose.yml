@@ -11,6 +11,10 @@ x-templates:
     depends_on:
       drand0:
         condition: service_started
+  needs_lotus0_healthy: &needs_lotus0_healthy
+    depends_on:
+      lotus0:
+        condition: service_healthy
 
 services:
   drand0:
@@ -78,16 +82,13 @@ services:
       retries: 10
 
   lotus1:
-    <<: [*filecoin_service]
+    <<: [*filecoin_service, *needs_lotus0_healthy]
     image: lotus:latest
     container_name: lotus1
     entrypoint: ["./scripts/start-lotus.sh", "1"]
     networks:
       antithesis-net:
         ipv4_address: ${LOTUS_1_IP}
-    depends_on:
-      lotus0: 
-        condition: service_healthy
     healthcheck:
       test: curl --fail http://10.20.20.26:1235/health/livez
       start_period: 30s
@@ -96,25 +97,22 @@ services:
       retries: 10
 
   lotus-miner0:
-    <<: [*filecoin_service]
+    <<: [*filecoin_service, *needs_lotus0_healthy]
     image: lotus:latest
     container_name: lotus-miner0
-    ports:
+    ports: # is this necessary? Can we put this somewhere else?
       - ${LOTUS_MINER_0_RPC_PORT}:${LOTUS_MINER_0_RPC_PORT}
     restart: on-failure
     entrypoint: ["./scripts/start-lotus-miner.sh", "0"]
     networks:
       antithesis-net:
         ipv4_address: ${LOTUS_MINER_0_IP}
-    depends_on:
-      lotus0: 
-        condition: service_healthy
 
   lotus-miner1:
     <<: [*filecoin_service]
     image: lotus:latest
     container_name: lotus-miner1
-    ports:
+    ports: # is this necessary? Can we put this somewhere else?
       - ${LOTUS_MINER_1_RPC_PORT}:${LOTUS_MINER_1_RPC_PORT}
     restart: on-failure
     entrypoint: ["./scripts/start-lotus-miner.sh", "1"]
@@ -126,24 +124,15 @@ services:
         condition: service_healthy
 
   forest0:
-    <<: [*filecoin_service]
+    <<: [*filecoin_service, *needs_lotus0_healthy]
     image: forest:latest
     container_name: forest0
-    ports:
+    ports: # is this necessary? Can we put this somewhere else?
       - ${FOREST_0_RPC_PORT}:${FOREST_0_RPC_PORT}
-    entrypoint: ["./scripts/start-forest.sh"]
+    entrypoint: ["./scripts/start-forest.sh", "0"]
     networks:
       antithesis-net:
         ipv4_address: ${FOREST_0_IP}
-    depends_on:
-      lotus0: 
-        condition: service_healthy
-    healthcheck:
-      test: curl --fail http://10.20.20.28:2346/livez?verbose
-      interval: 5s
-      timeout: 2s
-      retries: 10
-      start_period: 30s
 
   workload:
     <<: [*filecoin_service]
@@ -152,9 +141,6 @@ services:
     networks:
       antithesis-net:
         ipv4_address: 10.20.20.30
-    depends_on:
-      lotus1:
-        condition: service_healthy
 
 networks:
   antithesis-net:

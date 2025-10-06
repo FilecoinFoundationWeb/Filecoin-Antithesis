@@ -28,7 +28,6 @@ echo "Workload [entrypoint]: waiting for block height to reach ${INIT_BLOCK_HEIG
 while [ $INIT_BLOCK_HEIGHT -gt $BLOCK_HEIGHT_REACHED ]
 do
     BLOCK_HEIGHT_REACHED=$(curl -X POST $RPC_LOTUS -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"Filecoin.ChainHead","params":[]}' | jq '.result.Height')
-    echo "Workload [entrypoint]: block height check: reached ${BLOCK_HEIGHT_REACHED}"
     if [ $INIT_BLOCK_HEIGHT -le $BLOCK_HEIGHT_REACHED ]; then
         break
     fi

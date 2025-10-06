@@ -32,10 +32,8 @@ else
     INIT_MODE=false
 fi
 
-echo "lotus${no}: Fetching drand chain info from ${DRAND0_IP}..."
-
-retries=10
-while [ "$retries" -gt 0 ]; do
+while true; do
+    echo "lotus${no}: Fetching drand chain info from ${DRAND0_IP}..."
     response=$(curl -s --fail "http://${DRAND0_IP}/info" 2>&1)
     
     if [ $? -eq 0 ] && echo "$response" | jq -e '.public_key?' >/dev/null 2>&1; then
@@ -45,14 +43,8 @@ while [ "$retries" -gt 0 ]; do
         break
     else
         sleep 2
-        retries=$(( retries - 1 ))
     fi
 done
-
-if [ ! -f "chain_info" ]; then
-    echo "lotus${no}: ERROR - Failed to get drand chain info"
-    exit 1
-fi
 
 if [ "$INIT_MODE" = "true" ]; then
     sed "s/\${LOTUS_IP}/$LOTUS_IP/g; s/\${LOTUS_RPC_PORT}/$LOTUS_RPC_PORT/g" config.toml.template > config.toml
@@ -81,18 +73,51 @@ cat ${LOTUS_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_DATA_DIR}/l
 lotus net id > ${LOTUS_DATA_DIR}/lotus${no}-p2pID
 lotus auth create-token --perm admin > ${LOTUS_DATA_DIR}/lotus${no}-jwt
 
-retries=6
-for peer in "${LOTUS_DATA_DIR}/lotus${no}-ipv4addr" "${FOREST_0_DATA_DIR}/forest-listen-addr"; do
-    if [ -f "$peer" ]; then
-        attempt=1
-        while [ $attempt -le $retries ]; do
-            if lotus net connect $(cat $peer); then
-                break
-            fi
-            attempt=$((attempt + 1))
-            sleep 5
-        done
+# connecting to peers
+retries=10
+connect_with_retries() {
+  local addr_file="$1"
+
+  for (( i=1; i<=retries; i++ )); do
+    echo "attempt $i..."
+
+    ip=$(<"$addr_file")
+    if lotus net connect "$ip"; then
+        echo "successful connect!"
+        return 0
+    else
+        sleep 2
     fi
+  done
+
+  echo "ERROR: reached $MAX_RETRIES attempts."
+  return 1
+}
+
+echo "connecting to other lotus nodes..."
+for (( i=0; i<$NUM_LOTUS_CLIENTS; i++ )); do
+    if [[ $i -eq $no ]]; then
+        continue
+    fi
+
+    other_lotus_data_dir="LOTUS_${i}_DATA_DIR"
+    OTHER_LOTUS_DATA_DIR="${!other_lotus_data_dir}"
+    addr_file="${OTHER_LOTUS_DATA_DIR}/lotus${i}-ipv4addr"
+
+    echo "Connecting to lotus$i at $addr_file"
+    connect_with_retries "$addr_file"
 done
+
+echo "connecting to forest nodes..."
+for (( i=0; i<$NUM_FOREST_CLIENTS; i++ )); do
+    forest_data_dir="FOREST_${i}_DATA_DIR"
+    FOREST_DATA_DIR="${!forest_data_dir}"
+    addr_file="${FOREST_DATA_DIR}/forest${i}-ipv4addr"
+
+    echo "Connecting to forest$i at $addr_file"
+    connect_with_retries "$addr_file"
+done
+
+echo "lotus${no}: completed startup"
 
 sleep infinity
