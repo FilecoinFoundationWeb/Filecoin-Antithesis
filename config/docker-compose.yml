@@ -11,10 +11,26 @@ x-templates:
     depends_on:
       drand0:
         condition: service_started
+  needs_all_drand_healthy: &needs_all_drand_healthy
+    depends_on:
+      drand0: 
+        condition: service_healthy
+      drand1:
+        condition: service_healthy
+      drand2:
+        condition: service_healthy
   needs_lotus0_healthy: &needs_lotus0_healthy
     depends_on:
       lotus0:
         condition: service_healthy
+  needs_lotus1_healthy: &needs_lotus1_healthy
+    depends_on:
+      lotus1:
+        condition: service_healthy
+  healthcheck_settings: &healthcheck_settings
+    interval: 5s
+    timeout: 2s
+    retries: 10
 
 services:
   drand0:
@@ -23,10 +39,8 @@ services:
     image: drand
     entrypoint: ./start-drand0.sh
     healthcheck:
+      <<: *healthcheck_settings
       test: drand util ping http://drand0:8080
-      interval: 5s
-      timeout: 2s
-      retries: 10
 
   drand1:
     <<: [*filecoin_service, *needs_drand0_started]
@@ -34,10 +48,8 @@ services:
     image: drand
     entrypoint: ./start-drand1.sh
     healthcheck:
+      <<: *healthcheck_settings
       test: drand util ping http://drand1:8080
-      interval: 5s
-      timeout: 2s
-      retries: 10
 
   drand2:
     <<: [*filecoin_service, *needs_drand0_started]
@@ -45,29 +57,17 @@ services:
     image: drand
     entrypoint: ./start-drand2.sh
     healthcheck:
+      <<: *healthcheck_settings
       test: drand util ping http://drand2:8080
-      interval: 5s
-      timeout: 2s
-      retries: 10
 
   lotus0:
-    <<: [*filecoin_service]
+    <<: [*filecoin_service, *needs_all_drand_healthy]
     container_name: lotus0
     image: lotus:latest
     entrypoint: ["./scripts/start-lotus.sh", "0"]
-    depends_on:
-      drand0: 
-        condition: service_healthy
-      drand1:
-        condition: service_healthy
-      drand2:
-        condition: service_healthy
     healthcheck:
+      <<: *healthcheck_settings
       test: curl --fail http://lotus0:1234/health/livez
-      start_period: 20s
-      interval: 5s
-      timeout: 2s
-      retries: 10
 
   lotus1:
     <<: [*filecoin_service, *needs_lotus0_healthy]
@@ -75,40 +75,25 @@ services:
     container_name: lotus1
     entrypoint: ["./scripts/start-lotus.sh", "1"]
     healthcheck:
+      <<: *healthcheck_settings
       test: curl --fail http://lotus1:1235/health/livez
-      start_period: 30s
-      interval: 5s
-      timeout: 2s
-      retries: 10
 
   lotus-miner0:
     <<: [*filecoin_service, *needs_lotus0_healthy]
     image: lotus:latest
     container_name: lotus-miner0
-    ports: # is this necessary? Can we put this somewhere else?
-      - ${LOTUS_MINER_0_RPC_PORT}:${LOTUS_MINER_0_RPC_PORT}
-    restart: on-failure
     entrypoint: ["./scripts/start-lotus-miner.sh", "0"]
 
-  # does this service really depend on lotus1? Or can it start before then? (depend on lotus0?)
   lotus-miner1:
-    <<: [*filecoin_service]
+    <<: [*filecoin_service, *needs_lotus1_healthy]
     image: lotus:latest
     container_name: lotus-miner1
-    ports: # is this necessary? Can we put this somewhere else?
-      - ${LOTUS_MINER_1_RPC_PORT}:${LOTUS_MINER_1_RPC_PORT}
-    restart: on-failure
     entrypoint: ["./scripts/start-lotus-miner.sh", "1"]
-    depends_on:
-      lotus1: 
-        condition: service_healthy
 
   forest0:
     <<: [*filecoin_service, *needs_lotus0_healthy]
     image: forest:latest
     container_name: forest0
-    ports: # is this necessary? Can we put this somewhere else?
-      - ${FOREST_0_RPC_PORT}:${FOREST_0_RPC_PORT}
     entrypoint: ["./scripts/start-forest.sh", "0"]
 
   workload:

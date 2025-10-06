@@ -74,7 +74,6 @@ else
     lotus --repo="${LOTUS_PATH}" daemon --bootstrap=false --config=config.toml&
 fi
 
-
 lotus --version
 lotus wait-api
 
@@ -84,24 +83,24 @@ lotus net id > ${LOTUS_DATA_DIR}/lotus${no}-p2pID
 lotus auth create-token --perm admin > ${LOTUS_DATA_DIR}/lotus${no}-jwt
 
 # connecting to peers
-retries=10
 connect_with_retries() {
-  local addr_file="$1"
+    local retries=10
+    local addr_file="$1"
+    
+    for (( j=1; j<=retries; j++ )); do
+        echo "attempt $j..."
 
-  for (( i=1; i<=retries; i++ )); do
-    echo "attempt $i..."
+        ip=$(<"$addr_file")
+        if lotus net connect "$ip"; then
+            echo "successful connect!"
+            return 0
+        else
+            sleep 2
+        fi
+    done
 
-    ip=$(<"$addr_file")
-    if lotus net connect "$ip"; then
-        echo "successful connect!"
-        return 0
-    else
-        sleep 2
-    fi
-  done
-
-  echo "ERROR: reached $MAX_RETRIES attempts."
-  return 1
+    echo "ERROR: reached $MAX_RETRIES attempts."
+    return 1
 }
 
 echo "connecting to other lotus nodes..."

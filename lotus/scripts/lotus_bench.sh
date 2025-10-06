@@ -33,7 +33,7 @@ method_list=(
 
 endpoint_list=(
     http://"lotus0":"$LOTUS_0_RPC_PORT"/rpc/v1
-    #http://"$LOTUS_2_IP":"$LOTUS_2_RPC_PORT"/rpc/v1
+    #http://"lotus1":"$LOTUS_1_RPC_PORT"/rpc/v1
 )
 
 miner_list=(
