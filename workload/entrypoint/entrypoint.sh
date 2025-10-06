@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+#set -e
 
 # What is the purpose of the following?
 # Adjusting the Antithesis system time is not a permitted operation
@@ -29,16 +29,22 @@ echo "waiting for block height to reach ${INIT_BLOCK_HEIGHT}"
 
 while [ $INIT_BLOCK_HEIGHT -gt $BLOCK_HEIGHT_REACHED ]
 do
-    BLOCK_HEIGHT_REACHED=$(curl -s --fail -X POST "$RPC_LOTUS" \
+
+    # Capture response separately from exit code
+    response=$(curl -s --fail -X POST "$RPC_LOTUS" \
         -H 'Content-Type: application/json' \
-        --data '{"jsonrpc":"2.0","id":1,"method":"Filecoin.ChainHead","params":[]}' \
-        | jq -r '.result.Height // 0')
+        --data '{"jsonrpc":"2.0","id":1,"method":"Filecoin.ChainHead","params":[]}' 2>/dev/null)
+    curl_exit=$?
     
-    # true when lotus0 isn't available yet
-    if [[ $? -ne 0 || -z "$BLOCK_HEIGHT_REACHED" ]]; then
+    # If curl failed, retry
+    if [[ $curl_exit -ne 0 ]]; then
+        echo "lotus0 not available yet, retrying..."
         sleep 5
         continue
     fi
+    
+    # Parse the response
+    BLOCK_HEIGHT_REACHED=$(echo "$response" | jq -r '.result.Height // 0')
 
     echo "current height: $BLOCK_HEIGHT_REACHED"
 

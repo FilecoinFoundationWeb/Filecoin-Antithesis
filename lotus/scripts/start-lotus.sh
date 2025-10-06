@@ -30,7 +30,7 @@ fi
 
 while true; do
     echo "lotus${no}: Fetching drand chain info from drand0..."
-    response=$(curl -s --fail "http://drand0/info" 2>&1)
+    response=$(curl -s --fail "http://drand0:80/info" 2>&1)
     
     if [ $? -eq 0 ] && echo "$response" | jq -e '.public_key?' >/dev/null 2>&1; then
         echo "$response" | jq -c > chain_info
