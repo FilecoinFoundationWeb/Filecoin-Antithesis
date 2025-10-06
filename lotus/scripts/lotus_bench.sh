@@ -32,13 +32,13 @@ method_list=(
 )
 
 endpoint_list=(
-    http://"$LOTUS_1_IP":"$LOTUS_1_RPC_PORT"/rpc/v1
+    http://"lotus0":"$LOTUS_0_RPC_PORT"/rpc/v1
     #http://"$LOTUS_2_IP":"$LOTUS_2_RPC_PORT"/rpc/v1
 )
 
 miner_list=(
-    "$LOTUS_MINER_1_ACTOR_ADDRESS"
-    "$LOTUS_MINER_2_ACTOR_ADDRESS"
+    "lotus-miner0"
+    "lotus-miner1"
 )
 
 get_random_index() {

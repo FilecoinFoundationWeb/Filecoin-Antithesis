@@ -135,7 +135,7 @@ func PerformSpamOperation(ctx context.Context, config *Config) error {
 					// For Forest nodes, we need the Lotus API to fund from genesis
 					lotusNode := NodeConfig{
 						Name:          "Lotus1",
-						RPCURL:        "http://10.20.20.24:1234/rpc/v1",
+						RPCURL:        "http://lotus0:1234/rpc/v1",
 						AuthTokenPath: "/root/devgen/lotus-1/jwt",
 					}
 					lotusApi, lotusCloser, err := ConnectToNode(ctx, lotusNode)

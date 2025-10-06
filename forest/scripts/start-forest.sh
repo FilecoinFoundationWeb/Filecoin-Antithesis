@@ -5,9 +5,6 @@ no="$1"
 forest_data_dir="FOREST_${no}_DATA_DIR"
 export FOREST_DATA_DIR="${!forest_data_dir}"
 
-forest_ip="FOREST_${no}_IP"
-export FOREST_IP="${!forest_ip}"
-
 forest_rpc_port="FOREST_${no}_RPC_PORT"
 export FOREST_RPC_PORT="${!forest_rpc_port}"
 
@@ -27,13 +24,13 @@ export FOREST_BLOCK_DELAY_SECS=4
 export FOREST_PROPAGATION_DELAY_SECS=1
 
 while true; do
-    echo "forest${no}: Fetching drand chain info from ${DRAND0_IP}..."
-    response=$(curl -s --fail "http://${DRAND0_IP}/info" 2>&1)
+    echo "forest${no}: Fetching drand chain info from drand0..."
+    response=$(curl -s --fail "http://drand0/info" 2>&1)
     
     if [ $? -eq 0 ] && echo "$response" | jq -e '.public_key?' >/dev/null 2>&1; then
 
         # forest chain info needs to be in this format?
-        formatted_json=$(jq --arg server "http://${DRAND0_IP}" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$response")
+        formatted_json=$(jq --arg server "http://drand0" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$response")
         echo "formatted_json: $formatted_json"
         export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
         echo "forest${no}: Drand chain info ready"
@@ -51,6 +48,12 @@ forest --version
 sed "s|\${FOREST_DATA_DIR}|$FOREST_DATA_DIR|g; s|\${FOREST_TARGET_PEER_COUNT}|$FOREST_TARGET_PEER_COUNT|g" /forest/forest_config.toml.tpl > ${FOREST_DATA_DIR}/forest_config.toml
 echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
 
+host_ip=$(getent hosts "forest${no}" | awk '{ print $1 }')
+
+echo "---------------------------"
+echo "ip address: $host_ip"
+echo "---------------------------"
+
 # Perform basic initialization of the Forest node, including generating the admin token.
 forest --genesis "${SHARED_CONFIGS}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
@@ -61,14 +64,14 @@ forest --genesis "${SHARED_CONFIGS}/devgen.car" \
 
 forest --genesis "${SHARED_CONFIGS}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
-       --rpc-address "${FOREST_IP}:${FOREST_RPC_PORT}" \
-       --p2p-listen-address "/ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT}" \
-       --healthcheck-address "${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT}" \
+       --rpc-address "${host_ip}:${FOREST_RPC_PORT}" \
+       --p2p-listen-address "/ip4/${host_ip}/tcp/${FOREST_P2P_PORT}" \
+       --healthcheck-address "${host_ip}:${FOREST_HEALTHZ_RPC_PORT}" \
        --skip-load-actors &
 
 # Admin token is required for connection commands and wallet management.
 export TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
-export FULLNODE_API_INFO="$TOKEN:/ip4/${FOREST_IP}/tcp/${FOREST_RPC_PORT}/http"
+export FULLNODE_API_INFO="$TOKEN:/ip4/$host_ip/tcp/${FOREST_RPC_PORT}/http"
 echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 
 # forest node API needs to be up
@@ -78,12 +81,12 @@ echo "forest: collecting network info…"
 forest-cli net listen | head -n1 > "${FOREST_DATA_DIR}/forest${no}-ipv4addr"
 
 # connecting to peers
-retries=10
 connect_with_retries() {
+  local retries=10
   local addr_file="$1"
 
-  for (( i=1; i<=retries; i++ )); do
-    echo "attempt $i..."
+  for (( j=1; j<=retries; j++ )); do
+    echo "attempt $j..."
 
     ip=$(<"$addr_file")
     

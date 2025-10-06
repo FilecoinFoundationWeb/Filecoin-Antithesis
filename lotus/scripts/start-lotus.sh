@@ -5,15 +5,11 @@ no="$1"
 lotus_data_dir="LOTUS_${no}_DATA_DIR"
 export LOTUS_DATA_DIR="${!lotus_data_dir}"
 
-lotus_ip="LOTUS_${no}_IP"
-export LOTUS_IP="${!lotus_ip}"
-
 lotus_rpc_port="LOTUS_${no}_RPC_PORT"
 export LOTUS_RPC_PORT="${!lotus_rpc_port}"
 
 export LOTUS_F3_BOOTSTRAP_EPOCH=21
 export LOTUS_CHAININDEXER_ENABLEINDEXER=true
-export DRAND0_IP=${DRAND0_IP}
 
 # required via docs:
 lotus_path="LOTUS_${no}_PATH"
@@ -33,11 +29,12 @@ else
 fi
 
 while true; do
-    echo "lotus${no}: Fetching drand chain info from ${DRAND0_IP}..."
-    response=$(curl -s --fail "http://${DRAND0_IP}/info" 2>&1)
+    echo "lotus${no}: Fetching drand chain info from drand0..."
+    response=$(curl -s --fail "http://drand0/info" 2>&1)
     
     if [ $? -eq 0 ] && echo "$response" | jq -e '.public_key?' >/dev/null 2>&1; then
         echo "$response" | jq -c > chain_info
+        echo "$response"
         export DRAND_CHAIN_INFO=$(pwd)/chain_info
         echo "lotus${no}: Drand chain info ready"
         break
@@ -47,15 +44,28 @@ while true; do
 done
 
 if [ "$INIT_MODE" = "true" ]; then
-    sed "s/\${LOTUS_IP}/$LOTUS_IP/g; s/\${LOTUS_RPC_PORT}/$LOTUS_RPC_PORT/g" config.toml.template > config.toml
+    host_ip=$(getent hosts "lotus${no}" | awk '{ print $1 }')
+
+    echo "---------------------------"
+    echo "ip address: $host_ip"
+    echo "---------------------------"
+
+    sed "s|\${host_ip}|$host_ip|g; s|\${LOTUS_RPC_PORT}|$LOTUS_RPC_PORT|g" config.toml.template > config.toml
 
     if [ "$no" -eq 0 ]; then
         ./scripts/setup-genesis.sh
     fi
 
     cat ${SHARED_CONFIGS}/localnet.json | jq -r '.NetworkName' > ${LOTUS_DATA_DIR}/network_name
-        
+
     if [ "$no" -eq 0 ]; then
+        # TODO: This step is FLAKY!
+        # The error message we see is the following:
+        # 
+        # genesis func failed: make genesis block: failed to verify presealed data: failed to create verifier: failed to call method: message failed with backtrace:
+        # 00: f06 (method 2) -- Allowance 0 below minimum deal size for add verifier f081 (16)
+        #
+        # Is there a way to resolve this?
         lotus --repo="${LOTUS_PATH}" daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml&
     else
         lotus --repo="${LOTUS_PATH}" daemon --genesis=${SHARED_CONFIGS}/devgen.car --bootstrap=false --config=config.toml&

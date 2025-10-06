@@ -220,7 +220,7 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 		// For Forest, we need to get funds from Lotus first
 		lotusNode := NodeConfig{
 			Name:          "Lotus1",
-			RPCURL:        "http://10.20.20.24:1234/rpc/v1",
+			RPCURL:        "http://lotus0:1234/rpc/v1",
 			AuthTokenPath: "/root/devgen/lotus-1/jwt",
 		}
 		lotusApi, lotusCloser, err := ConnectToNode(ctx, lotusNode)
@@ -338,7 +338,7 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 		// For Forest, we need to get funds from Lotus first
 		lotusNode := NodeConfig{
 			Name:          "Lotus1",
-			RPCURL:        "http://10.20.20.24:1234/rpc/v1",
+			RPCURL:        "http://lotus0:1234/rpc/v1",
 			AuthTokenPath: "/root/devgen/lotus-1/jwt",
 		}
 		lotusApi, lotusCloser, err := ConnectToNode(ctx, lotusNode)

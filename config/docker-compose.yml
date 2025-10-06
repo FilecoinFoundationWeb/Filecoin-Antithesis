@@ -22,11 +22,8 @@ services:
     container_name: drand0
     image: drand
     entrypoint: ./start-drand0.sh
-    networks:
-      antithesis-net:
-        ipv4_address: ${DRAND0_IP}
     healthcheck:
-      test: drand util ping http://10.20.20.21:8080
+      test: drand util ping http://drand0:8080
       interval: 5s
       timeout: 2s
       retries: 10
@@ -36,11 +33,8 @@ services:
     container_name: drand1
     image: drand
     entrypoint: ./start-drand1.sh
-    networks:
-      antithesis-net:
-        ipv4_address: ${DRAND1_IP}
     healthcheck:
-      test: drand util ping http://10.20.20.22:8080
+      test: drand util ping http://drand1:8080
       interval: 5s
       timeout: 2s
       retries: 10
@@ -50,11 +44,8 @@ services:
     container_name: drand2
     image: drand
     entrypoint: ./start-drand2.sh
-    networks:
-      antithesis-net:
-        ipv4_address: ${DRAND2_IP}
     healthcheck:
-      test: drand util ping http://10.20.20.23:8080
+      test: drand util ping http://drand2:8080
       interval: 5s
       timeout: 2s
       retries: 10
@@ -64,9 +55,6 @@ services:
     container_name: lotus0
     image: lotus:latest
     entrypoint: ["./scripts/start-lotus.sh", "0"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${LOTUS_0_IP}
     depends_on:
       drand0: 
         condition: service_healthy
@@ -75,7 +63,7 @@ services:
       drand2:
         condition: service_healthy
     healthcheck:
-      test: curl --fail http://10.20.20.24:1234/health/livez
+      test: curl --fail http://lotus0:1234/health/livez
       start_period: 20s
       interval: 5s
       timeout: 2s
@@ -86,11 +74,8 @@ services:
     image: lotus:latest
     container_name: lotus1
     entrypoint: ["./scripts/start-lotus.sh", "1"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${LOTUS_1_IP}
     healthcheck:
-      test: curl --fail http://10.20.20.26:1235/health/livez
+      test: curl --fail http://lotus1:1235/health/livez
       start_period: 30s
       interval: 5s
       timeout: 2s
@@ -104,10 +89,8 @@ services:
       - ${LOTUS_MINER_0_RPC_PORT}:${LOTUS_MINER_0_RPC_PORT}
     restart: on-failure
     entrypoint: ["./scripts/start-lotus-miner.sh", "0"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${LOTUS_MINER_0_IP}
 
+  # does this service really depend on lotus1? Or can it start before then? (depend on lotus0?)
   lotus-miner1:
     <<: [*filecoin_service]
     image: lotus:latest
@@ -116,9 +99,6 @@ services:
       - ${LOTUS_MINER_1_RPC_PORT}:${LOTUS_MINER_1_RPC_PORT}
     restart: on-failure
     entrypoint: ["./scripts/start-lotus-miner.sh", "1"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${LOTUS_MINER_1_IP}
     depends_on:
       lotus1: 
         condition: service_healthy
@@ -130,20 +110,8 @@ services:
     ports: # is this necessary? Can we put this somewhere else?
       - ${FOREST_0_RPC_PORT}:${FOREST_0_RPC_PORT}
     entrypoint: ["./scripts/start-forest.sh", "0"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${FOREST_0_IP}
 
   workload:
     <<: [*filecoin_service]
     image: workload
     container_name: workload
-    networks:
-      antithesis-net:
-        ipv4_address: 10.20.20.30
-
-networks:
-  antithesis-net:
-    ipam:
-      config:
-        - subnet: 10.20.20.0/24

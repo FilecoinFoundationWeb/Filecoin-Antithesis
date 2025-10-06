@@ -30,9 +30,9 @@
 -			"https://api3.drand.sh",
 -			"https://drand.cloudflare.com",
 -			"https://api.drand.secureweb3.com:6875", // Storswift
-+			"http://10.20.20.21",
-+			"http://10.20.20.22",
-+			"http://10.20.20.23", // Storswift
++			"http://drand0",
++			"http://drand1",
++			"http://drand2", // Storswift
  		},
 -		Relays: []string{
 -			"/dnsaddr/api.drand.sh/",
