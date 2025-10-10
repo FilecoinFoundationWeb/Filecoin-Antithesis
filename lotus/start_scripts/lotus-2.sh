@@ -19,15 +19,15 @@ else
 fi
 
 # Always get fresh chain info
-curl 10.20.20.21/info | jq -c > chain_info
-export DRAND_CHAIN_INFO=chain_info
+curl 10.20.20.21/info | jq -c > ${LOTUS_2_DATA_DIR}/chain_info
+export DRAND_CHAIN_INFO=${LOTUS_2_DATA_DIR}/chain_info
 
 lotus --version
 
 # Function to connect to peers with retries
 connect_to_peers() {
     max_attempts=5
-    for peer in "${LOTUS_1_DATA_DIR}/ipv4addr" "${FOREST_DATA_DIR}/forest-listen-addr"; do
+    for peer in "${LOTUS_1_DATA_DIR}/lotus-1-ipv4addr" "${FOREST_DATA_DIR}/forest-listen-addr"; do
         if [ -f "$peer" ]; then
             attempt=1
             while [ $attempt -le $max_attempts ]; do
@@ -38,7 +38,7 @@ connect_to_peers() {
                 fi
                 echo "lotus-2: Failed to connect to peer from $peer"
                 attempt=$((attempt + 1))
-                sleep 5
+                sleep 10
             done
         else
             echo "lotus-2: Peer address file $peer not found"
@@ -66,11 +66,19 @@ fi
 lotus wait-api
 echo "lotus-2: finished waiting for API, proceeding with network setup."
 
-lotus net listen > ${LOTUS_2_DATA_DIR}/ipv4addr
-cat ${LOTUS_2_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr
-lotus net id > ${LOTUS_2_DATA_DIR}/p2pID
-lotus auth create-token --perm admin > ${LOTUS_2_DATA_DIR}/jwt
+# Only save net listen output during initialization
+if [ "$INIT_MODE" = "true" ]; then
+    echo "lotus-2: listening for peers (initialization mode)..."
+    lotus net listen > ${LOTUS_2_DATA_DIR}/ipv4addr
 
+
+else
+    echo "lotus-2: reusing existing ipv4addr from previous initialization"
+fi
+
+    cat ${LOTUS_2_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_2_DATA_DIR}/lotus-2-ipv4addr
+    lotus net id > ${LOTUS_2_DATA_DIR}/p2pID
+    lotus auth create-token --perm admin > ${LOTUS_2_DATA_DIR}/jwt
 # Connect to peers with retries
 connect_to_peers
 
