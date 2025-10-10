@@ -3,8 +3,6 @@ package resources
 import (
 	"context"
 	"log"
-
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 // CheckChainBackfill validates the chain index for a given set of nodes.
@@ -46,7 +44,7 @@ func CheckChainBackfill(ctx context.Context, nodes []NodeConfig) error {
 			"impact":   "High - validates chain index consistency",
 			"details":  "Chain index validation ensures proper chain state tracking",
 		}
-		assert.Sometimes(err == nil, "Chain index validation: Chain index validation should succeed - validation failure detected", map[string]interface{}{
+		AssertSometimes(node.Name, err == nil, "Chain index validation: Chain index validation should succeed - validation failure detected", map[string]interface{}{
 			"operation":   "chain_index_validation",
 			"requirement": "Chain index validation should succeed",
 			"details":     details,
@@ -79,7 +77,7 @@ func PerformCheckBackfill(ctx context.Context, config *Config) error {
 			log.Printf("[WARN] Chain backfill check failed, will retry: %v", err)
 			return err // Return original error for retry
 		}
-		assert.Sometimes(true, "Chain index backfill: Chain index backfill check completed successfully", map[string]interface{}{
+		AssertSometimes("ChainIndexBackfill", true, "Chain index backfill: Chain index backfill check completed successfully", map[string]interface{}{
 			"operation":   "chain_index_backfill",
 			"requirement": "Chain index backfill check completed.",
 		})

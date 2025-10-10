@@ -6,7 +6,6 @@ import (
 	"log"
 	"time"
 
-	antithesisAssert "github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/exitcode"
 	"github.com/filecoin-project/lotus/api"
@@ -22,7 +21,7 @@ const (
 	MinerCreationMigrationEpoch = 200
 )
 
-func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount) error {
+func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount, nodeName string) error {
 	log.Printf("[INFO] Starting miner creation...")
 	head, err := api.ChainHead(ctx)
 	if err != nil {
@@ -105,7 +104,7 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		}
 
 		// Antithesis assertion for monitoring
-		antithesisAssert.Always(err != nil,
+		AssertAlways(nodeName, err != nil,
 			"Miner creation must fail with negative deposit",
 			map[string]interface{}{
 				"operation":     "miner_creation_deposit",
@@ -126,7 +125,7 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		}
 
 		// Antithesis assertion for monitoring
-		antithesisAssert.Sometimes(err == nil,
+		AssertSometimes(nodeName, err == nil,
 			"Miner creation might succeed with zero deposit if the epoch is < 200",
 			map[string]interface{}{
 				"operation":     "miner_creation_deposit",
@@ -155,7 +154,7 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		}
 
 		// Antithesis assertion for monitoring
-		antithesisAssert.Always(err == nil,
+		AssertAlways(nodeName, err == nil,
 			"Miner creation should succeed with excess deposit",
 			map[string]interface{}{
 				"operation":     "miner_creation_deposit",
@@ -194,7 +193,7 @@ func CreateMiner(ctx context.Context, api api.FullNode, deposit abi.TokenAmount)
 		}
 
 		// Antithesis assertion for monitoring
-		antithesisAssert.Always(err == nil,
+		AssertAlways(nodeName, err == nil,
 			"Miner creation should succeed with correct deposit",
 			map[string]interface{}{
 				"operation":       "miner_creation",

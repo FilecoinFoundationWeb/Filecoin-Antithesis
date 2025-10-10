@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
 )
 
@@ -264,11 +263,10 @@ func (m *NodeHealthMonitor) streamNodeUpdates(ctx context.Context, node NodeConf
 				m.mu.Unlock()
 				if exists {
 					if time.Since(lastChange) > monitorDuration {
-						assert.Always(false, "Chain monitoring: Node should be advancing - chain stall detected", map[string]interface{}{
+						AssertAlways(node.Name, false, "Chain monitoring: Node should be advancing - chain stall detected", map[string]interface{}{
 							"operation":            "chain_monitoring",
 							"current_height":       currentHeight,
 							"last_reported_height": lastReportedHeight,
-							"node":                 node.Name,
 							"property":             "Chain advancement",
 							"impact":               "Critical - indicates node stalls",
 							"stall_duration":       time.Since(lastChange),
@@ -354,9 +352,8 @@ func (m *NodeHealthMonitor) monitorHeightForNode(ctx context.Context, node NodeC
 
 					if stalls >= m.monitorConfig.MaxConsecutiveStalls {
 						heightIncreasing := false
-						assert.Always(heightIncreasing, "Height monitoring: Node height should be increasing - consecutive stalls detected", map[string]interface{}{
+						AssertAlways(node.Name, heightIncreasing, "Height monitoring: Node height should be increasing - consecutive stalls detected", map[string]interface{}{
 							"operation":          "height_monitoring",
-							"node":               node.Name,
 							"height":             heights[0],
 							"consecutive_stalls": stalls,
 							"property":           "Height progression",
@@ -412,9 +409,8 @@ func (m *NodeHealthMonitor) checkNodePeerCount(ctx context.Context, node NodeCon
 	log.Printf("[INFO] Node %s has %d peers", node.Name, peerCount)
 
 	// Assert that peer count is not 0 or less than 1
-	assert.Always(peerCount > 0, "Peer monitoring: Node should have active peer connections - network isolation detected", map[string]interface{}{
+	AssertAlways(node.Name, peerCount > 0, "Peer monitoring: Node should have active peer connections - network isolation detected", map[string]interface{}{
 		"operation":  "peer_monitoring",
-		"node":       node.Name,
 		"peer_count": peerCount,
 		"property":   "Peer connectivity",
 		"impact":     "Critical - indicates network isolation",
@@ -468,9 +464,8 @@ func (m *NodeHealthMonitor) checkNodeF3Status(ctx context.Context, node NodeConf
 	log.Printf("[INFO] Node %s F3 status: %v", node.Name, f3Running)
 
 	// Assert that F3 is running
-	assert.Always(f3Running, "F3 monitoring: F3 consensus service should be running - consensus failure detected", map[string]interface{}{
+	AssertAlways(node.Name, f3Running, "F3 monitoring: F3 consensus service should be running - consensus failure detected", map[string]interface{}{
 		"operation":  "f3_monitoring",
-		"node":       node.Name,
 		"f3_running": f3Running,
 		"property":   "F3 service status",
 		"impact":     "Critical - F3 is required for consensus",

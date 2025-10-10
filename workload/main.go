@@ -761,7 +761,7 @@ func minerCommands() *cli.Command {
 						log.Printf("[INFO] Using normal required deposit: %s", requiredDeposit)
 					}
 
-					return resources.CreateMiner(c.Context, api, testDeposit)
+					return resources.CreateMiner(c.Context, api, testDeposit, nodeConfig.Name)
 				},
 			},
 		},

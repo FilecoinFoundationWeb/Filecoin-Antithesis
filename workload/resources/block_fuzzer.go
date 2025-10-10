@@ -10,7 +10,6 @@ import (
 	mathrand "math/rand"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/crypto"
@@ -389,12 +388,12 @@ func GenerateMalformedBlocks(config *BlockFuzzerConfig) []*types.BlockMsg {
 }
 
 // FuzzBlockSubmission generates and submits various types of malformed blocks
-func FuzzBlockSubmission(ctx context.Context, api api.FullNode) error {
-	return FuzzBlockSubmissionWithConfig(ctx, api, DefaultBlockFuzzerConfig())
+func FuzzBlockSubmission(ctx context.Context, api api.FullNode, nodeName string) error {
+	return FuzzBlockSubmissionWithConfig(ctx, api, nodeName, DefaultBlockFuzzerConfig())
 }
 
 // FuzzBlockSubmissionWithConfig generates and submits malformed blocks with custom configuration
-func FuzzBlockSubmissionWithConfig(ctx context.Context, api api.FullNode, config *BlockFuzzerConfig) error {
+func FuzzBlockSubmissionWithConfig(ctx context.Context, api api.FullNode, nodeName string, config *BlockFuzzerConfig) error {
 	mathrand.Seed(time.Now().UnixNano())
 
 	// Generate malformed blocks based on configuration
@@ -403,7 +402,7 @@ func FuzzBlockSubmissionWithConfig(ctx context.Context, api api.FullNode, config
 	// Submit all test cases
 	for i, block := range blocks {
 		testCaseName := fmt.Sprintf("TestCase_%d", i)
-		log.Printf("[INFO] Submitting test case: %s", testCaseName)
+		log.Printf("[INFO] Submitting test case: %s on node: %s", testCaseName, nodeName)
 
 		err := api.SyncSubmitBlock(ctx, block)
 
@@ -414,7 +413,7 @@ func FuzzBlockSubmissionWithConfig(ctx context.Context, api api.FullNode, config
 		}
 
 		// The node should reject all these malformed blocks
-		assert.Always(err != nil,
+		AssertAlways(nodeName, err != nil,
 			"Block validation: Malformed block submission should be rejected - validation bypass detected",
 			map[string]interface{}{
 				"operation": "block_validation",
@@ -428,7 +427,7 @@ func FuzzBlockSubmissionWithConfig(ctx context.Context, api api.FullNode, config
 		time.Sleep(config.DelayBetweenTests)
 	}
 
-	log.Printf("[INFO] Completed %d test cases", len(blocks))
+	log.Printf("[INFO] Completed %d test cases on node: %s", len(blocks), nodeName)
 	return nil
 }
 
@@ -467,7 +466,7 @@ func PerformBlockFuzzing(ctx context.Context, nodeConfig *NodeConfig) error {
 	defer closer()
 
 	return RetryOperation(ctx, func() error {
-		err := FuzzBlockSubmission(ctx, api)
+		err := FuzzBlockSubmission(ctx, api, nodeConfig.Name)
 		if err != nil {
 			log.Printf("[WARN] Block fuzzing failed, will retry: %v", err)
 			return err // Return original error for retry

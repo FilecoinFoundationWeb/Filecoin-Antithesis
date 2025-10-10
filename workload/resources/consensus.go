@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/chain/types"
 )
@@ -221,7 +220,7 @@ func (cc *ConsensusChecker) checkTipsetConsensus(ctx context.Context, height abi
 
 // CheckConsensus verifies that all nodes have consensus on tipsets for a range of heights
 // If no height is specified (height = 0), it chooses a random height between genesis and minHead-20
-func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.ChainEpoch) error {
+func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.ChainEpoch, nodeName string) error {
 	return RetryOperation(ctx, func() error {
 		log.Printf("Starting consensus check between nodes")
 
@@ -309,7 +308,7 @@ func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.Chain
 			}
 
 			// After all retries, make the final assertion
-			assert.Always(consensusReached,
+			AssertAlways(nodeName, consensusReached,
 				"Consensus check: All nodes must agree on the same tipset - network fork or consensus failure detected",
 				map[string]interface{}{
 					"operation":      "consensus_agreement",
@@ -349,8 +348,8 @@ func PerformConsensusCheck(ctx context.Context, config *Config, height int64) er
 		log.Printf("[INFO] Will check consensus starting at height %d", height)
 	}
 
-	// Run the consensus check
-	err = checker.CheckConsensus(ctx, abi.ChainEpoch(height))
+	// Run the consensus check - use generic "ConsensusChecker" as this is multi-node
+	err = checker.CheckConsensus(ctx, abi.ChainEpoch(height), "ConsensusChecker")
 	if err != nil {
 		log.Printf("[WARN] Consensus check failed, will retry: %v", err)
 		return err // Return original error for retry
@@ -469,7 +468,9 @@ func PerformCheckFinalizedTipsets(ctx context.Context) error {
 		}
 		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts2.Cids(), v1Nodes[1].Name, i)
 
-		assert.Sometimes(ts1.Equals(ts2), "Chain synchronization: Finalized tipsets should match between nodes - Just in case of any reorgs this might violate unless it is not finality long",
+		// Use both node names in the assertion
+		nodeNames := v1Nodes[0].Name + "+" + v1Nodes[1].Name
+		AssertSometimes(nodeNames, ts1.Equals(ts2), "Chain synchronization: Finalized tipsets should match between nodes - Just in case of any reorgs this might violate unless it is not finality long",
 			map[string]interface{}{
 				"operation":   "chain_synchronization",
 				"requirement": "Chain synchronization",

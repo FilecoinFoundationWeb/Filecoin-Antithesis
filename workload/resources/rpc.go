@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 )
 
 type MethodConfig struct {
@@ -223,15 +221,15 @@ func CallV2API(endpoint string) {
 
 // CheckF3Running checks if F3 is running on nodes
 func CheckF3Running() error {
-	urls := []string{
-		"http://forest:23456",
-		"http://lotus-1:1234",
-		"http://lotus-2:1235",
+	nodeMap := map[string]string{
+		"http://forest:23456": "Forest",
+		"http://lotus-1:1234": "Lotus1",
+		"http://lotus-2:1235": "Lotus2",
 	}
 
 	request := `{"jsonrpc":"2.0","method":"Filecoin.F3IsRunning","params":[],"id":1}`
 
-	for _, url := range urls {
+	for url, nodeName := range nodeMap {
 		_, resp := DoRawRPCRequest(url, 1, request)
 		var response struct {
 			Result bool `json:"result"`
@@ -242,7 +240,7 @@ func CheckF3Running() error {
 		}
 
 		log.Printf("[INFO] F3 is running on %s: %v", url, response.Result)
-		assert.Sometimes(response.Result, fmt.Sprintf("F3 status check: F3 should be running on %s - F3 service failure detected", url),
+		AssertSometimes(nodeName, response.Result, fmt.Sprintf("F3 status check: F3 should be running on %s - F3 service failure detected", url),
 			map[string]interface{}{
 				"operation":   "f3_status_check",
 				"requirement": fmt.Sprintf("F3 is running on %s", url),
