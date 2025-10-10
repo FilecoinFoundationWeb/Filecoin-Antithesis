@@ -5,9 +5,6 @@ no="$1"
 lotus_data_dir="LOTUS_${no}_DATA_DIR"
 export LOTUS_DATA_DIR="${!lotus_data_dir}"
 
-lotus_rpc_port="LOTUS_${no}_RPC_PORT"
-export LOTUS_RPC_PORT="${!lotus_rpc_port}"
-
 export LOTUS_F3_BOOTSTRAP_EPOCH=21
 export LOTUS_CHAININDEXER_ENABLEINDEXER=true
 
@@ -18,6 +15,7 @@ export LOTUS_PATH="${!lotus_path}"
 lotus_miner_path="LOTUS_MINER_${no}_PATH"
 export LOTUS_MINER_PATH="${!lotus_miner_path}"
 
+export LOTUS_RPC_PORT=$LOTUS_RPC_PORT
 export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"

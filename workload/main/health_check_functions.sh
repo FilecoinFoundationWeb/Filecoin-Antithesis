@@ -39,7 +39,7 @@ check_node_running() {
             endpoint="http://lotus-1:1234"
             ;;
         "lotus-2")
-            endpoint="http://lotus-2:1235"
+            endpoint="http://lotus-2:1234"
             ;;
         "forest")
             endpoint="http://forest:3456"

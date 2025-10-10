@@ -21,7 +21,7 @@ def get_url_and_token(node_type:str):
         base_path = "/root/devgen/lotus-1"
         token_txt = "jwt"
     elif node_type == "lotus-2":
-        rpc_url = "http://lotus1:1235/rpc/v1"
+        rpc_url = "http://lotus1:1234/rpc/v1"
         base_path = "/root/devgen/lotus-2"
         token_txt = "jwt"
     else:

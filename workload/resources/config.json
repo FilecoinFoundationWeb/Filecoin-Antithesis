@@ -12,7 +12,7 @@
     },
     {
       "name": "Lotus1",
-      "rpcurl": "http://lotus1:1235/rpc/v1",
+      "rpcurl": "http://lotus1:1234/rpc/v1",
       "authtokenpath": "/root/devgen/lotus1/jwt"
     },
     {

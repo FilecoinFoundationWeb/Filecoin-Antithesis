@@ -5,17 +5,13 @@ no="$1"
 forest_data_dir="FOREST_${no}_DATA_DIR"
 export FOREST_DATA_DIR="${!forest_data_dir}"
 
-forest_rpc_port="FOREST_${no}_RPC_PORT"
-export FOREST_RPC_PORT="${!forest_rpc_port}"
-
-forest_p2p_port="FOREST_${no}_P2P_PORT"
-export FOREST_P2P_PORT="${!forest_p2p_port}"
-
-forest_healthz_rpc_port="FOREST_${no}_HEALTHZ_RPC_PORT"
-export FOREST_HEALTHZ_RPC_PORT="${!forest_healthz_rpc_port}"
-
-#TODO: This is probably going to need to be dynamic
+export FOREST_RPC_PORT=$FOREST_RPC_PORT
+export FOREST_P2P_PORT=$FOREST_P2P_PORT
+export FOREST_HEALTHZ_RPC_PORT=$FOREST_HEALTHZ_RPC_PORT
 export FOREST_TARGET_PEER_COUNT=$(($NUM_LOTUS_CLIENTS + $NUM_FOREST_CLIENTS - 1))
+
+forest_0_f3_sidecar_rpc_endpoint="FOREST_${no}_F3_SIDECAR_RPC_ENDPOINT"
+export FOREST_F3_SIDECAR_RPC_ENDPOINT="${!forest_0_f3_sidecar_rpc_endpoint}"
 
 export FOREST_F3_BOOTSTRAP_EPOCH=10
 export FOREST_F3_FINALITY=5
