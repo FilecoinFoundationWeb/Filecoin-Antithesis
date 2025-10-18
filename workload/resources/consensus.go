@@ -57,7 +57,7 @@ func NewConsensusChecker(ctx context.Context, nodes []NodeConfig) (*ConsensusChe
 	}
 	checker.nodes["Lotus2"] = NodeInfo{
 		Name:   "Lotus2",
-		RPCURL: "http://lotus-2:1235/rpc/v1",
+		RPCURL: "http://lotus-2:1234/rpc/v1",
 	}
 	checker.nodes["Lotus1-V2"] = NodeInfo{
 		Name:   "Lotus1-V2",
@@ -65,7 +65,7 @@ func NewConsensusChecker(ctx context.Context, nodes []NodeConfig) (*ConsensusChe
 	}
 	checker.nodes["Lotus2-V2"] = NodeInfo{
 		Name:   "Lotus2-V2",
-		RPCURL: "http://lotus-2:1235/rpc/v2",
+		RPCURL: "http://lotus-2:1234/rpc/v2",
 	}
 
 	for name, node := range checker.nodes {

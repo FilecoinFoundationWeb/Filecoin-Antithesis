@@ -226,7 +226,7 @@ func CheckF3Running() error {
 	urls := []string{
 		"http://forest:23456",
 		"http://lotus-1:1234",
-		"http://lotus-2:1235",
+		"http://lotus-2:1234",
 	}
 
 	request := `{"jsonrpc":"2.0","method":"Filecoin.F3IsRunning","params":[],"id":1}`
@@ -256,7 +256,7 @@ func CheckPeers() error {
 	urls := []string{
 		"http://forest:3456",
 		"http://lotus-1:1234",
-		"http://lotus-2:1235",
+		"http://lotus-2:1234",
 	}
 
 	request := `{"jsonrpc":"2.0","method":"Filecoin.NetPeers","params":[],"id":1}`

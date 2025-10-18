@@ -3,15 +3,15 @@ x-templates:
   filecoin_service: &filecoin_service
     env_file: .env
     environment:
-      - NUM_LOTUS_CLIENTS=2
-      - NUM_FOREST_CLIENTS=1
+      - NUM_LOTUS_CLIENTS=3
+      - NUM_FOREST_CLIENTS=2
     volumes:
       - ./data/lotus0:${LOTUS_0_DATA_DIR}
-      - ./data/forest0:${FOREST_0_DATA_DIR}
       - ./data/lotus1:${LOTUS_1_DATA_DIR}
+      - ./data/lotus2:${LOTUS_2_DATA_DIR}
+      - ./data/forest0:${FOREST_0_DATA_DIR}
+      - ./data/forest1:${FOREST_1_DATA_DIR}
       - ./shared/configs:${SHARED_CONFIGS}
-      - ./data/curio:${CURIO_DATA_DIR}
-      - ./data/workload:/opt/antithesis/filwizard/workspace:rw
   needs_drand0_started: &needs_drand0_started
     depends_on:
       drand0:
@@ -31,6 +31,10 @@ x-templates:
   needs_lotus1_healthy: &needs_lotus1_healthy
     depends_on:
       lotus1:
+        condition: service_healthy
+  needs_lotus2_healthy: &needs_lotus2_healthy
+    depends_on:
+      lotus2:
         condition: service_healthy
   healthcheck_settings: &healthcheck_settings
     interval: 5s
@@ -82,6 +86,15 @@ services:
     healthcheck:
       <<: *healthcheck_settings
       test: curl --fail http://lotus1:1234/health/livez
+    
+  lotus2:
+    <<: [*filecoin_service, *needs_lotus0_healthy]
+    image: lotus:latest
+    container_name: lotus2
+    entrypoint: ["./scripts/start-lotus.sh", "2"]
+    healthcheck:
+      <<: *healthcheck_settings
+      test: curl --fail http://lotus2:1234/health/livez
 
   lotus-miner0:
     <<: [*filecoin_service, *needs_lotus0_healthy]
@@ -95,82 +108,25 @@ services:
     container_name: lotus-miner1
     entrypoint: ["./scripts/start-lotus-miner.sh", "1"]
 
+  lotus-miner2:
+    <<: [*filecoin_service, *needs_lotus2_healthy]
+    image: lotus:latest
+    container_name: lotus-miner2
+    entrypoint: ["./scripts/start-lotus-miner.sh", "2"]
+
   forest0:
     <<: [*filecoin_service, *needs_lotus0_healthy]
     image: forest:latest
     container_name: forest0
-    ports:
-      - ${FOREST_0_RPC_PORT}:${FOREST_0_RPC_PORT}
-    entrypoint: ["./scripts/start-forest.sh"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${FOREST_0_IP}
-    depends_on:
-      lotus0: 
-        condition: service_healthy
-    healthcheck:
-      test: curl --fail http://10.20.20.28:2346/livez?verbose
-      interval: 5s
-      timeout: 2s
-      retries: 10
-      start_period: 30s
+    entrypoint: ["./scripts/start-forest.sh", "0"]
 
+  forest1:
+    <<: [*filecoin_service, *needs_lotus0_healthy]
+    image: forest:latest
+    container_name: forest1
+    entrypoint: ["./scripts/start-forest.sh", "1"]
 
   workload:
     <<: [*filecoin_service]
     image: workload
     container_name: workload
-    networks:
-      antithesis-net:
-        ipv4_address: 10.20.20.30
-    depends_on:
-      lotus1:
-        condition: service_healthy
-  # Curio service
-  curio:
-    <<: [*filecoin_service]
-    image: curio:latest
-    container_name: curio
-    env_file:
-      - .env
-    environment:
-      - CURIO_IP=${CURIO_IP}
-    ports:
-      - "443:443"
-      - "80:80"
-      - "12300:12300"
-      - "4701:4701"
-      - "32100:32100"
-    entrypoint: ["./scripts/curio-init.sh"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${CURIO_IP}
-    depends_on:
-      lotus0:
-        condition: service_healthy
-      yugabyte:
-        condition: service_started
-  yugabyte:
-    image: yugabytedb/yugabyte:latest
-    container_name: yugabyte
-    init: true
-    command: [ "bin/yugabyted", "start", "--base_dir=/home/yugabyte/yb_data", "--background=false" ]
-    ports:
-      - "5433:5433"
-      - "9042:9042"
-      - "15433:15433"
-    environment:
-      - TINI_SUBREAPER=true
-    env_file:
-      - .env
-    volumes:
-      - ./data/yugabyte:/home/yugabyte/yb_data
-    networks:
-      antithesis-net:
-        ipv4_address: ${YUGABYTE_IP}
-
-networks:
-  antithesis-net:
-    ipam:
-      config:
-        - subnet: 10.20.20.0/24

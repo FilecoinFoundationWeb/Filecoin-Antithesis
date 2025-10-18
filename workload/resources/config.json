@@ -1,29 +1,29 @@
 {
   "nodes": [
     {
+      "name": "Lotus0",
+      "rpcurl": "http://lotus0:1234/rpc/v1",
+      "authtokenpath": "/root/devgen/lotus0/jwt"
+    },
+    {
+      "name": "Lotus0-V2",
+      "rpcurl": "http://lotus0:1234/rpc/v2",
+      "authtokenpath": "/root/devgen/lotus0/jwt"
+    },
+    {
       "name": "Lotus1",
-      "rpcurl": "http://10.20.20.24:1234/rpc/v1",
-      "authtokenpath": "/root/devgen/lotus-1/jwt"
-    },
-    {
-      "name": "Lotus1-V2",
-      "rpcurl": "http://10.20.20.24:1234/rpc/v2",
-      "authtokenpath": "/root/devgen/lotus-1/jwt"
-    },
-    {
-      "name": "Lotus2",
-      "rpcurl": "http://10.20.20.26:1235/rpc/v1",
-      "authtokenpath": "/root/devgen/lotus-2/jwt"
+      "rpcurl": "http://lotus1:1234/rpc/v1",
+      "authtokenpath": "/root/devgen/lotus1/jwt"
     },
     {
       "name": "Lotus2-V2",
-      "rpcurl": "http://10.20.20.24:1234/rpc/v2",
-      "authtokenpath": "/root/devgen/lotus-1/jwt"
+      "rpcurl": "http://lotus0:1234/rpc/v2",
+      "authtokenpath": "/root/devgen/lotus0/jwt"
     },
     {
-      "name":"Forest",
-      "rpcurl": "http://10.20.20.28:3456/rpc/v1",
-      "authtokenpath":"/root/devgen/forest/jwt"
+      "name":"Forest0",
+      "rpcurl": "http://forest0:3456/rpc/v1",
+      "authtokenpath":"/root/devgen/forest0/jwt"
     }
   ],
   "defaultFundingAmount": "100000000000000000000"
