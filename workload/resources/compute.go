@@ -4,11 +4,10 @@ import (
 	"context"
 	"log"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/lotus/api"
 )
 
-func StateMismatch(ctx context.Context, api api.FullNode) error {
+func StateMismatch(ctx context.Context, api api.FullNode, nodeName string) error {
 	checkTs, err := api.ChainHead(ctx)
 	if err != nil {
 		log.Printf("[ERROR] Failed to get chain head: %v", err)
@@ -78,7 +77,7 @@ func StateMismatch(ctx context.Context, api api.FullNode) error {
 
 		// Verify state consistency
 		if st.Root != checkTs.ParentState() {
-			assert.Always(st.Root == checkTs.ParentState(),
+			AssertAlways(nodeName, st.Root == checkTs.ParentState(),
 				"State computation: Computed state must match parent state - state computation error detected",
 				map[string]interface{}{
 					"operation":       "state_computation",
@@ -121,6 +120,6 @@ func PerformStateCheck(ctx context.Context, nodeConfig *NodeConfig) error {
 	defer closer()
 
 	return RetryOperation(ctx, func() error {
-		return StateMismatch(ctx, api)
+		return StateMismatch(ctx, api, nodeConfig.Name)
 	}, "State consistency check operation")
 }
