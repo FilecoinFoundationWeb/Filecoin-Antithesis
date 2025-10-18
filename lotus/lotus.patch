@@ -99,9 +99,7 @@
  
 -const PropagationDelaySecs = uint64(1)
 +const PropagationDelaySecs = uint64(7)
- 
--var EquivocationDelaySecs = uint64(0)
-+var EquivocationDelaySecs = uint64(2)
+
  
  // SlashablePowerDelay is the number of epochs after ElectionPeriodStart, after
  // which the miner is slashed
