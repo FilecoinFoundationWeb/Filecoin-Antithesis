@@ -20,7 +20,7 @@ echo "Current system time: $current_time"
 RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.26:1235/rpc/v0}"
 
 # Waiting for the chain head to pass a certain height
-INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-10}"
+INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-5}"
 BLOCK_HEIGHT_REACHED=0
 
 echo "Workload [entrypoint]: waiting for block height to reach ${INIT_BLOCK_HEIGHT}"
@@ -34,7 +34,8 @@ do
     fi
     sleep 5
 done
-
+cd /opt/antithesis/filwizard
+./filwizard contract clone-config --config config/filecoin-synapse.json --workspace ./workspace
 echo "Workload [entrypoint]: chainhead has reached block height ${INIT_BLOCK_HEIGHT}"
 
 python3 -u /opt/antithesis/entrypoint/setup_complete.py

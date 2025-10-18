@@ -21,28 +21,15 @@ ENV GOPATH="/go"
 
 # Create directories for Go code
 WORKDIR /opt/antithesis
+RUN apt install -y git
+COPY ./entrypoint ./entrypoint/
+RUN git clone https://github.com/parthshah1/filwizard.git /opt/antithesis/filwizard
+
+WORKDIR /opt/antithesis/filwizard
+RUN git checkout poc-demo
+RUN go build -o /usr/local/bin/filwizard ./main.go 
 
 # Copy the necessary Go files and resources
-COPY ./entrypoint ./entrypoint
-COPY ./resources ./resources
-#COPY ./go-test-scripts ./go-test-scripts
-
-COPY go.mod ./go.mod
-COPY go.sum ./go.sum
-COPY main.go ./main.go
-COPY ./main ./test/v1/main
-
-# Make all files in ./test/v1/main executable
-RUN chmod +x ./test/v1/main/*
-
-# Download Go dependencies
-RUN go mod download
-
-# Build the Go application
-ENV CGO_ENABLED=1
-RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') go build -o ./app ./main.go
-
-RUN rm ./main.go
 
 # Set the entrypoint to an idle state
 ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]

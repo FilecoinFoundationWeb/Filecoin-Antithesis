@@ -3,6 +3,7 @@ drand_tag = $(shell git ls-remote --tags https://github.com/drand/drand.git | gr
 lotus_tag = $(shell git ls-remote https://github.com/filecoin-project/lotus.git HEAD | cut -f1)
 builder = docker
 forest_commit = $(shell git ls-remote https://github.com/ChainSafe/forest.git HEAD | cut -f1)
+curio_commit = $(shell git ls-remote https://github.com/filecoin-project/curio.git HEAD | cut -f1)
 
 # Architecture configuration - set TARGET_ARCH to build for specific architecture
 TARGET_ARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
@@ -45,13 +46,18 @@ build-workload:
 	@echo "Building workload for $(TARGET_ARCH) architecture..."
 	$(BUILD_CMD) -t workload:latest -f workload/Dockerfile workload
 
+.PHONY: build-curio
+build-curio:
+	@echo "Building curio for $(TARGET_ARCH) architecture..."
+	@echo "Curio commit: $(curio_commit)"
+	$(BUILD_CMD) --build-arg GIT_COMMIT=$(curio_commit) -t curio:latest -f curio/Dockerfile curio
 .PHONY: run-localnet
 run-localnet:
 	$(builder) compose up
 
 # Build everything and run local docker compose up
 .PHONY: all
-all: build-drand build-forest build-lotus build-workload run-localnet
+all: build-drand build-forest build-lotus build-workload build-curio run-localnet
 
 # Show current target architecture
 .PHONY: show-arch

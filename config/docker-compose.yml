@@ -7,6 +7,8 @@ x-templates:
       - ./data/forest0:${FOREST_0_DATA_DIR}
       - ./data/lotus1:${LOTUS_1_DATA_DIR}
       - ./shared/configs:${SHARED_CONFIGS}
+      - ./data/curio:${CURIO_DATA_DIR}
+      - ./data/workload:/opt/antithesis/filwizard/workspace:rw
   needs_drand0_started: &needs_drand0_started
     depends_on:
       drand0:
@@ -145,6 +147,7 @@ services:
       retries: 10
       start_period: 30s
 
+
   workload:
     <<: [*filecoin_service]
     image: workload
@@ -155,6 +158,48 @@ services:
     depends_on:
       lotus1:
         condition: service_healthy
+  # Curio service
+  curio:
+    <<: [*filecoin_service]
+    image: curio:latest
+    container_name: curio
+    env_file:
+      - .env
+    environment:
+      - CURIO_IP=${CURIO_IP}
+    ports:
+      - "443:443"
+      - "80:80"
+      - "12300:12300"
+      - "4701:4701"
+      - "32100:32100"
+    entrypoint: ["./scripts/curio-init.sh"]
+    networks:
+      antithesis-net:
+        ipv4_address: ${CURIO_IP}
+    depends_on:
+      lotus0:
+        condition: service_healthy
+      yugabyte:
+        condition: service_started
+  yugabyte:
+    image: yugabytedb/yugabyte:latest
+    container_name: yugabyte
+    init: true
+    command: [ "bin/yugabyted", "start", "--base_dir=/home/yugabyte/yb_data", "--background=false" ]
+    ports:
+      - "5433:5433"
+      - "9042:9042"
+      - "15433:15433"
+    environment:
+      - TINI_SUBREAPER=true
+    env_file:
+      - .env
+    volumes:
+      - ./data/yugabyte:/home/yugabyte/yb_data
+    networks:
+      antithesis-net:
+        ipv4_address: ${YUGABYTE_IP}
 
 networks:
   antithesis-net:

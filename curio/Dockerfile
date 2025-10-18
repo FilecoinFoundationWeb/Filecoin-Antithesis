@@ -1,9 +1,9 @@
+
 # STAGE 1: Use the pre-built lotus image as a source for its binaries
 # This avoids rebuilding lotus and uses the same version as the rest of your environment.
 ARG LOTUS_TAG=latest
-FROM us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/lotus:${LOTUS_TAG} as lotus-builder
+FROM lotus:${LOTUS_TAG} as lotus-builder
 
-# STAGE 2: Build Curio using the base image you specified
 FROM docker.io/golang:latest
 
 # First, copy the lotus binaries from the builder stage into our final image
@@ -39,9 +39,10 @@ RUN set -eux; \
     rustc --version;
 
 RUN git clone https://github.com/filecoin-project/curio.git /opt/curio
-
 WORKDIR /opt/curio
-RUN git checkout main
+RUN git checkout pdpv0
+COPY ./patches/curio.patch ./curio.patch
+RUN git apply curio.patch
 
 ### make configurable filecoin-ffi build
 ARG FFI_BUILD_FROM_SOURCE=0
@@ -54,7 +55,10 @@ ARG GOFLAGS=""
 
 RUN make 2k
 RUN make pdptool
+RUN make sptool
 RUN install -C curio /usr/local/bin/curio
 RUN install -C pdptool /usr/local/bin/pdptool
+RUN install -C sptool /usr/local/bin/sptool
 RUN curio fetch-params 2048
+COPY ./scripts/curio-init.sh ./scripts/curio-init.sh
 ENTRYPOINT ["sleep", "infinity"] 
