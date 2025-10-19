@@ -9,7 +9,8 @@ TARGET_ARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/'
 DOCKER_PLATFORM = linux/$(TARGET_ARCH)
 
 # Simple build command that works with any architecture
-BUILD_CMD = docker build
+BUILD_CMD = docker build --load
+LOCAL_BUILD ?= 1
 
 .PHONY: show-drand-tag
 show-drand-tag:
@@ -25,8 +26,7 @@ show-forest-commit:
 .PHONY: build-forest
 build-forest:
 	@echo "Building forest for $(TARGET_ARCH) architecture..."
-	@echo "Forest commit: $(forest_commit)"
-	$(BUILD_CMD) --build-arg GIT_COMMIT=$(forest_commit) -t forest:latest -f forest/Dockerfile forest
+	$(BUILD_CMD) --build-arg GIT_COMMIT=$(forest_commit) --build-arg LOCAL_BUILD=${LOCAL_BUILD}  -t forest:latest -f forest/Dockerfile forest
 
 .PHONY: build-drand
 build-drand:
