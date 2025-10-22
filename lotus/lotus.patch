@@ -73,19 +73,17 @@
    "ProtocolVersion": 7,
    "InitialInstance": 0,
 -  "BootstrapEpoch": 1000,
-+  "BootstrapEpoch": 10,
++  "BootstrapEpoch": 5,
    "NetworkName": "2k",
    "ExplicitPower": null,
    "IgnoreECPower": false,
-@@ -21,8 +21,8 @@
-     "RebroadcastBackoffMax": 60000000000
+@@ -22,7 +22,7 @@
    },
    "EC": {
--    "Period": 4000000000,
+     "Period": 4000000000,
 -    "Finality": 900,
-+    "Period": 15000000000,
-+    "Finality": 5,
++    "Finality": 2,
      "DelayMultiplier": 2,
      "BaseDecisionBackoffTable": [1.3, 1.69, 2.2, 2.86, 3.71, 4.83, 6.27, 7.5],
      "HeadLookback": 4,
-
+	 
