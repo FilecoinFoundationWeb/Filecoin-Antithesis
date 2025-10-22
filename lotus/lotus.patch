@@ -88,21 +88,4 @@
      "DelayMultiplier": 2,
      "BaseDecisionBackoffTable": [1.3, 1.69, 2.2, 2.86, 3.71, 4.83, 6.27, 7.5],
      "HeadLookback": 4,
---- a/build/buildconstants/params_2k.go
-+++ b/build/buildconstants/params_2k.go
-@@ -189,11 +189,11 @@ func init() {
- 
- }
- 
--const BlockDelaySecs = uint64(4)
-+const BlockDelaySecs = uint64(15)
- 
--const PropagationDelaySecs = uint64(1)
-+const PropagationDelaySecs = uint64(7)
- 
--var EquivocationDelaySecs = uint64(0)
-+var EquivocationDelaySecs = uint64(0)
- 
- // SlashablePowerDelay is the number of epochs after ElectionPeriodStart, after
- // which the miner is slashed
 
