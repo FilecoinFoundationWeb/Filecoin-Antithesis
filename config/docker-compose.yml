@@ -1,3 +1,4 @@
+
 name: filecoin
 x-templates:
   filecoin_service: &filecoin_service
@@ -41,7 +42,7 @@ services:
   drand0:
     <<: [*filecoin_service]
     container_name: drand0
-    image: drand
+    image: "drand:latest"
     entrypoint: ./start-drand0.sh
     healthcheck:
       <<: *healthcheck_settings
@@ -50,7 +51,7 @@ services:
   drand1:
     <<: [*filecoin_service, *needs_drand0_started]
     container_name: drand1
-    image: drand
+    image: "drand:latest"
     entrypoint: ./start-drand1.sh
     healthcheck:
       <<: *healthcheck_settings
@@ -59,7 +60,7 @@ services:
   drand2:
     <<: [*filecoin_service, *needs_drand0_started]
     container_name: drand2
-    image: drand
+    image: "drand:latest"
     entrypoint: ./start-drand2.sh
     healthcheck:
       <<: *healthcheck_settings
@@ -68,7 +69,7 @@ services:
   lotus0:
     <<: [*filecoin_service, *needs_all_drand_healthy]
     container_name: lotus0
-    image: lotus:latest
+    image: "lotus:dynamic"
     entrypoint: ["./scripts/start-lotus.sh", "0"]
     healthcheck:
       <<: *healthcheck_settings
@@ -76,8 +77,8 @@ services:
 
   lotus1:
     <<: [*filecoin_service, *needs_lotus0_healthy]
-    image: lotus:latest
     container_name: lotus1
+    image: "lotus:dynamic"
     entrypoint: ["./scripts/start-lotus.sh", "1"]
     healthcheck:
       <<: *healthcheck_settings
@@ -85,20 +86,20 @@ services:
 
   lotus-miner0:
     <<: [*filecoin_service, *needs_lotus0_healthy]
-    image: lotus:latest
     container_name: lotus-miner0
+    image: "lotus:dynamic"
     entrypoint: ["./scripts/start-lotus-miner.sh", "0"]
 
   lotus-miner1:
     <<: [*filecoin_service, *needs_lotus1_healthy]
-    image: lotus:latest
     container_name: lotus-miner1
+    image: "lotus:dynamic"
     entrypoint: ["./scripts/start-lotus-miner.sh", "1"]
 
   forest0:
     <<: [*filecoin_service, *needs_lotus0_healthy]
-    image: forest:latest
     container_name: forest0
+    image: "forest:dynamic"
     ports:
       - ${FOREST_0_RPC_PORT}:${FOREST_0_RPC_PORT}
     entrypoint: ["./scripts/start-forest.sh"]
@@ -118,7 +119,7 @@ services:
 
   workload:
     <<: [*filecoin_service]
-    image: workload
+    image: "workload:latest"
     container_name: workload
     networks:
       antithesis-net:
@@ -127,29 +128,29 @@ services:
       lotus1:
         condition: service_healthy
   # Curio service
-  curio:
-    <<: [*filecoin_service]
-    image: curio:latest
-    container_name: curio
-    env_file:
-      - .env
-    environment:
-      - CURIO_IP=${CURIO_IP}
-    ports:
-      - "443:443"
-      - "80:80"
-      - "12300:12300"
-      - "4701:4701"
-      - "32100:32100"
-    entrypoint: ["./scripts/curio-init.sh"]
-    networks:
-      antithesis-net:
-        ipv4_address: ${CURIO_IP}
-    depends_on:
-      lotus0:
-        condition: service_healthy
-      yugabyte:
-        condition: service_started
+  # curio:
+  #   <<: [*filecoin_service]
+  #   container_name: curio
+  #   image: "curio:dynamic"
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - CURIO_IP=${CURIO_IP}
+  #   ports:
+  #     - "443:443"
+  #     - "80:80"
+  #     - "12300:12300"
+  #     - "4701:4701"
+  #     - "32100:32100"
+  #   entrypoint: ["./scripts/curio-init.sh"]
+  #   networks:
+  #     antithesis-net:
+  #       ipv4_address: ${CURIO_IP}
+  #   depends_on:
+  #     lotus0:
+  #       condition: service_healthy
+  #     yugabyte:
+  #       condition: service_started
   yugabyte:
     image: yugabytedb/yugabyte:latest
     container_name: yugabyte
