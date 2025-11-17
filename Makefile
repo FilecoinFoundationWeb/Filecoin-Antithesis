@@ -28,6 +28,12 @@ build-forest:
 	@echo "Forest commit: $(forest_commit)"
 	$(BUILD_CMD) --build-arg GIT_COMMIT=$(forest_commit) -t forest:latest -f forest/Dockerfile forest
 
+.PHONY: build-curio
+build-curio:
+	@echo "Building curio for $(TARGET_ARCH) architecture..."
+	@echo "Curio tag: $(curio_tag)"
+	$(BUILD_CMD) --build-arg GIT_BRANCH=$(curio_tag) -t curio:latest -f curio/Dockerfile curio`
+
 .PHONY: build-drand
 build-drand:
 	@echo "Building drand for $(TARGET_ARCH) architecture..."
@@ -51,7 +57,7 @@ run-localnet:
 
 # Build everything and run local docker compose up
 .PHONY: all
-all: build-drand build-forest build-lotus build-workload run-localnet
+all: build-drand build-forest build-lotus build-curio build-workload run-localnet
 
 # Show current target architecture
 .PHONY: show-arch
