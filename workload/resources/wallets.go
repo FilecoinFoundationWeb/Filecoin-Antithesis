@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
@@ -195,7 +194,7 @@ func SendFunds(ctx context.Context, api api.FullNode, from, to address.Address, 
 
 	sm, err := api.MpoolPushMessage(ctx, msg, nil)
 	if err != nil {
-		assert.Sometimes(true,
+		AssertSometimes("WalletTransfer", true,
 			"Wallet transfer: Mpool push message should succeed - message push failure detected",
 			map[string]interface{}{
 				"operation":      "wallet_transfer",
@@ -391,7 +390,7 @@ func SendFundsToEthAddress(ctx context.Context, api api.FullNode, from address.A
 	// Push message to mempool with automatic gas estimation
 	sm, err := api.MpoolPushMessage(ctx, msg, nil)
 	if err != nil {
-		assert.Sometimes(true,
+		AssertSometimes("ETHWalletTransfer", true,
 			"ETH wallet transfer: Mpool push message to ETH address should succeed - message push failure detected",
 			map[string]interface{}{
 				"operation":      "eth_wallet_transfer",
