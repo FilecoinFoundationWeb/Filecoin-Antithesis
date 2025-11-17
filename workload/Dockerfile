@@ -16,7 +16,7 @@ RUN apt-get update -y && \
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     npm install -g npm@latest
-
+RUN npm install -g pnpm@latest
 # Install Rust and Foundry
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     . $HOME/.cargo/env && \
@@ -31,29 +31,56 @@ RUN pip install antithesis cffi --break-system-packages
 # Set Go environment
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/go"
+RUN npm install -g solc
 ENV PATH="$GOPATH/bin:$PATH"
-
 # Install Hardhat (as some projects might need it)
-RUN npm install -g hardhat
 
 # Install Solidity compiler
-RUN npm install -g solc
 
 # Install abigen using Go (instead of problematic PPA)
 RUN go install github.com/ethereum/go-ethereum/cmd/abigen@latest
-
-# Clone and build filwizard
-RUN git clone https://github.com/parthshah1/filwizard /opt/antithesis
-
-# Set working directory
-WORKDIR /opt/antithesis
-RUN git checkout main
+WORKDIR /opt/antithesis 
 COPY ./entrypoint ./entrypoint
 COPY ./main ./test/v1/main
-# Build filwizard
+RUN npm install -g hardhat
+
+
+
+# Clone and build filwizard
+RUN git clone -b api-properties https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
+
+WORKDIR /opt/antithesis/FilWizard
+
 RUN make build
+
 RUN cp ./filwizard /usr/local/bin/filwizard
-RUN filwizard contract clone-config --config config/contracts.json --workspace ./workspace 
-# Default command
-CMD ["filwizard"]
+RUN filwizard contract clone-config --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace 
+RUN ls 
+RUN git clone -b devnet-support-v2 https://github.com/parthshah1/synapse-sdk /opt/antithesis/synapse-sdk
+
+WORKDIR /opt/antithesis/synapse-sdk
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+ENV CI=true
+RUN pnpm --filter @filoz/synapse-sdk add @sentry/browser@^10.21.0 @sentry/node@^10.21.0 --save-optional
+
+# Install core dependencies first
+RUN pnpm install --filter @filoz/synapse-core --no-optional
+
+# Build core
+RUN pnpm --filter @filoz/synapse-core run build
+
+
+
+# Install SDK dependencies
+RUN pnpm install --filter @filoz/synapse-sdk --no-optional
+
+# Install ethers at root so utils scripts can find it
+# Force workspace root installation and ignore workspace check
+RUN pnpm config set ignore-workspace-root-check true && \
+    pnpm add -w ethers --no-optional
+
+# Build SDK
+RUN pnpm --filter @filoz/synapse-sdk run build
+
+WORKDIR /opt/antithesis/FilWizard
 ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]

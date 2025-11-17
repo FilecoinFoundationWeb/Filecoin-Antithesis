@@ -6,9 +6,43 @@ This README serves as a guide for both prospective and active contributers. We w
 
 ## Setup
 
-There are 9 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 lotus nodes (`lotus-1`, `lotus-2`), 1 forest node (`forest`), 2 lotus miners (`lotus-miner-1`, `lotus-miner-2`), and 1 `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
+There are 11 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 lotus nodes (`lotus-1`, `lotus-2`), 1 forest node (`forest`), 2 lotus miners (`lotus-miner-1`, `lotus-miner-2`), 1 Curio storage provider (`curio`), 1 Yugabyte database (`yugabyte`), and 1 `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
 
 The `workload` container has the [test commands](https://antithesis.com/docs/test_templates/first_test/#test-commands) where endpoints are called, smart contracts deployed, transactions requested, etc... There are also validations to assert correctness and guarantees also occur in this container using the [Antithesis SDK](https://antithesis.com/docs/using_antithesis/sdk/). We explain more on the SDK in a later section.
+
+### Runtime Contract Deployment
+
+During system initialization, the `workload` container automatically deploys Filecoin onchain cloud contracts to the network using [FilWizard](https://github.com/parthshah1/FilWizard), a comprehensive Filecoin testing tool that handles wallet management, contract deployment, and transaction testing. FilWizard is integrated as a dependency in the workload container. These contracts are deployed at runtime after the blockchain reaches a minimum block height (default: 5 blocks). The deployment process includes:
+
+**Deployed Contracts:**
+- **USDFC**: ERC-20 token contract for payments and settlements
+- **Multicall3**: Batch transaction contract for efficient multi-call operations
+- **FilecoinWarmStorageService**: Main warm storage service contract
+- **FilecoinWarmStorageServiceStateView**: State view contract for querying storage service state
+- **ServiceProviderRegistry**: Registry contract for managing storage providers
+- **PDPVerifier**: Proof of Data Possession verifier contract for storage proofs
+
+**Deployment Flow:**
+1. The workload container waits for the chain to reach the initial block height
+2. Contracts are deployed using FilWizard's `filwizard contract deploy-local` command with the Filecoin Synapse configuration
+3. FilWizard extracts and stores contract addresses in `deployments.json`
+4. Contract addresses are shared with other containers (e.g., Curio) via shared volumes
+5. The Synapse SDK is configured with contract addresses for E2E testing
+6. FilWizard is used to create and fund client and Storage Provider (SP) accounts with USDFC tokens and FIL
+
+**Synapse SDK Integration:**
+The Synapse SDK is automatically set up in the workload container to interact with the deployed contracts. It:
+- Uses FilWizard to create client and SP private keys
+- Uses FilWizard to fund accounts with USDFC tokens and FIL
+- Configures environment variables for contract interactions
+- Enables end-to-end testing of the Filecoin storage service ecosystem
+
+**Curio Integration:**
+The Curio storage provider container:
+- Waits for contract addresses from the workload container
+- Configures PDP (Proof of Data Possession) service using the deployed PDP Verifier contract
+- Sets up storage provider registration with the Service Provider Registry
+- Integrates with the Warm Storage Service for storage operations
 
 ## Github Files and Directories
 
@@ -16,15 +50,17 @@ In this repository, we have directories that build all the images referenced in 
 
 We've made small patches for the Lotus and Forest nodes to work with a local Drand cluster. Antithesis is fully deterministic and requires our SUT to run without internet access (a source of nondeterminism).
 
+**FilWizard Integration**: The workload container integrates [FilWizard](https://github.com/parthshah1/FilWizard), a separate comprehensive Filecoin testing tool repository. FilWizard is cloned during the Docker build process and provides wallet management, contract deployment, and transaction testing capabilities. Most workload operations are handled by FilWizard rather than code in this repository.
+
 The `cleanup.sh` executable will clear the data directory. This data directory is used when running the docker-compose locally, so emptying this is necessary after shutting down the system.
 
-There are supplementary READMEs located in the drand, forest, lotus, and workload directories. These provide some description specific to their respective folders. 
+There are supplementary READMEs located in the drand, forest, lotus, workload, and curio directories. These provide some description specific to their respective folders. 
 
 ## Sanity Check Locally
 
 A good practice to confirm your test script works correctly in Antithesis is to run it locally. Here are the steps:
 
-1. Build each image required by the docker-compose.yml. We need a total of 4 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`). The build system supports both local development builds and instrumented builds for Antithesis testing.
+1. Build each image required by the docker-compose.yml. We need a total of 5 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`, `curio:latest`). The build system supports both local development builds and instrumented builds for Antithesis testing.
 
 You can build all images using:
 ```bash
@@ -42,6 +78,7 @@ make build-lotus LOCAL_BUILD=1     # Builds lotus without instrumentation
 make build-forest LOCAL_BUILD=1    # Builds forest without instrumentation
 make build-drand LOCAL_BUILD=1     # Builds drand without instrumentation
 make build-workload               # Builds workload (not affected by LOCAL_BUILD)
+# Note: Curio image must be built separately - see curio/Dockerfile
 
 # For Antithesis instrumented builds
 make build-lotus LOCAL_BUILD=0     # Builds lotus with instrumentation
@@ -57,6 +94,13 @@ make help
 ```
 
 2. Run `docker-compose up` from the root directory to start all containers defined in `docker-compose.yml`
+
+   **Note:** The workload container will automatically:
+   - Wait for the blockchain to reach the initial block height
+   - Deploy Filecoin onchain cloud contracts (USDFC, Warm Storage Service, Service Provider Registry, PDP Verifier, etc.)
+   - Set up the Synapse SDK with contract addresses
+   - Create and fund client and SP accounts
+   - Signal `setupComplete` when ready
 
 3. After the workload container has signaled `setupComplete` (or printed `system is healthy`), you can run any test command 1 to many times via `docker exec`:
 
@@ -131,7 +175,7 @@ Our Filecoin testing framework comprehensively validates the entire Filecoin eco
 | Category | Purpose | Test Operations | Next Steps |
 |----------|---------|-----------------|------------|
 | **Wallet Management** | Validate wallet creation, funding, and deletion across nodes | • Create wallets with random counts (1-15) on random nodes<br>• Delete random number of wallets<br>• Initialize wallets with funding<br>• Verify wallet operations across Lotus1/Lotus2 | |
-| **Smart Contract Deployment** | Test EVM-compatible smart contract deployment and interaction | • Deploy SimpleCoin contract (ERC-20 token)<br>• Deploy MCopy contract (memory operations)<br>• Deploy TStorage contract (transient storage)<br>• Invoke contract methods and verify results | |
+| **Smart Contract Deployment** | Test EVM-compatible smart contract deployment and interaction | • Deploy SimpleCoin contract (ERC-20 token)<br>• Deploy MCopy contract (memory operations)<br>• Deploy TStorage contract (transient storage)<br>• Runtime deployment of Filecoin onchain cloud contracts (USDFC, Warm Storage Service, Service Provider Registry, PDP Verifier)<br>• Invoke contract methods and verify results | |
 | **Transaction Processing** | Validate mempool operations and transaction handling | • Spam transactions between wallets<br>• Mempool fuzzing with different strategies<br>• ETH legacy transaction testing<br>• Random transaction parameter generation | |
 | **Consensus & Finality** | Ensure consensus mechanisms work correctly | • Check F3 consensus running status<br>• Validate finalized tipsets match across nodes<br>• Chain walk validation (10 tipsets)<br>• Consensus fault injection testing | |
 | **Network Operations** | Test P2P networking and peer management | • Check peer connections across nodes<br>• Monitor network connectivity<br>• Validate node synchronization status<br>• Test network partition resilience | |
@@ -170,6 +214,9 @@ Our Filecoin testing framework comprehensively validates the entire Filecoin eco
 5. **Performance Monitoring**: Validates timing constraints and performance degradation
 6. **State Consistency**: Ensures blockchain state remains consistent across nodes
 7. **Ethereum Compatibility**: Validates ETH API compatibility layer functionality
+8. **Runtime Contract Deployment**: Automatically deploys Filecoin onchain cloud contracts during system initialization
+9. **Storage Provider Testing**: Tests Curio storage provider integration with deployed contracts
+10. **End-to-End Storage Workflows**: Validates complete storage service workflows using Synapse SDK
 
 ### Assertion Framework
 
@@ -195,15 +242,19 @@ We use the Antithesis SDK to define test properties and assertions:
 -   Set up RPC and API testing framework
 -   Integrate code coverage instrumentation
 -   Create CI jobs for build, push, and testing automation
+-   **Integrate Curio storage provider for end-to-end deal testing**
+-   **Runtime deployment of Filecoin onchain cloud contracts (USDFC, Warm Storage Service, Service Provider Registry, PDP Verifier)**
+-   **Synapse SDK integration for E2E storage service testing**
+-   **PDP (Proof of Data Possession) service setup and testing**
 
 ### Longer-Term Goals
 
--   Integrate Curio for enhanced testing e2e deals
--   Filecoin Services (PDP, FS)
+-   Expand Filecoin Services testing (PDP, FS)
 -   Implement fuzz testing for bad inputs
 -   Expand Ethereum-based workloads
 -   Add more sophisticated consensus testing
 -   Expand smart contract testing scenarios
+-   Enhanced E2E storage workflow testing
 
 ## A Concrete Example
 

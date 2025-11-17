@@ -38,6 +38,38 @@ done
 echo "Workload [entrypoint]: chainhead has reached block height ${INIT_BLOCK_HEIGHT}"
 export FILECOIN_RPC="http://lotus-1:1234/rpc/v1"
 export FILECOIN_TOKEN=$(cat /root/devgen/lotus-1/jwt)
-#filwizard contract deploy-local --config config/contracts.json --workspace ./workspace --rpc-url "$FILECOIN_RPC" --create-deployer --bindings
+export ETH_RPC_URL="http://lotus-1:1234/rpc/v1"
+pwd
+filwizard contract deploy-local --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace --rpc-url "$FILECOIN_RPC" --create-deployer --bindings || echo "Filwizard deployment completed with warnings/errors, but continuing..."
+
+# Wait for deployments.json to be created (either by filwizard or other deployment process)
+echo "Waiting for deployments.json to be created..."
+while [ ! -f ./workspace/deployments.json ]; do
+    echo "Waiting for deployments.json..."
+    sleep 2
+done
+
+# Copy full deployments.json to shared volume and extract PDP verifier address
+echo "Copying deployments.json to shared volume..."
+cp ./workspace/deployments.json /root/devgen/deployments.json
+echo "Workload [entrypoint]: Copied full deployments.json to /root/devgen/"
+
+echo "Extracting PDP verifier address from deployments.json..."
+PDP_VERIFIER_ADDRESS=$(cat ./workspace/deployments.json | jq -r '.[] | select(.name=="pdpverifier") | .address')
+
+if [ -n "$PDP_VERIFIER_ADDRESS" ] && [ "$PDP_VERIFIER_ADDRESS" != "null" ]; then
+    echo "PDP_VERIFIER_ADDRESS=$PDP_VERIFIER_ADDRESS" > /root/devgen/curio/pdp_contract_address.env
+    echo "Workload [entrypoint]: PDP Verifier deployed at: $PDP_VERIFIER_ADDRESS"
+    echo "Workload [entrypoint]: Created PDP contract address file successfully"
+    echo "Workload [entrypoint]: Full deployments.json available at /root/devgen/deployments.json"
+else
+    echo "Workload [entrypoint]: ERROR - Could not extract PDP verifier address from deployments.json"
+    cat ./workspace/deployments.json | jq '.'
+fi
+
+# Call setup-synapse.sh to configure synapse SDK
+echo "Workload [entrypoint]: Setting up synapse SDK..."
+/opt/antithesis/entrypoint/setup-synapse.sh
+
 python3 -u /opt/antithesis/entrypoint/setup_complete.py
 sleep infinity

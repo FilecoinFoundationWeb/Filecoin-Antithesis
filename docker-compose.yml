@@ -259,7 +259,7 @@ services:
 
   # Curio service
   curio:
-    image: curio:latest
+    image: curio:${CURIO_TAG:-latest}
     container_name: curio
     volumes:
       - ./data/curio:/var/lib/curio:rw
@@ -271,6 +271,7 @@ services:
       - .env
     environment:
       - CURIO_IP=${CURIO_IP}
+      - CURIO_PDP_VERIFIER_ADDRESS=${CURIO_PDP_VERIFIER_ADDRESS}
     ports:
       - "443:443"
       - "80:80"
@@ -286,10 +287,12 @@ services:
         condition: service_healthy
       yugabyte:
         condition: service_started
+      workload:
+        condition: service_started
 
   #Workload service
   workload:
-    image: workload:filwizard
+    image: workload:${WORKLOAD_TAG:-filwizard}
     container_name: workload
     volumes:
       - ./data/lotus-1:/root/devgen/lotus-1

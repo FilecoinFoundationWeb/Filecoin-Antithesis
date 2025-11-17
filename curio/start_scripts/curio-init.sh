@@ -25,9 +25,7 @@ if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
 
   if [ ! -f $CURIO_REPO_PATH/.init.setup ]; then
     export DEFAULT_WALLET=`lotus wallet default`
-    echo DEFAULT_WALLET=$DEFAULT_WALLET
-     echo Create a new miner actor ...
-    lotus-shed miner create $DEFAULT_WALLET $DEFAULT_WALLET $DEFAULT_WALLET 2KiB
+    lotus-shed miner create --deposit-margin-factor 1.01 $DEFAULT_WALLET $DEFAULT_WALLET $DEFAULT_WALLET 2KiB
     touch $CURIO_REPO_PATH/.init.setup
   fi
 
@@ -107,7 +105,13 @@ if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
   # Get and format private key
   echo "Preparing private key..."
   PRIVATE_KEY_HEX=$(lotus wallet export $DEFAULT_WALLET | xxd -r -p | jq -r '.PrivateKey' | base64 -d | xxd -p -c 32)
+  
+  # Save private key to file
+  echo "Saving private key to ${CURIO_REPO_PATH}/private_key..."
+  echo "$PRIVATE_KEY_HEX" > ${CURIO_REPO_PATH}/private_key
+  
   echo "Importing PDP private key..."
+  
   sleep 30
   
   # Import the private key using RPC
@@ -139,5 +143,29 @@ if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
   echo "PDP service setup complete"
 fi
 
+# Wait for .env.devnet file with all contract addresses
+echo "Waiting for .env.devnet file with contract addresses..."
+while [ ! -f $CURIO_REPO_PATH/.env.devnet ]; do
+  echo "Waiting for .env.devnet file..."
+  sleep 5
+done
+
+# Source .env.devnet to load all contract addresses
+source $CURIO_REPO_PATH/.env.devnet
+
+# Export contract addresses with names expected by curio (from curio.patch)
+export CURIO_PDP_VERIFIER_ADDRESS=$PDP_VERIFIER_ADDRESS
+export RECORDKEEPER_CONTRACT=$WARM_STORAGE_CONTRACT_ADDRESS
+export SERVICE_REGISTRY_ADDRESS=$SP_REGISTRY_ADDRESS
+# USDFC_ADDRESS is already correctly named
+
+echo "Using contract addresses:"
+echo "  PDP Verifier: $CURIO_PDP_VERIFIER_ADDRESS"
+echo "  Recordkeeper (Warm Storage): $RECORDKEEPER_CONTRACT"
+echo "  Service Registry: $SERVICE_REGISTRY_ADDRESS"
+echo "  USDFC: $USDFC_ADDRESS"
+
 echo Starting curio node ...
 exec curio run --nosync --name devnet --layers seal,post,pdp-only,gui
+
+sleep infinity

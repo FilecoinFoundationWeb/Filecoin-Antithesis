@@ -1,5 +1,5 @@
 # Dockerfile to build instrumented version of lotus
-FROM docker.io/golang:1.23.10-bookworm
+FROM docker.io/golang:latest
 
 # Installing rust
 RUN apt-get update && \
@@ -28,7 +28,6 @@ RUN git submodule update --init
 
 # Perform code coverage instrumentation (source transformation)
 RUN go get github.com/antithesishq/antithesis-sdk-go@latest
-RUN go get github.com/filecoin-project/go-jsonrpc@v0.8.0
 RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-instrumentor@latest
 RUN go mod tidy
 RUN mkdir /lotus_instrumented
@@ -44,7 +43,7 @@ WORKDIR /lotus_instrumented/customer/
 RUN rm -rf /lotus
 
 # Build 2k binary for lotus
-RUN make 2k
+RUN make clean 2k
 RUN go build -o lotus-health ./cmd/lotus-health
 RUN go build -o lotus-bench ./cmd/lotus-bench
 # Check lotus version

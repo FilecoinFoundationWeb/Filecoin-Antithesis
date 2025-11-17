@@ -86,4 +86,3 @@
      "DelayMultiplier": 2,
      "BaseDecisionBackoffTable": [1.3, 1.69, 2.2, 2.86, 3.71, 4.83, 6.27, 7.5],
      "HeadLookback": 4,
-	 
