@@ -31,8 +31,7 @@ build-forest:
 .PHONY: build-curio
 build-curio:
 	@echo "Building curio for $(TARGET_ARCH) architecture..."
-	@echo "Curio tag: $(curio_tag)"
-	$(BUILD_CMD) --build-arg GIT_BRANCH=$(curio_tag) -t curio:latest -f curio/Dockerfile curio`
+	$(BUILD_CMD) -t curio:latest -f curio/Dockerfile curio
 
 .PHONY: build-drand
 build-drand:
