@@ -39,7 +39,7 @@ services:
   drand0:
     <<: [*filecoin_service]
     container_name: drand0
-    image: drand
+    image: drand:dynamic
     entrypoint: ./start-drand0.sh
     healthcheck:
       <<: *healthcheck_settings
@@ -48,7 +48,7 @@ services:
   drand1:
     <<: [*filecoin_service, *needs_drand0_started]
     container_name: drand1
-    image: drand
+    image: drand:dynamic
     entrypoint: ./start-drand1.sh
     healthcheck:
       <<: *healthcheck_settings
@@ -57,7 +57,7 @@ services:
   drand2:
     <<: [*filecoin_service, *needs_drand0_started]
     container_name: drand2
-    image: drand
+    image: drand:dynamic
     entrypoint: ./start-drand2.sh
     healthcheck:
       <<: *healthcheck_settings
@@ -66,7 +66,7 @@ services:
   lotus0:
     <<: [*filecoin_service, *needs_all_drand_healthy]
     container_name: lotus0
-    image: lotus:latest
+    image: lotus:dynamic
     entrypoint: ["./scripts/start-lotus.sh", "0"]
     healthcheck:
       <<: *healthcheck_settings
@@ -74,7 +74,7 @@ services:
 
   lotus1:
     <<: [*filecoin_service, *needs_lotus0_healthy]
-    image: lotus:latest
+    image: lotus:dynamic
     container_name: lotus1
     entrypoint: ["./scripts/start-lotus.sh", "1"]
     healthcheck:
@@ -83,21 +83,37 @@ services:
 
   lotus-miner0:
     <<: [*filecoin_service, *needs_lotus0_healthy]
-    image: lotus:latest
+    image: lotus:dynamic
     container_name: lotus-miner0
     entrypoint: ["./scripts/start-lotus-miner.sh", "0"]
 
   lotus-miner1:
     <<: [*filecoin_service, *needs_lotus1_healthy]
-    image: lotus:latest
+    image: lotus:dynamic
     container_name: lotus-miner1
     entrypoint: ["./scripts/start-lotus-miner.sh", "1"]
 
   forest0:
     <<: [*filecoin_service, *needs_lotus0_healthy]
-    image: forest:latest
+    image: forest:dynamic
     container_name: forest0
     entrypoint: ["./scripts/start-forest.sh", "0"]
+
+  # Yugabyte Database Service
+  yugabyte:
+    <<: [*filecoin_service]
+    image: yugabytedb/yugabyte:latest
+    container_name: yugabyte
+    init: true
+    command: [ "bin/yugabyted", "start", "--base_dir=/home/yugabyte/yb_data", "--background=false" ]
+    ports:
+      - "5433:5433"
+      - "9042:9042"
+      - "15433:15433"
+    environment:
+      - TINI_SUBREAPER=true
+    volumes:
+      - ./data/yugabyte:/home/yugabyte/yb_data
 
   workload:
     <<: [*filecoin_service]
