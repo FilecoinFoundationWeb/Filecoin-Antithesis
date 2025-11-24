@@ -69,8 +69,7 @@ forest --genesis "${LOTUS_1_DATA_DIR}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
        --rpc-address "${FOREST_IP}:${FOREST_RPC_PORT}" \
        --p2p-listen-address "/ip4/${FOREST_IP}/tcp/${FOREST_P2P_PORT}" \
-       --healthcheck-address "${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT}" \
-       --skip-load-actors &
+       --healthcheck-address "${FOREST_IP}:${FOREST_HEALTHZ_RPC_PORT}" &
 
 # Admin token is required for connection commands and wallet management.
 TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
