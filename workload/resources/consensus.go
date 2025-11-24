@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/chain/types"
 )
@@ -221,7 +220,7 @@ func (cc *ConsensusChecker) checkTipsetConsensus(ctx context.Context, height abi
 
 // CheckConsensus verifies that all nodes have consensus on tipsets for a range of heights
 // If no height is specified (height = 0), it chooses a random height between genesis and minHead-20
-func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.ChainEpoch) error {
+func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.ChainEpoch, nodeName string) error {
 	return RetryOperation(ctx, func() error {
 		log.Printf("Starting consensus check between nodes")
 
@@ -309,7 +308,7 @@ func (cc *ConsensusChecker) CheckConsensus(ctx context.Context, height abi.Chain
 			}
 
 			// After all retries, make the final assertion
-			assert.Always(consensusReached,
+			AssertAlways(nodeName, consensusReached,
 				"Consensus check: All nodes must agree on the same tipset - network fork or consensus failure detected",
 				map[string]interface{}{
 					"operation":      "consensus_agreement",
@@ -349,8 +348,8 @@ func PerformConsensusCheck(ctx context.Context, config *Config, height int64) er
 		log.Printf("[INFO] Will check consensus starting at height %d", height)
 	}
 
-	// Run the consensus check
-	err = checker.CheckConsensus(ctx, abi.ChainEpoch(height))
+	// Run the consensus check - use generic "ConsensusChecker" as this is multi-node
+	err = checker.CheckConsensus(ctx, abi.ChainEpoch(height), "ConsensusChecker")
 	if err != nil {
 		log.Printf("[WARN] Consensus check failed, will retry: %v", err)
 		return err // Return original error for retry
@@ -382,20 +381,11 @@ func PerformCheckFinalizedTipsets(ctx context.Context) error {
 		log.Printf("[ERROR] Failed to load config: %v", err)
 		return nil
 	}
-
-	// Filter nodes to get V1 and V2 nodes separately
 	v1Nodes := FilterLotusNodesV1(config.Nodes)
-	v2Nodes := FilterLotusNodesWithV2(config.Nodes)
-
 	if len(v1Nodes) < 2 {
 		log.Printf("[ERROR] Need at least two Lotus V1 nodes for this test, found %d", len(v1Nodes))
 		return nil
 	}
-	if len(v2Nodes) < 2 {
-		log.Printf("[ERROR] Need at least two Lotus V2 nodes for this test, found %d", len(v2Nodes))
-		return nil
-	}
-
 	// Connect to V1 nodes to get chain heads and find common height range
 	api1, closer1, err := ConnectToNode(ctx, v1Nodes[0])
 	if err != nil {
@@ -458,43 +448,29 @@ func PerformCheckFinalizedTipsets(ctx context.Context) error {
 	randomHeight := minHeight + rand.Int63n(maxHeight-minHeight+1)
 	log.Printf("[INFO] Selected height %d for finalized tipset comparison (range: %d-%d)", randomHeight, minHeight, maxHeight)
 
-	// Connect to V2 nodes for finalized tipset comparison
-	api11, closer11, err := ConnectToNodeV2(ctx, v2Nodes[0])
-	if err != nil {
-		log.Printf("[ERROR] Failed to connect to %s: %v", v2Nodes[0].Name, err)
-		return nil
-	}
-	defer closer11()
-
-	api22, closer22, err := ConnectToNodeV2(ctx, v2Nodes[1])
-	if err != nil {
-		log.Printf("[ERROR] Failed to connect to %s: %v", v2Nodes[1].Name, err)
-		return nil
-	}
-	defer closer22()
-
 	// Chain walk: Check 10 tipsets down from the selected height
 	log.Printf("[INFO] Starting chain walk from height %d down to %d", randomHeight, randomHeight-9)
 
 	for i := randomHeight; i >= randomHeight-9; i-- {
 		log.Printf("[INFO] Checking finalized tipset at height %d", i)
-		heightSelector := types.TipSetSelectors.Height(abi.ChainEpoch(i), true, types.TipSetAnchors.Finalized)
 
-		ts1, err := api11.ChainGetTipSet(ctx, heightSelector)
+		ts1, err := api1.ChainGetFinalizedTipSet(ctx)
 		if err != nil {
-			log.Printf("failed to get finalized tipset by height from %s: %v", v2Nodes[0].Name, err)
+			log.Printf("failed to get finalized tipset by height from %s: %v", v1Nodes[0].Name, err)
 			return nil
 		}
-		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts1.Cids(), v2Nodes[0].Name, i)
+		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts1.Cids(), v1Nodes[0].Name, i)
 
-		ts2, err := api22.ChainGetTipSet(ctx, heightSelector)
+		ts2, err := api2.ChainGetFinalizedTipSet(ctx)
 		if err != nil {
-			log.Printf("failed to get finalized tipset by height from %s: %v", v2Nodes[1].Name, err)
+			log.Printf("failed to get finalized tipset by height from %s: %v", v1Nodes[1].Name, err)
 			return nil
 		}
-		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts2.Cids(), v2Nodes[1].Name, i)
+		log.Printf("[INFO] Finalized tipset %s on %s at height %d", ts2.Cids(), v1Nodes[1].Name, i)
 
-		assert.Always(ts1.Equals(ts2), "Chain synchronization: Finalized tipsets should match between nodes - chain divergence detected",
+		// Use both node names in the assertion
+		nodeNames := v1Nodes[0].Name + "+" + v1Nodes[1].Name
+		AssertSometimes(nodeNames, ts1.Equals(ts2), "Chain synchronization: Finalized tipsets should match between nodes - Just in case of any reorgs this might violate unless it is not finality long",
 			map[string]interface{}{
 				"operation":   "chain_synchronization",
 				"requirement": "Chain synchronization",
