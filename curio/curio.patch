@@ -1,0 +1,522 @@
+--- a/pdp/contract/addresses.go
++++ b/pdp/contract/addresses.go
+@@ -2,6 +2,7 @@ package contract
+ 
+ import (
+ 	"math/big"
++	"os"
+ 
+ 	"github.com/ethereum/go-ethereum/common"
+ 	"github.com/snadrus/must"
+@@ -23,25 +24,153 @@ type RecordKeeperAddresses struct {
+ }
+ 
+ func (a RecordKeeperAddresses) List() []common.Address {
+-	return []common.Address{a.FWSService, a.Simple}
++	var addresses []common.Address
++	zeroAddr := common.Address{}
++	if a.FWSService != zeroAddr {
++		addresses = append(addresses, a.FWSService)
++	}
++	if a.Simple != zeroAddr {
++		addresses = append(addresses, a.Simple)
++	}
++	return addresses
++}
++
++// getEnvOrDefault returns the environment variable value if set, otherwise returns the default value
++func getEnvOrDefault(envVar, defaultValue string) string {
++	envVal := os.Getenv(envVar)
++	log.Infof("Checking environment variable %s: envVal=%s (empty: %v), defaultValue=%s (empty: %v)", envVar, envVal, envVal == "", defaultValue, defaultValue == "")
++	if envVal != "" {
++		log.Infof("Using environment variable %s=%s (default: %s)", envVar, envVal, defaultValue)
++		return envVal
++	}
++	log.Infof("Using default value for %s=%s (env var not set)", envVar, defaultValue)
++	if defaultValue == "" {
++		log.Warnf("WARNING: Default value for %s is empty string", envVar)
++	}
++	return defaultValue
++}
++
++// getRecordKeeperAddress returns the recordkeeper address from environment variables
++// Checks RECORDKEEPER_CONTRACT first, then WARM_STORAGE_CONTRACT_ADDRESS, then uses default
++func getRecordKeeperAddress(defaultValue string) string {
++	recordKeeperEnv := os.Getenv("RECORDKEEPER_CONTRACT")
++	warmStorageEnv := os.Getenv("WARM_STORAGE_CONTRACT_ADDRESS")
++
++	log.Infof("Checking recordkeeper environment variables:")
++	log.Infof("  RECORDKEEPER_CONTRACT=%s (empty: %v)", recordKeeperEnv, recordKeeperEnv == "")
++	log.Infof("  WARM_STORAGE_CONTRACT_ADDRESS=%s (empty: %v)", warmStorageEnv, warmStorageEnv == "")
++	log.Infof("  Default value=%s (empty: %v)", defaultValue, defaultValue == "")
++
++	if recordKeeperEnv != "" {
++		log.Infof("Using environment variable RECORDKEEPER_CONTRACT=%s", recordKeeperEnv)
++		return recordKeeperEnv
++	}
++	if warmStorageEnv != "" {
++		log.Infof("Using environment variable WARM_STORAGE_CONTRACT_ADDRESS=%s", warmStorageEnv)
++		return warmStorageEnv
++	}
++	log.Infof("Using default recordkeeper address=%s (env vars not set)", defaultValue)
++	if defaultValue == "" {
++		log.Warnf("WARNING: Default recordkeeper address is empty string")
++	}
++	return defaultValue
++}
++
++// getEnvRequired returns the environment variable value, or empty string if not set
++// For Build2k, all contracts must be provided via environment variables
++func getEnvRequired(envVar string) string {
++	val := os.Getenv(envVar)
++	log.Infof("Checking required environment variable %s=%s", envVar, val)
++	if val == "" {
++		log.Warnf("WARNING: Environment variable %s is not set or empty (required for Build2k)", envVar)
++	} else {
++		log.Infof("Using environment variable %s=%s", envVar, val)
++	}
++	return val
++}
++
++// getRecordKeeperAddressRequired returns the recordkeeper address from environment variables for Build2k
++// Checks RECORDKEEPER_CONTRACT first, then WARM_STORAGE_CONTRACT_ADDRESS
++func getRecordKeeperAddressRequired() string {
++	recordKeeperEnv := os.Getenv("RECORDKEEPER_CONTRACT")
++	warmStorageEnv := os.Getenv("WARM_STORAGE_CONTRACT_ADDRESS")
++
++	log.Infof("Checking required recordkeeper environment variables for Build2k:")
++	log.Infof("  RECORDKEEPER_CONTRACT=%s (empty: %v)", recordKeeperEnv, recordKeeperEnv == "")
++	log.Infof("  WARM_STORAGE_CONTRACT_ADDRESS=%s (empty: %v)", warmStorageEnv, warmStorageEnv == "")
++
++	if recordKeeperEnv != "" {
++		log.Infof("Using environment variable RECORDKEEPER_CONTRACT=%s", recordKeeperEnv)
++		return recordKeeperEnv
++	}
++	if warmStorageEnv != "" {
++		log.Infof("Using environment variable WARM_STORAGE_CONTRACT_ADDRESS=%s", warmStorageEnv)
++		return warmStorageEnv
++	}
++	log.Warnf("WARNING: Neither RECORDKEEPER_CONTRACT nor WARM_STORAGE_CONTRACT_ADDRESS is set or both are empty (required for Build2k)")
++	return warmStorageEnv
+ }
+ 
+ func ContractAddresses() PDPContracts {
++	log.Infof("Loading PDP contract addresses for network: %s", build.BuildTypeString())
++
+ 	switch build.BuildType {
+ 	case build.BuildCalibnet:
+-		return PDPContracts{
+-			PDPVerifier: common.HexToAddress("0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C"), // PDPVerifier Proxy v3.1.0 - https://github.com/FilOzone/pdp/releases/tag/v3.1.0
++		pdpVerifierAddr := getEnvOrDefault("CURIO_PDP_VERIFIER_ADDRESS", "0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C")
++		recordKeeperAddr := getRecordKeeperAddress("0x02925630df557F957f70E112bA06e50965417CA0")
++		contracts := PDPContracts{
++			PDPVerifier: common.HexToAddress(pdpVerifierAddr), // PDPVerifier Proxy v3.1.0 - https://github.com/FilOzone/pdp/releases/tag/v3.1.0
+ 			AllowedPublicRecordKeepers: RecordKeeperAddresses{
+-				FWSService: common.HexToAddress("0x02925630df557F957f70E112bA06e50965417CA0"), // FWSS Proxy - https://github.com/FilOzone/filecoin-services/releases/tag/v1.0.0
++				FWSService: common.HexToAddress(recordKeeperAddr), // FWSS Proxy - https://github.com/FilOzone/filecoin-services/releases/tag/v1.0.0
+ 			},
+ 		}
++		log.Infof("PDP Contract Addresses (Calibnet):")
++		log.Infof("  PDPVerifier: %s", contracts.PDPVerifier)
++		log.Infof("  RecordKeeper (FWSService): %s", contracts.AllowedPublicRecordKeepers.FWSService)
++		return contracts
+ 	case build.BuildMainnet:
+-		return PDPContracts{
+-			PDPVerifier: common.HexToAddress("0xBADd0B92C1c71d02E7d520f64c0876538fa2557F"), // PDPVerifier Proxy v3.1.0 - https://github.com/FilOzone/pdp/releases/tag/v3.1.0
++		pdpVerifierAddr := getEnvOrDefault("CURIO_PDP_VERIFIER_ADDRESS", "0xBADd0B92C1c71d02E7d520f64c0876538fa2557F")
++		recordKeeperAddr := getRecordKeeperAddress("0x8408502033C418E1bbC97cE9ac48E5528F371A9f")
++		contracts := PDPContracts{
++			PDPVerifier: common.HexToAddress(pdpVerifierAddr), // PDPVerifier Proxy v3.1.0 - https://github.com/FilOzone/pdp/releases/tag/v3.1.0
+ 			AllowedPublicRecordKeepers: RecordKeeperAddresses{
+-				FWSService: common.HexToAddress("0x8408502033C418E1bbC97cE9ac48E5528F371A9f"), // FWSS Proxy - https://github.com/FilOzone/filecoin-services/releases/tag/v1.0.0
++				FWSService: common.HexToAddress(recordKeeperAddr), // FWSS Proxy - https://github.com/FilOzone/filecoin-services/releases/tag/v1.0.0
+ 			},
+ 		}
++		log.Infof("PDP Contract Addresses (Mainnet):")
++		log.Infof("  PDPVerifier: %s", contracts.PDPVerifier)
++		log.Infof("  RecordKeeper (FWSService): %s", contracts.AllowedPublicRecordKeepers.FWSService)
++		return contracts
++	case build.Build2k:
++		// Build2k requires all contract addresses to be provided via environment variables
++		// Contracts may be deployed later by other processes, so we allow zero addresses
++		pdpVerifierAddr := getEnvRequired("CURIO_PDP_VERIFIER_ADDRESS")
++		recordKeeperAddr := getRecordKeeperAddressRequired()
++
++		log.Infof("Final address strings before conversion:")
++		log.Infof("  PDPVerifier string: %s (empty: %v)", pdpVerifierAddr, pdpVerifierAddr == "")
++		log.Infof("  RecordKeeper string: %s (empty: %v)", recordKeeperAddr, recordKeeperAddr == "")
++
++		contracts := PDPContracts{
++			PDPVerifier: common.HexToAddress(pdpVerifierAddr),
++			AllowedPublicRecordKeepers: RecordKeeperAddresses{
++				FWSService: common.HexToAddress(recordKeeperAddr),
++			},
++		}
++
++		zeroAddr := common.Address{}
++		log.Infof("PDP Contract Addresses (Build2k):")
++		log.Infof("  PDPVerifier: %s (zero: %v)", contracts.PDPVerifier, contracts.PDPVerifier == zeroAddr)
++		log.Infof("  RecordKeeper (FWSService): %s (zero: %v)", contracts.AllowedPublicRecordKeepers.FWSService, contracts.AllowedPublicRecordKeepers.FWSService == zeroAddr)
++
++		if contracts.PDPVerifier == zeroAddr {
++			log.Warnf("WARNING: PDPVerifier address is zero/empty")
++		}
++		if contracts.AllowedPublicRecordKeepers.FWSService == zeroAddr {
++			log.Warnf("WARNING: RecordKeeper (FWSService) address is zero/empty")
++		}
++
++		return contracts
+ 	default:
+ 		panic("PDP contract unknown for this network")
+ 	}
+@@ -61,12 +190,39 @@ func IsPublicService(serviceLabel string) bool {
+ // IsRecordKeeperAllowed checks if a recordkeeper address is in the whitelist
+ // Returns true if the address is allowed, or if there's no whitelist for the network
+ func IsRecordKeeperAllowed(recordKeeper common.Address) bool {
++	allowedList := ContractAddresses().AllowedPublicRecordKeepers.List()
++
++	log.Infof("Checking if recordkeeper is allowed:")
++	log.Infof("  RecordKeeper address: %s", recordKeeper)
++	log.Infof("  Network: %s", build.BuildTypeString())
++	log.Infof("  Allowed list length: %d", len(allowedList))
++
++	if len(allowedList) == 0 {
++		log.Infof("  Allowed list is empty")
++	} else {
++		log.Infof("  Allowed list addresses:")
++		for i, allowed := range allowedList {
++			log.Infof("    [%d] %s", i, allowed)
++		}
++	}
++
++	// For Build2k, if whitelist is empty (contracts not yet deployed), allow any recordkeeper
++	// This allows flexibility when contracts are deployed later by other processes
++	if build.BuildType == build.Build2k && len(allowedList) == 0 {
++		log.Infof("  Build2k with empty whitelist: allowing any recordkeeper")
++		return true
++	}
++
+ 	// Check if the recordkeeper is in the whitelist
+-	for _, allowed := range ContractAddresses().AllowedPublicRecordKeepers.List() {
++	for i, allowed := range allowedList {
+ 		if recordKeeper == allowed {
++			log.Infof("  RecordKeeper %s found in allowed list at index %d: ALLOWED", recordKeeper, i)
+ 			return true
+ 		}
++		log.Infof("  Comparing with allowed[%d]: %s (match: %v)", i, allowed, recordKeeper == allowed)
+ 	}
++
++	log.Infof("  RecordKeeper %s not found in allowed list: DENIED", recordKeeper)
+ 	return false
+ }
+ 
+@@ -74,11 +230,34 @@ const ServiceRegistryMainnet = "0xf55dDbf63F1b55c3F1D4FA7e339a68AB7b64A5eB"  //
+ const ServiceRegistryCalibnet = "0x839e5c9988e4e9977d40708d0094103c0839Ac9D" // ServiceProviderRegistry Proxy - https://github.com/FilOzone/filecoin-services/releases/tag/v1.0.0
+ 
+ func ServiceRegistryAddress() (common.Address, error) {
++	log.Infof("Loading Service Registry address for network: %s", build.BuildTypeString())
++
+ 	switch build.BuildType {
+ 	case build.BuildCalibnet:
+-		return common.HexToAddress(ServiceRegistryCalibnet), nil
++		addr := getEnvOrDefault("SERVICE_REGISTRY_ADDRESS", ServiceRegistryCalibnet)
++		result := common.HexToAddress(addr)
++		log.Infof("Service Registry Address (Calibnet): %s", result)
++		return result, nil
+ 	case build.BuildMainnet:
+-		return common.HexToAddress(ServiceRegistryMainnet), nil
++		addr := getEnvOrDefault("SERVICE_REGISTRY_ADDRESS", ServiceRegistryMainnet)
++		result := common.HexToAddress(addr)
++		log.Infof("Service Registry Address (Mainnet): %s", result)
++		return result, nil
++	case build.Build2k:
++		// Service registry may be deployed later by other processes
++		addr := getEnvRequired("SERVICE_REGISTRY_ADDRESS")
++		log.Infof("Service Registry address string: %s (empty: %v)", addr, addr == "")
++		if addr == "" {
++			log.Warnf("Service Registry Address (Build2k): not set (empty address)")
++			return common.Address{}, nil
++		}
++		result := common.HexToAddress(addr)
++		zeroAddr := common.Address{}
++		log.Infof("Service Registry Address (Build2k): %s (zero: %v)", result, result == zeroAddr)
++		if result == zeroAddr {
++			log.Warnf("WARNING: Service Registry address converted to zero address")
++		}
++		return result, nil
+ 	default:
+ 		return common.Address{}, xerrors.Errorf("service registry address not set for this network %s", build.BuildTypeString()[1:])
+ 	}
+@@ -88,11 +267,34 @@ const USDFCAddressMainnet = "0x80B98d3aa09ffff255c3ba4A241111Ff1262F045"
+ const USDFCAddressCalibnet = "0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0"
+ 
+ func USDFCAddress() (common.Address, error) {
++	log.Infof("Loading USDFC address for network: %s", build.BuildTypeString())
++
+ 	switch build.BuildType {
+ 	case build.BuildCalibnet:
+-		return common.HexToAddress(USDFCAddressCalibnet), nil
++		addr := getEnvOrDefault("USDFC_ADDRESS", USDFCAddressCalibnet)
++		result := common.HexToAddress(addr)
++		log.Infof("USDFC Address (Calibnet): %s", result)
++		return result, nil
+ 	case build.BuildMainnet:
+-		return common.HexToAddress(USDFCAddressMainnet), nil
++		addr := getEnvOrDefault("USDFC_ADDRESS", USDFCAddressMainnet)
++		result := common.HexToAddress(addr)
++		log.Infof("USDFC Address (Mainnet): %s", result)
++		return result, nil
++	case build.Build2k:
++		// USDFC contract may be deployed later by other processes
++		addr := getEnvRequired("USDFC_ADDRESS")
++		log.Infof("USDFC address string: %s (empty: %v)", addr, addr == "")
++		if addr == "" {
++			log.Warnf("USDFC Address (Build2k): not set (empty address)")
++			return common.Address{}, nil
++		}
++		result := common.HexToAddress(addr)
++		zeroAddr := common.Address{}
++		log.Infof("USDFC Address (Build2k): %s (zero: %v)", result, result == zeroAddr)
++		if result == zeroAddr {
++			log.Warnf("WARNING: USDFC address converted to zero address")
++		}
++		return result, nil
+ 	default:
+ 		return common.Address{}, xerrors.Errorf("USDFC address not set for this network %s", build.BuildTypeString()[1:])
+ 	}
+diff --git a/pdp/contract/utils.go b/pdp/contract/utils.go
+index 4b3e15be..cc4c91a8 100644
+--- a/pdp/contract/utils.go
++++ b/pdp/contract/utils.go
+@@ -126,30 +126,71 @@ func encodeBool(b bool) []byte {
+ // an IPDPProvingSchedule instance bound to the appropriate address.
+ // It uses the view contract address if available, otherwise uses the listener address directly.
+ func GetProvingScheduleFromListener(listenerAddr common.Address, ethClient *ethclient.Client) (*IPDPProvingSchedule, error) {
++	schedule, _, err := GetProvingScheduleFromListenerWithLogging(listenerAddr, ethClient, 0)
++	return schedule, err
++}
++
++// GetProvingScheduleFromListenerWithLogging is the same as GetProvingScheduleFromListener but returns
++// the contract address being used and includes detailed logging for debugging.
++func GetProvingScheduleFromListenerWithLogging(listenerAddr common.Address, ethClient *ethclient.Client, dataSetId int64) (*IPDPProvingSchedule, common.Address, error) {
+ 	// Try to get the view contract address from the listener
+ 	provingScheduleAddr := listenerAddr
+ 
++	log.Infow("Resolving proving schedule contract address",
++		"dataSetId", dataSetId,
++		"listenerAddr", listenerAddr.Hex(),
++		"initialScheduleAddr", provingScheduleAddr.Hex())
++
+ 	// Check if the listener supports the viewContractAddress method
+ 	listenerService, err := NewListenerServiceWithViewContract(listenerAddr, ethClient)
+-	if err == nil {
++	if err != nil {
++		log.Debugw("Failed to create listener service with view contract, using listener address directly",
++			"dataSetId", dataSetId,
++			"listenerAddr", listenerAddr.Hex(),
++			"error", err)
++	} else {
+ 		// Try to get the view contract address
+ 		viewAddr, err := listenerService.ViewContractAddress(nil)
+-		if err == nil && viewAddr != (common.Address{}) {
++		if err != nil {
++			log.Debugw("Failed to get view contract address, using listener address directly",
++				"dataSetId", dataSetId,
++				"listenerAddr", listenerAddr.Hex(),
++				"error", err)
++		} else if viewAddr != (common.Address{}) {
+ 			// Use the view contract for proving schedule operations
+ 			provingScheduleAddr = viewAddr
++			log.Infow("Using view contract address for proving schedule",
++				"dataSetId", dataSetId,
++				"listenerAddr", listenerAddr.Hex(),
++				"viewContractAddr", viewAddr.Hex())
++		} else {
++			log.Debugw("View contract address is zero, using listener address directly",
++				"dataSetId", dataSetId,
++				"listenerAddr", listenerAddr.Hex())
+ 		}
+ 	}
+ 
++	log.Infow("Final proving schedule contract address",
++		"dataSetId", dataSetId,
++		"listenerAddr", listenerAddr.Hex(),
++		"scheduleContractAddr", provingScheduleAddr.Hex(),
++		"isZero", provingScheduleAddr == common.Address{})
++
+ 	// Create and return the IPDPProvingSchedule binding
+ 	// This works whether provingScheduleAddr points to:
+ 	// - The view contract (which must implement IPDPProvingSchedule)
+ 	// - The listener itself (where listener must implement IPDPProvingSchedule)
+ 	provingSchedule, err := NewIPDPProvingSchedule(provingScheduleAddr, ethClient)
+ 	if err != nil {
+-		return nil, xerrors.Errorf("failed to create proving schedule binding: %w", err)
++		log.Errorw("Failed to create proving schedule binding",
++			"dataSetId", dataSetId,
++			"listenerAddr", listenerAddr.Hex(),
++			"scheduleContractAddr", provingScheduleAddr.Hex(),
++			"error", err)
++		return nil, common.Address{}, xerrors.Errorf("failed to create proving schedule binding: %w", err)
+ 	}
+ 
+-	return provingSchedule, nil
++	return provingSchedule, provingScheduleAddr, nil
+ }
+ 
+ func GetDataSetMetadataAtKey(listenerAddr common.Address, ethClient *ethclient.Client, dataSetId *mbig.Int, key string) (bool, string, error) {
+diff --git a/pdp/handlers_create.go b/pdp/handlers_create.go
+index f7200d45..1444c213 100644
+--- a/pdp/handlers_create.go
++++ b/pdp/handlers_create.go
+@@ -48,6 +48,11 @@ func (p *PDPService) handleCreateDataSetAndAddPieces(w http.ResponseWriter, r *h
+ 	}
+ 
+ 	recordKeeperAddr := common.HexToAddress(reqBody.RecordKeeper)
++	logCreate.Infof("Received recordKeeper from request (handleCreateDataSetAndAddPieces):")
++	logCreate.Infof("  recordKeeper string: %s", reqBody.RecordKeeper)
++	logCreate.Infof("  recordKeeper address: %s", recordKeeperAddr.Hex())
++	logCreate.Infof("  serviceLabel: %s", serviceLabel)
++	logCreate.Infof("  isPublicService: %v", contract.IsPublicService(serviceLabel))
+ 	if recordKeeperAddr == (common.Address{}) {
+ 		http.Error(w, "Invalid recordKeeper address", http.StatusBadRequest)
+ 		return
+@@ -55,6 +60,7 @@ func (p *PDPService) handleCreateDataSetAndAddPieces(w http.ResponseWriter, r *h
+ 
+ 	// Check if the recordkeeper is in the whitelist for public services
+ 	if contract.IsPublicService(serviceLabel) && !contract.IsRecordKeeperAllowed(recordKeeperAddr) {
++		logCreate.Warnf("RecordKeeper %s is not allowed for public service %s", recordKeeperAddr.Hex(), serviceLabel)
+ 		http.Error(w, "recordKeeper address not allowed for public service", http.StatusForbidden)
+ 		return
+ 	}
+@@ -207,6 +213,11 @@ func (p *PDPService) handleCreateDataSet(w http.ResponseWriter, r *http.Request)
+ 	}
+ 
+ 	recordKeeperAddr := common.HexToAddress(reqBody.RecordKeeper)
++	logCreate.Infof("Received recordKeeper from request (handleCreateDataSet):")
++	logCreate.Infof("  recordKeeper string: %s", reqBody.RecordKeeper)
++	logCreate.Infof("  recordKeeper address: %s", recordKeeperAddr.Hex())
++	logCreate.Infof("  serviceLabel: %s", serviceLabel)
++	logCreate.Infof("  isPublicService: %v", contract.IsPublicService(serviceLabel))
+ 	if recordKeeperAddr == (common.Address{}) {
+ 		http.Error(w, "Invalid recordKeeper address", http.StatusBadRequest)
+ 		return
+@@ -214,6 +225,7 @@ func (p *PDPService) handleCreateDataSet(w http.ResponseWriter, r *http.Request)
+ 
+ 	// Check if the recordkeeper is in the whitelist for public services
+ 	if contract.IsPublicService(serviceLabel) && !contract.IsRecordKeeperAllowed(recordKeeperAddr) {
++		logCreate.Warnf("RecordKeeper %s is not allowed for public service %s", recordKeeperAddr.Hex(), serviceLabel)
+ 		http.Error(w, "recordKeeper address not allowed for public service", http.StatusForbidden)
+ 		return
+ 	}
+diff --git a/tasks/pdp/proofset_create_watch.go b/tasks/pdp/proofset_create_watch.go
+index 5759a996..b6dac801 100644
+--- a/tasks/pdp/proofset_create_watch.go
++++ b/tasks/pdp/proofset_create_watch.go
+@@ -88,7 +88,12 @@ func processDataSetCreate(ctx context.Context, db *harmonydb.DB, psc DataSetCrea
+ 	log.Infow("Extracted dataSetId from receipt", "txHash", psc.CreateMessageHash, "dataSetId", dataSetId)
+ 
+ 	// Get the listener address for this data set from the PDPVerifier contract
+-	pdpVerifier, err := contract.NewPDPVerifier(contract.ContractAddresses().PDPVerifier, ethClient)
++	pdpVerifierAddr := contract.ContractAddresses().PDPVerifier
++	log.Infow("Getting listener address for data set",
++		"dataSetId", dataSetId,
++		"pdpVerifier", pdpVerifierAddr.Hex())
++
++	pdpVerifier, err := contract.NewPDPVerifier(pdpVerifierAddr, ethClient)
+ 	if err != nil {
+ 		return xerrors.Errorf("failed to instantiate PDPVerifier contract: %w", err)
+ 	}
+@@ -97,13 +102,50 @@ func processDataSetCreate(ctx context.Context, db *harmonydb.DB, psc DataSetCrea
+ 	if err != nil {
+ 		return xerrors.Errorf("failed to get listener address for data set %d: %w", dataSetId, err)
+ 	}
++	zeroAddr := common.Address{}
++
++	// Get allowed FWSS addresses for comparison
++	allowedAddresses := contract.ContractAddresses().AllowedPublicRecordKeepers.List()
++	log.Infow("Retrieved listener address from PDPVerifier",
++		"dataSetId", dataSetId,
++		"listenerAddr", listenerAddr.Hex(),
++		"listenerIsZero", listenerAddr == zeroAddr,
++		"allowedFWSSAddresses", allowedAddresses)
++
++	// Check if listener matches any allowed address
++	listenerMatchesAllowed := false
++	for i, allowed := range allowedAddresses {
++		if listenerAddr == allowed {
++			listenerMatchesAllowed = true
++			log.Infow("Listener address matches allowed FWSS address",
++				"dataSetId", dataSetId,
++				"listenerAddr", listenerAddr.Hex(),
++				"allowedIndex", i,
++				"allowedAddr", allowed.Hex())
++			break
++		}
++	}
++	if !listenerMatchesAllowed && len(allowedAddresses) > 0 {
++		log.Warnw("Listener address does NOT match any allowed FWSS address",
++			"dataSetId", dataSetId,
++			"listenerAddr", listenerAddr.Hex(),
++			"allowedAddresses", allowedAddresses)
++	}
++
++	if listenerAddr == zeroAddr {
++		return xerrors.Errorf("listener address is zero for data set %d", dataSetId)
++	}
+ 
+ 	// Get the proving period from the listener
+ 	// Assumption: listener is a PDP Service with proving window informational methods
+-	provingPeriod, challengeWindow, err := getProvingPeriodChallengeWindow(ctx, ethClient, listenerAddr)
++	provingPeriod, challengeWindow, err := getProvingPeriodChallengeWindow(ctx, ethClient, listenerAddr, dataSetId)
+ 	if err != nil {
+ 		return xerrors.Errorf("failed to get max proving period: %w", err)
+ 	}
++	log.Infow("Successfully retrieved proving period and challenge window",
++		"dataSetId", dataSetId,
++		"provingPeriod", provingPeriod,
++		"challengeWindow", challengeWindow)
+ 	_, err = db.BeginTransaction(ctx, func(tx *harmonydb.Tx) (bool, error) {
+ 		// Insert a new entry into pdp_data_sets
+ 		_, err = tx.Exec(`
+@@ -162,17 +204,39 @@ func extractDataSetIdFromReceipt(receipt *types.Receipt) (int64, error) {
+ 	return 0, xerrors.Errorf("DataSetCreated event not found in receipt")
+ }
+ 
+-func getProvingPeriodChallengeWindow(ctx context.Context, ethClient *ethclient.Client, listenerAddr common.Address) (uint64, uint64, error) {
++func getProvingPeriodChallengeWindow(ctx context.Context, ethClient *ethclient.Client, listenerAddr common.Address, dataSetId int64) (uint64, uint64, error) {
++	log.Infow("Getting proving schedule from listener",
++		"dataSetId", dataSetId,
++		"listenerAddr", listenerAddr.Hex())
++
+ 	// Get the proving schedule from the listener (handles view contract indirection)
+-	schedule, err := contract.GetProvingScheduleFromListener(listenerAddr, ethClient)
++	schedule, scheduleAddr, err := contract.GetProvingScheduleFromListenerWithLogging(listenerAddr, ethClient, dataSetId)
+ 	if err != nil {
+ 		return 0, 0, xerrors.Errorf("failed to get proving schedule from listener: %w", err)
+ 	}
+ 
++	log.Infow("Calling GetPDPConfig",
++		"dataSetId", dataSetId,
++		"listenerAddr", listenerAddr.Hex(),
++		"scheduleContractAddr", scheduleAddr.Hex(),
++		"methodId", "0xea0f9354")
++
+ 	config, err := schedule.GetPDPConfig(&bind.CallOpts{Context: ctx})
+ 	if err != nil {
++		log.Errorw("GetPDPConfig call failed",
++			"dataSetId", dataSetId,
++			"listenerAddr", listenerAddr.Hex(),
++			"scheduleContractAddr", scheduleAddr.Hex(),
++			"error", err)
+ 		return 0, 0, xerrors.Errorf("failed to GetPDPConfig: %w", err)
+ 	}
+ 
++	log.Infow("GetPDPConfig succeeded",
++		"dataSetId", dataSetId,
++		"maxProvingPeriod", config.MaxProvingPeriod,
++		"challengeWindowSize", config.ChallengeWindow.String(),
++		"challengesPerProof", config.ChallengesPerProof.String(),
++		"initChallengeWindowStart", config.InitChallengeWindowStart.String())
++
+ 	return config.MaxProvingPeriod, config.ChallengeWindow.Uint64(), nil
+ }
