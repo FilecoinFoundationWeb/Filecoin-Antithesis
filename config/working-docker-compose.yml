@@ -146,3 +146,6 @@ services:
     <<: [*filecoin_service]
     image: workload:dynamic
     container_name: workload
+    depends_on:
+      lotus0:
+        condition: service_healthy

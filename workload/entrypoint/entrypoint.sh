@@ -1,10 +1,8 @@
 #!/bin/bash
 
-#set -e
+set -e
 
-# What is the purpose of the following?
-# Adjusting the Antithesis system time is not a permitted operation
-echo "synchronizing system time..."
+echo "Workload [entrypoint]: synchronizing system time..."
 # Attempt to sync time with NTP server
 if ntpdate -q pool.ntp.org &>/dev/null; then
     # If query works, try to sync
@@ -19,43 +17,65 @@ fi
 current_time=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
 echo "Current system time: $current_time"
 
-RPC_LOTUS="${RPC_LOTUS:-http://lotus0:1234/rpc/v0}"
+# RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.26:1235/rpc/v0}"
+RPC_LOTUS="${RPC_LOTUS:-http://lotus0:${LOTUS_RPC_PORT:-1234}/rpc/v0}"
 
 # Waiting for the chain head to pass a certain height
-INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-10}"
+INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-5}"
 BLOCK_HEIGHT_REACHED=0
 
-echo "waiting for block height to reach ${INIT_BLOCK_HEIGHT}"
+echo "Workload [entrypoint]: waiting for block height to reach ${INIT_BLOCK_HEIGHT}"
 
 while [ $INIT_BLOCK_HEIGHT -gt $BLOCK_HEIGHT_REACHED ]
 do
-
-    # Capture response separately from exit code
-    response=$(curl -s --fail -X POST "$RPC_LOTUS" \
-        -H 'Content-Type: application/json' \
-        --data '{"jsonrpc":"2.0","id":1,"method":"Filecoin.ChainHead","params":[]}' 2>/dev/null)
-    curl_exit=$?
-    
-    # If curl failed, retry
-    if [[ $curl_exit -ne 0 ]]; then
-        echo "lotus0 not available yet, retrying..."
-        sleep 5
-        continue
-    fi
-    
-    # Parse the response
-    BLOCK_HEIGHT_REACHED=$(echo "$response" | jq -r '.result.Height // 0')
-
-    echo "current height: $BLOCK_HEIGHT_REACHED"
-
+    BLOCK_HEIGHT_REACHED=$(curl -X POST $RPC_LOTUS -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"Filecoin.ChainHead","params":[]}' | jq '.result.Height')
+    echo "Workload [entrypoint]: block height check: reached ${BLOCK_HEIGHT_REACHED}"
     if [ $INIT_BLOCK_HEIGHT -le $BLOCK_HEIGHT_REACHED ]; then
         break
     fi
     sleep 5
 done
 
-echo "block height has reached ${INIT_BLOCK_HEIGHT}"
+echo "Workload [entrypoint]: chainhead has reached block height ${INIT_BLOCK_HEIGHT}"
+# export FILECOIN_RPC="http://lotus-1:1234/rpc/v1"
+export FILECOIN_RPC="$RPC_LOTUS"
+
+# export FILECOIN_TOKEN=$(cat /root/devgen/lotus-1/jwt)
+export FILECOIN_TOKEN=$(cat ${LOTUS_0_PATH}/token)
+
+# export ETH_RPC_URL="http://lotus-1:1234/rpc/v1"
+export ETH_RPC_URL="$RPC_LOTUS"
+pwd
+filwizard contract deploy-local --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace --rpc-url "$FILECOIN_RPC" --create-deployer --bindings || echo "Filwizard deployment completed with warnings/errors, but continuing..."
+
+# Wait for deployments.json to be created (either by filwizard or other deployment process)
+echo "Waiting for deployments.json to be created..."
+while [ ! -f ./workspace/deployments.json ]; do
+    echo "Waiting for deployments.json..."
+    sleep 2
+done
+
+# Copy full deployments.json to shared volume and extract PDP verifier address
+echo "Copying deployments.json to shared volume..."
+cp ./workspace/deployments.json /root/devgen/deployments.json
+echo "Workload [entrypoint]: Copied full deployments.json to /root/devgen/"
+
+echo "Extracting PDP verifier address from deployments.json..."
+PDP_VERIFIER_ADDRESS=$(cat ./workspace/deployments.json | jq -r '.[] | select(.name=="pdpverifier") | .address')
+
+if [ -n "$PDP_VERIFIER_ADDRESS" ] && [ "$PDP_VERIFIER_ADDRESS" != "null" ]; then
+    echo "PDP_VERIFIER_ADDRESS=$PDP_VERIFIER_ADDRESS" > /root/devgen/curio/pdp_contract_address.env
+    echo "Workload [entrypoint]: PDP Verifier deployed at: $PDP_VERIFIER_ADDRESS"
+    echo "Workload [entrypoint]: Created PDP contract address file successfully"
+    echo "Workload [entrypoint]: Full deployments.json available at /root/devgen/deployments.json"
+else
+    echo "Workload [entrypoint]: ERROR - Could not extract PDP verifier address from deployments.json"
+    cat ./workspace/deployments.json | jq '.'
+fi
+
+# Call setup-synapse.sh to configure synapse SDK
+echo "Workload [entrypoint]: Setting up synapse SDK..."
+/opt/antithesis/entrypoint/setup-synapse.sh
 
 python3 -u /opt/antithesis/entrypoint/setup_complete.py
-
 sleep infinity

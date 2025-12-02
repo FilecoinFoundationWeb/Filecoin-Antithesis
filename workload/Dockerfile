@@ -6,43 +6,81 @@ FROM ubuntu:latest
 
 # Install necessary packages including Python and Go
 RUN apt-get update -y && \
-    apt-get install -y python3 python3-pip python3-requests python3-filelock curl jq gcc ntpdate && \
+    apt-get install -y python3 python3-pip python3-requests python3-filelock curl jq gcc ntpdate git && \
     ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && \
     curl -OL "https://golang.org/dl/go1.23.2.linux-${ARCH}.tar.gz" && \
     tar -C /usr/local -xzf "go1.23.2.linux-${ARCH}.tar.gz" && \
     rm "go1.23.2.linux-${ARCH}.tar.gz"
 
-# Install Antithesis Python SDK
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g npm@latest
+RUN npm install -g pnpm@latest
+# Install Rust and Foundry
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    . $HOME/.cargo/env && \
+    curl -L https://foundry.paradigm.xyz | bash && \
+    . ~/.bashrc && \
+    foundryup
+
+# Add Foundry to PATH
+ENV PATH="/root/.foundry/bin:${PATH}"
 RUN pip install antithesis cffi --break-system-packages
 
-# Set up Go environment
+# Set Go environment
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/go"
+RUN npm install -g solc
+ENV PATH="$GOPATH/bin:$PATH"
+# Install Hardhat (as some projects might need it)
 
-# Create directories for Go code
-WORKDIR /opt/antithesis
+# Install Solidity compiler
 
-# Copy the necessary Go files and resources
+# Install abigen using Go (instead of problematic PPA)
+RUN go install github.com/ethereum/go-ethereum/cmd/abigen@latest
+WORKDIR /opt/antithesis 
 COPY ./entrypoint ./entrypoint
-COPY ./resources ./resources
-#COPY ./go-test-scripts ./go-test-scripts
-
-COPY go.mod ./go.mod
-COPY go.sum ./go.sum
-COPY main.go ./main.go
 COPY ./main ./test/v1/main
+RUN npm install -g hardhat
 
-# Make all files in ./test/v1/main executable
-RUN chmod +x ./test/v1/main/*
 
-# Download Go dependencies
-RUN go mod download
 
-# Build the Go application
-ENV CGO_ENABLED=1
-RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') go build -o ./app ./main.go
+# Clone and build filwizard
+RUN git clone -b api-properties https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
 
-RUN rm ./main.go
+WORKDIR /opt/antithesis/FilWizard
 
-# Set the entrypoint to an idle state
+RUN make build
+
+RUN cp ./filwizard /usr/local/bin/filwizard
+RUN filwizard contract clone-config --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace 
+RUN ls 
+RUN git clone -b devnet-support-v2 https://github.com/parthshah1/synapse-sdk /opt/antithesis/synapse-sdk
+
+WORKDIR /opt/antithesis/synapse-sdk
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+ENV CI=true
+RUN pnpm --filter @filoz/synapse-sdk add @sentry/browser@^10.21.0 @sentry/node@^10.21.0 --save-optional
+
+# Install core dependencies first
+RUN pnpm install --filter @filoz/synapse-core
+
+# Build core
+RUN pnpm --filter @filoz/synapse-core run build
+
+
+
+# Install SDK dependencies
+RUN pnpm install --filter @filoz/synapse-sdk 
+
+# Install ethers at root so utils scripts can find it
+# Force workspace root installation and ignore workspace check
+RUN pnpm config set ignore-workspace-root-check true && \
+    pnpm add -w ethers
+
+# Build SDK
+RUN pnpm --filter @filoz/synapse-sdk run build
+
+WORKDIR /opt/antithesis/FilWizard
 ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]
