@@ -11,7 +11,6 @@ x-templates:
       - ./data/lotus1:${LOTUS_1_DATA_DIR}
       - ./shared/configs:${SHARED_CONFIGS}
       - ./data/curio_repo:${CURIO_REPO_PATH}:rw
-      #- ./data/curio_storage:${CURIO_REPO_PATH}/storage:rw  # actual storage
     pull_policy: never
   needs_drand0_started: &needs_drand0_started
     depends_on:
@@ -122,11 +121,7 @@ services:
   curio:
     <<: [*filecoin_service]
     image: curio:${CURIO_TAG:-dynamic}
-    container_name: curio
-    #environment:
-      #- CURIO_IP=${CURIO_IP}
-      #- CURIO_PDP_VERIFIER_ADDRESS=${CURIO_PDP_VERIFIER_ADDRESS}
-      #- CURIO_REPO_PATH=${CURIO_REPO_PATH} 
+    container_name: curio 
     ports:
       - "4343:443"
       - "8080:80"
@@ -143,7 +138,7 @@ services:
         condition: service_started
 
   workload:
-    <<: [*filecoin_service]
+    <<: [*filecoin_service, *needs_lotus0_healthy]
     image: workload:dynamic
     container_name: workload
     depends_on:
