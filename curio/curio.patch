@@ -1,3 +1,12 @@
+diff --git a/extern/filecoin-ffi b/extern/filecoin-ffi
+index 586063e9..7315a33e 160000
+--- a/extern/filecoin-ffi
++++ b/extern/filecoin-ffi
+@@ -1 +1 @@
+-Subproject commit 586063e9cfa45147d554f176759520398715ba41
++Subproject commit 7315a33ed47f27ef8b224c752268ee73e12cdb19
+diff --git a/pdp/contract/addresses.go b/pdp/contract/addresses.go
+index 32e1b685..499ccdfc 100644
 --- a/pdp/contract/addresses.go
 +++ b/pdp/contract/addresses.go
 @@ -2,6 +2,7 @@ package contract
@@ -8,7 +17,7 @@
  
  	"github.com/ethereum/go-ethereum/common"
  	"github.com/snadrus/must"
-@@ -23,25 +24,153 @@ type RecordKeeperAddresses struct {
+@@ -23,25 +24,161 @@ type RecordKeeperAddresses struct {
  }
  
  func (a RecordKeeperAddresses) List() []common.Address {
@@ -116,9 +125,11 @@
 +				FWSService: common.HexToAddress(recordKeeperAddr), // FWSS Proxy - https://github.com/FilOzone/filecoin-services/releases/tag/v1.0.0
  			},
  		}
++		zeroAddr := common.Address{}
 +		log.Infof("PDP Contract Addresses (Calibnet):")
-+		log.Infof("  PDPVerifier: %s", contracts.PDPVerifier)
-+		log.Infof("  RecordKeeper (FWSService): %s", contracts.AllowedPublicRecordKeepers.FWSService)
++		log.Infof("  PDPVerifier: %s (zero: %v)", contracts.PDPVerifier, contracts.PDPVerifier == zeroAddr)
++		log.Infof("  RecordKeeper (FWSService): %s (zero: %v)", contracts.AllowedPublicRecordKeepers.FWSService, contracts.AllowedPublicRecordKeepers.FWSService == zeroAddr)
++		log.Infof("  RecordKeeper (Simple): %s (zero: %v)", contracts.AllowedPublicRecordKeepers.Simple, contracts.AllowedPublicRecordKeepers.Simple == zeroAddr)
 +		return contracts
  	case build.BuildMainnet:
 -		return PDPContracts{
@@ -127,14 +138,15 @@
 +		recordKeeperAddr := getRecordKeeperAddress("0x8408502033C418E1bbC97cE9ac48E5528F371A9f")
 +		contracts := PDPContracts{
 +			PDPVerifier: common.HexToAddress(pdpVerifierAddr), // PDPVerifier Proxy v3.1.0 - https://github.com/FilOzone/pdp/releases/tag/v3.1.0
- 			AllowedPublicRecordKeepers: RecordKeeperAddresses{
--				FWSService: common.HexToAddress("0x8408502033C418E1bbC97cE9ac48E5528F371A9f"), // FWSS Proxy - https://github.com/FilOzone/filecoin-services/releases/tag/v1.0.0
++			AllowedPublicRecordKeepers: RecordKeeperAddresses{
 +				FWSService: common.HexToAddress(recordKeeperAddr), // FWSS Proxy - https://github.com/FilOzone/filecoin-services/releases/tag/v1.0.0
- 			},
- 		}
++			},
++		}
++		zeroAddr := common.Address{}
 +		log.Infof("PDP Contract Addresses (Mainnet):")
-+		log.Infof("  PDPVerifier: %s", contracts.PDPVerifier)
-+		log.Infof("  RecordKeeper (FWSService): %s", contracts.AllowedPublicRecordKeepers.FWSService)
++		log.Infof("  PDPVerifier: %s (zero: %v)", contracts.PDPVerifier, contracts.PDPVerifier == zeroAddr)
++		log.Infof("  RecordKeeper (FWSService): %s (zero: %v)", contracts.AllowedPublicRecordKeepers.FWSService, contracts.AllowedPublicRecordKeepers.FWSService == zeroAddr)
++		log.Infof("  RecordKeeper (Simple): %s (zero: %v)", contracts.AllowedPublicRecordKeepers.Simple, contracts.AllowedPublicRecordKeepers.Simple == zeroAddr)
 +		return contracts
 +	case build.Build2k:
 +		// Build2k requires all contract addresses to be provided via environment variables
@@ -148,15 +160,17 @@
 +
 +		contracts := PDPContracts{
 +			PDPVerifier: common.HexToAddress(pdpVerifierAddr),
-+			AllowedPublicRecordKeepers: RecordKeeperAddresses{
+ 			AllowedPublicRecordKeepers: RecordKeeperAddresses{
+-				FWSService: common.HexToAddress("0x8408502033C418E1bbC97cE9ac48E5528F371A9f"), // FWSS Proxy - https://github.com/FilOzone/filecoin-services/releases/tag/v1.0.0
 +				FWSService: common.HexToAddress(recordKeeperAddr),
-+			},
-+		}
+ 			},
+ 		}
 +
 +		zeroAddr := common.Address{}
 +		log.Infof("PDP Contract Addresses (Build2k):")
 +		log.Infof("  PDPVerifier: %s (zero: %v)", contracts.PDPVerifier, contracts.PDPVerifier == zeroAddr)
 +		log.Infof("  RecordKeeper (FWSService): %s (zero: %v)", contracts.AllowedPublicRecordKeepers.FWSService, contracts.AllowedPublicRecordKeepers.FWSService == zeroAddr)
++		log.Infof("  RecordKeeper (Simple): %s (zero: %v)", contracts.AllowedPublicRecordKeepers.Simple, contracts.AllowedPublicRecordKeepers.Simple == zeroAddr)
 +
 +		if contracts.PDPVerifier == zeroAddr {
 +			log.Warnf("WARNING: PDPVerifier address is zero/empty")
@@ -164,12 +178,15 @@
 +		if contracts.AllowedPublicRecordKeepers.FWSService == zeroAddr {
 +			log.Warnf("WARNING: RecordKeeper (FWSService) address is zero/empty")
 +		}
++		if contracts.AllowedPublicRecordKeepers.Simple == zeroAddr {
++			log.Warnf("WARNING: RecordKeeper (Simple) address is zero/empty")
++		}
 +
 +		return contracts
  	default:
  		panic("PDP contract unknown for this network")
  	}
-@@ -61,12 +190,39 @@ func IsPublicService(serviceLabel string) bool {
+@@ -61,12 +198,39 @@ func IsPublicService(serviceLabel string) bool {
  // IsRecordKeeperAllowed checks if a recordkeeper address is in the whitelist
  // Returns true if the address is allowed, or if there's no whitelist for the network
  func IsRecordKeeperAllowed(recordKeeper common.Address) bool {
@@ -210,7 +227,7 @@
  	return false
  }
  
-@@ -74,11 +230,34 @@ const ServiceRegistryMainnet = "0xf55dDbf63F1b55c3F1D4FA7e339a68AB7b64A5eB"  //
+@@ -74,11 +238,34 @@ const ServiceRegistryMainnet = "0xf55dDbf63F1b55c3F1D4FA7e339a68AB7b64A5eB"  //
  const ServiceRegistryCalibnet = "0x839e5c9988e4e9977d40708d0094103c0839Ac9D" // ServiceProviderRegistry Proxy - https://github.com/FilOzone/filecoin-services/releases/tag/v1.0.0
  
  func ServiceRegistryAddress() (common.Address, error) {
@@ -247,7 +264,7 @@
  	default:
  		return common.Address{}, xerrors.Errorf("service registry address not set for this network %s", build.BuildTypeString()[1:])
  	}
-@@ -88,11 +267,34 @@ const USDFCAddressMainnet = "0x80B98d3aa09ffff255c3ba4A241111Ff1262F045"
+@@ -88,11 +275,34 @@ const USDFCAddressMainnet = "0x80B98d3aa09ffff255c3ba4A241111Ff1262F045"
  const USDFCAddressCalibnet = "0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0"
  
  func USDFCAddress() (common.Address, error) {
@@ -285,10 +302,10 @@
  		return common.Address{}, xerrors.Errorf("USDFC address not set for this network %s", build.BuildTypeString()[1:])
  	}
 diff --git a/pdp/contract/utils.go b/pdp/contract/utils.go
-index 4b3e15be..cc4c91a8 100644
+index e8eb8cf4..9eeea687 100644
 --- a/pdp/contract/utils.go
 +++ b/pdp/contract/utils.go
-@@ -126,30 +126,71 @@ func encodeBool(b bool) []byte {
+@@ -126,17 +126,74 @@ func encodeBool(b bool) []byte {
  // an IPDPProvingSchedule instance bound to the appropriate address.
  // It uses the view contract address if available, otherwise uses the listener address directly.
  func GetProvingScheduleFromListener(listenerAddr common.Address, ethClient *ethclient.Client) (*IPDPProvingSchedule, error) {
@@ -335,18 +352,37 @@ index 4b3e15be..cc4c91a8 100644
 +			log.Debugw("View contract address is zero, using listener address directly",
 +				"dataSetId", dataSetId,
 +				"listenerAddr", listenerAddr.Hex())
- 		}
- 	}
- 
++		}
++	}
++
 +	log.Infow("Final proving schedule contract address",
 +		"dataSetId", dataSetId,
 +		"listenerAddr", listenerAddr.Hex(),
 +		"scheduleContractAddr", provingScheduleAddr.Hex(),
 +		"isZero", provingScheduleAddr == common.Address{})
 +
- 	// Create and return the IPDPProvingSchedule binding
- 	// This works whether provingScheduleAddr points to:
- 	// - The view contract (which must implement IPDPProvingSchedule)
++	// Check if contract has code deployed (debugging)
++	code, err := ethClient.CodeAt(context.Background(), provingScheduleAddr, nil)
++	if err != nil {
++		log.Warnw("Failed to get contract code",
++			"dataSetId", dataSetId,
++			"scheduleContractAddr", provingScheduleAddr.Hex(),
++			"error", err)
++	} else {
++		log.Infow("Contract code check",
++			"dataSetId", dataSetId,
++			"scheduleContractAddr", provingScheduleAddr.Hex(),
++			"codeSize", len(code),
++			"hasCode", len(code) > 0)
++		if len(code) == 0 {
++			log.Errorw("Contract has no code deployed",
++				"dataSetId", dataSetId,
++				"scheduleContractAddr", provingScheduleAddr.Hex())
++			return nil, common.Address{}, xerrors.Errorf("contract at %s has no code deployed", provingScheduleAddr.Hex())
+ 		}
+ 	}
+ 
+@@ -146,10 +203,15 @@ func GetProvingScheduleFromListener(listenerAddr common.Address, ethClient *ethc
  	// - The listener itself (where listener must implement IPDPProvingSchedule)
  	provingSchedule, err := NewIPDPProvingSchedule(provingScheduleAddr, ethClient)
  	if err != nil {
@@ -409,10 +445,20 @@ index f7200d45..1444c213 100644
  		return
  	}
 diff --git a/tasks/pdp/proofset_create_watch.go b/tasks/pdp/proofset_create_watch.go
-index 5759a996..b6dac801 100644
+index 5759a996..1e9062b3 100644
 --- a/tasks/pdp/proofset_create_watch.go
 +++ b/tasks/pdp/proofset_create_watch.go
-@@ -88,7 +88,12 @@ func processDataSetCreate(ctx context.Context, db *harmonydb.DB, psc DataSetCrea
+@@ -3,7 +3,9 @@ package pdp
+ import (
+ 	"context"
+ 	"encoding/json"
++	"fmt"
+ 	"math/big"
++	"strings"
+ 
+ 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+ 	"github.com/ethereum/go-ethereum/common"
+@@ -88,7 +90,12 @@ func processDataSetCreate(ctx context.Context, db *harmonydb.DB, psc DataSetCrea
  	log.Infow("Extracted dataSetId from receipt", "txHash", psc.CreateMessageHash, "dataSetId", dataSetId)
  
  	// Get the listener address for this data set from the PDPVerifier contract
@@ -426,7 +472,7 @@ index 5759a996..b6dac801 100644
  	if err != nil {
  		return xerrors.Errorf("failed to instantiate PDPVerifier contract: %w", err)
  	}
-@@ -97,13 +102,50 @@ func processDataSetCreate(ctx context.Context, db *harmonydb.DB, psc DataSetCrea
+@@ -97,13 +104,50 @@ func processDataSetCreate(ctx context.Context, db *harmonydb.DB, psc DataSetCrea
  	if err != nil {
  		return xerrors.Errorf("failed to get listener address for data set %d: %w", dataSetId, err)
  	}
@@ -478,7 +524,7 @@ index 5759a996..b6dac801 100644
  	_, err = db.BeginTransaction(ctx, func(tx *harmonydb.Tx) (bool, error) {
  		// Insert a new entry into pdp_data_sets
  		_, err = tx.Exec(`
-@@ -162,17 +204,39 @@ func extractDataSetIdFromReceipt(receipt *types.Receipt) (int64, error) {
+@@ -162,17 +206,49 @@ func extractDataSetIdFromReceipt(receipt *types.Receipt) (int64, error) {
  	return 0, xerrors.Errorf("DataSetCreated event not found in receipt")
  }
  
@@ -507,7 +553,17 @@ index 5759a996..b6dac801 100644
 +			"dataSetId", dataSetId,
 +			"listenerAddr", listenerAddr.Hex(),
 +			"scheduleContractAddr", scheduleAddr.Hex(),
-+			"error", err)
++			"error", err,
++			"errorType", fmt.Sprintf("%T", err))
++
++		// Additional debugging: Check if this is a revert with data
++		errMsg := err.Error()
++		log.Errorw("GetPDPConfig detailed error",
++			"dataSetId", dataSetId,
++			"errorMessage", errMsg,
++			"containsRevert", strings.Contains(errMsg, "revert"),
++			"containsExit33", strings.Contains(errMsg, "exit=[33]"))
++
  		return 0, 0, xerrors.Errorf("failed to GetPDPConfig: %w", err)
  	}
  

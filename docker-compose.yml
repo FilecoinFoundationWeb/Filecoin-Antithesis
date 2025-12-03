@@ -212,7 +212,7 @@ services:
       lotus-2: 
         condition: service_healthy
 
-  #Forest service
+  # #Forest service
   forest:
     image: forest:${FOREST_COMMIT:-latest}
     container_name: forest
@@ -292,7 +292,7 @@ services:
 
   #Workload service
   workload:
-    image: workload:${WORKLOAD_TAG:-filwizard}
+    image: workload:latest
     container_name: workload
     volumes:
       - ./data/lotus-1:/root/devgen/lotus-1

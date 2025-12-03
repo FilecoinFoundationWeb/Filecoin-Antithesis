@@ -13,7 +13,7 @@ RUN apt-get update -y && \
     rm "go1.23.2.linux-${ARCH}.tar.gz"
 
 # Install Node.js and npm
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
     npm install -g npm@latest
 RUN npm install -g pnpm@latest
@@ -45,40 +45,36 @@ COPY ./main ./test/v1/main
 RUN npm install -g hardhat
 
 
-
+RUN ls -la /opt/antithesis
 # Clone and build filwizard
-RUN git clone -b api-properties https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
+RUN git clone https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
+
 
 WORKDIR /opt/antithesis/FilWizard
-
+RUN git checkout api-properties
 RUN make build
 
 RUN cp ./filwizard /usr/local/bin/filwizard
 RUN filwizard contract clone-config --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace 
-RUN ls 
-RUN git clone -b devnet-support-v2 https://github.com/parthshah1/synapse-sdk /opt/antithesis/synapse-sdk
-
+RUN git clone https://github.com/parthshah1/synapse-sdk /opt/antithesis/synapse-sdk
 WORKDIR /opt/antithesis/synapse-sdk
+RUN git pull
+RUN git checkout antithesis-util-scripts
+
 ENV NODE_OPTIONS="--max-old-space-size=8192"
 ENV CI=true
-RUN pnpm --filter @filoz/synapse-sdk add @sentry/browser@^10.21.0 @sentry/node@^10.21.0 --save-optional
 
-# Install core dependencies first
-RUN pnpm install --filter @filoz/synapse-core --no-optional
+# Install all workspace dependencies at once
+RUN pnpm install
 
-# Build core
+# Build core first (dependency of SDK)
 RUN pnpm --filter @filoz/synapse-core run build
 
+# Build SDK
+RUN pnpm --filter @filoz/synapse-sdk run build
 
-
-# Install SDK dependencies
-RUN pnpm install --filter @filoz/synapse-sdk --no-optional
-
-# Install ethers at root so utils scripts can find it
-# Force workspace root installation and ignore workspace check
-RUN pnpm config set ignore-workspace-root-check true && \
-    pnpm add -w ethers --no-optional
-
+# Install ethers at root for utils scripts
+RUN pnpm add -w ethers
 # Build SDK
 RUN pnpm --filter @filoz/synapse-sdk run build
 

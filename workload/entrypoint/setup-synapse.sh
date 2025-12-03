@@ -83,9 +83,9 @@ CURIO_SHARED_DIR="/root/devgen/curio"
 mkdir -p "$CURIO_SHARED_DIR"
 cp "$ENV_FILE" "$CURIO_SHARED_DIR/.env.devnet" || exit 1
 
-filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$CLIENT_PRIVATE_KEY" --amount 10000000000000000000 --fil 0 || exit 1
+filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$CLIENT_PRIVATE_KEY" --amount 100000000000000000000 --fil 0 || exit 1
 filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$CLIENT_PRIVATE_KEY" --amount 0 --fil 10 || exit 1
-filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$SP_PRIVATE_KEY" --amount 10000000000000000000 --fil 0 || exit 1
+filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$SP_PRIVATE_KEY" --amount 100000000000000000000 --fil 0 || exit 1
 filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$SP_PRIVATE_KEY" --amount 0 --fil 10 || exit 1
 rm -f "$CLIENT_KEYS_FILE"
 
@@ -93,8 +93,6 @@ export $(cat "$ENV_FILE" | grep -v '^#' | xargs)
 cd /opt/antithesis/synapse-sdk
 export ENV_FILE="/opt/antithesis/synapse-sdk/.env.devnet"
 export SERVICE_URL="${SP_SERVICE_URL:-http://curio:80}"
-
-node /opt/antithesis/synapse-sdk/utils/debug-curio-ping.js || exit 1
 
 REGISTER_OUTPUT=$(node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/sp-tool.js register \
     --name "${SP_NAME:-My Devnet Provider}" \
@@ -104,13 +102,12 @@ REGISTER_OUTPUT=$(node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/
 PROVIDER_ID=$(echo "$REGISTER_OUTPUT" | sed -n 's/.*Provider registered with ID: \([0-9]*\).*/\1/p' | head -1)
 [ -z "$PROVIDER_ID" ] && { echo -e "${RED}ERROR: Could not extract Provider ID${NC}" >&2; exit 1; }
 
-node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/sp-tool.js info --id "$PROVIDER_ID" --network devnet || exit 1
-node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/sp-tool.js warm-add --id "$PROVIDER_ID" --network devnet || exit 1
-node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/post-deploy-setup.js --mode client || exit 1
+# node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/sp-tool.js info --id "$PROVIDER_ID" --network devnet || exit 1
+# node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/sp-tool.js warm-add --id "$PROVIDER_ID" --network devnet || exit 1
+# node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/post-deploy-setup.js --mode client 
 
 # TEST_UPLOAD="${TEST_UPLOAD:-n}"
 # [ "$TEST_UPLOAD" = "y" ] && node /opt/antithesis/synapse-sdk/utils/test-piece-upload-flow.js
 
-node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/example-storage-e2e.js /opt/antithesis/synapse-sdk/utils/sp-tool.js /opt/antithesis/synapse-sdk/utils/example-storage-e2e.js || exit 1
 sleep infinity
 
