@@ -17,11 +17,10 @@ fi
 current_time=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
 echo "Current system time: $current_time"
 
-# RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.26:1235/rpc/v0}"
-RPC_LOTUS="${RPC_LOTUS:-http://lotus0:${LOTUS_RPC_PORT:-1234}/rpc/v0}"
+RPC_LOTUS="${RPC_LOTUS:-http://lotus-0:1234/rpc/v0}"
 
 # Waiting for the chain head to pass a certain height
-INIT_BLOCK_HEIGHT="${INIT_BLOCK_HEIGHT:-5}"
+INIT_BLOCK_HEIGHT=5
 BLOCK_HEIGHT_REACHED=0
 
 echo "Workload [entrypoint]: waiting for block height to reach ${INIT_BLOCK_HEIGHT}"
@@ -37,14 +36,11 @@ do
 done
 
 echo "Workload [entrypoint]: chainhead has reached block height ${INIT_BLOCK_HEIGHT}"
-# export FILECOIN_RPC="http://lotus-1:1234/rpc/v1"
-export FILECOIN_RPC="$RPC_LOTUS"
-
-# export FILECOIN_TOKEN=$(cat /root/devgen/lotus-1/jwt)
-export FILECOIN_TOKEN=$(cat ${LOTUS_0_PATH}/token)
-
-# export ETH_RPC_URL="http://lotus-1:1234/rpc/v1"
-export ETH_RPC_URL="$RPC_LOTUS"
+export FILECOIN_RPC="http://lotus-0:1234/rpc/v1"
+echo LOTUS_0_DATA_DIR=$LOTUS_0_DATA_DIR
+export FILECOIN_TOKEN=$(cat $LOTUS_0_DATA_DIR/lotus0-jwt)
+#echo FILECOIN_TOKEN=$FILECOIN_TOKEN
+export ETH_RPC_URL="http://lotus-0:1234/rpc/v1"
 pwd
 filwizard contract deploy-local --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace --rpc-url "$FILECOIN_RPC" --create-deployer --bindings || echo "Filwizard deployment completed with warnings/errors, but continuing..."
 

@@ -1,6 +1,6 @@
 # STAGE 1: Use the pre-built lotus image as a source for its binaries
 # This avoids rebuilding lotus and uses the same version as the rest of your environment.
-ARG LOTUS_TAG=dynamic
+ARG LOTUS_TAG=latest
 FROM lotus:${LOTUS_TAG} as lotus-builder
 
 FROM docker.io/golang:latest
@@ -59,6 +59,4 @@ RUN install -C curio /usr/local/bin/curio
 RUN install -C pdptool /usr/local/bin/pdptool
 RUN install -C sptool /usr/local/bin/sptool
 RUN curio fetch-params 2048
-COPY start_scripts/curio-init.sh /opt/curio/start_scripts/curio-init.sh
-RUN chmod +x /opt/curio/start_scripts/curio-init.sh
 ENTRYPOINT ["sleep", "infinity"] 

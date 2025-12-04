@@ -18,6 +18,8 @@ ENV_FILE="/opt/antithesis/synapse-sdk/.env.devnet"
 WORKSPACE_PATH="/opt/antithesis/FilWizard/workspace"
 DEPLOYMENTS_FILE="/opt/antithesis/FilWizard/workspace/deployments.json"
 
+echo FILECOIN_RPC="$FILECOIN_RPC"
+
 if [ ! -f "$DEPLOYMENTS_FILE" ]; then
     filwizard contract deploy-local --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace --rpc-url "$FILECOIN_RPC" --create-deployer --bindings || exit 1
 fi
@@ -66,7 +68,7 @@ SP_PRIVATE_KEY=$(cat "$SP_PRIVATE_KEY_FILE" | tr -d '[:space:]')
 
 cat > "$ENV_FILE" << EOF
 NETWORK=devnet
-RPC_URL=http://lotus-1:1234/rpc/v1
+RPC_URL=http://lotus-0:1234/rpc/v1
 WARM_STORAGE_CONTRACT_ADDRESS=$WARM_STORAGE_CONTRACT_ADDRESS
 WARM_STORAGE_VIEW_ADDRESS=$WARM_STORAGE_VIEW_ADDRESS
 SP_REGISTRY_ADDRESS=$SP_REGISTRY_ADDRESS
@@ -83,9 +85,9 @@ CURIO_SHARED_DIR="/root/devgen/curio"
 mkdir -p "$CURIO_SHARED_DIR"
 cp "$ENV_FILE" "$CURIO_SHARED_DIR/.env.devnet" || exit 1
 
-filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$CLIENT_PRIVATE_KEY" --amount 10000000000000000000 --fil 0 || exit 1
+filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$CLIENT_PRIVATE_KEY" --amount 1000000000000000000000 --fil 0 || exit 1
 filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$CLIENT_PRIVATE_KEY" --amount 0 --fil 10 || exit 1
-filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$SP_PRIVATE_KEY" --amount 10000000000000000000 --fil 0 || exit 1
+filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$SP_PRIVATE_KEY" --amount 10000000000000000000000 --fil 0 || exit 1
 filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" --private-key "$SP_PRIVATE_KEY" --amount 0 --fil 10 || exit 1
 rm -f "$CLIENT_KEYS_FILE"
 
@@ -94,23 +96,18 @@ cd /opt/antithesis/synapse-sdk
 export ENV_FILE="/opt/antithesis/synapse-sdk/.env.devnet"
 export SERVICE_URL="${SP_SERVICE_URL:-http://curio:80}"
 
-node /opt/antithesis/synapse-sdk/utils/debug-curio-ping.js || exit 1
-
 REGISTER_OUTPUT=$(node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/sp-tool.js register \
     --name "${SP_NAME:-My Devnet Provider}" \
     --http "${SP_SERVICE_URL:-http://curio:80}" \
     --network devnet 2>&1) || { echo "$REGISTER_OUTPUT" >&2; exit 1; }
-
+echo $REGISTER_OUTPUT
 PROVIDER_ID=$(echo "$REGISTER_OUTPUT" | sed -n 's/.*Provider registered with ID: \([0-9]*\).*/\1/p' | head -1)
 [ -z "$PROVIDER_ID" ] && { echo -e "${RED}ERROR: Could not extract Provider ID${NC}" >&2; exit 1; }
-
+echo $PROVIDER_ID
 node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/sp-tool.js info --id "$PROVIDER_ID" --network devnet || exit 1
 node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/sp-tool.js warm-add --id "$PROVIDER_ID" --network devnet || exit 1
-node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/post-deploy-setup.js --mode client || exit 1
+node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/post-deploy-setup.js --mode client 
+ls
+node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/example-storage-e2e.js /opt/antithesis/synapse-sdk/README.md
 
-# TEST_UPLOAD="${TEST_UPLOAD:-n}"
-# [ "$TEST_UPLOAD" = "y" ] && node /opt/antithesis/synapse-sdk/utils/test-piece-upload-flow.js
-
-node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/example-storage-e2e.js /opt/antithesis/synapse-sdk/utils/sp-tool.js /opt/antithesis/synapse-sdk/utils/example-storage-e2e.js || exit 1
 sleep infinity
-

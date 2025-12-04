@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 set -e
 echo CURIO_REPO_PATH=$CURIO_REPO_PATH
-export LOTUS_PATH=${LOTUS_1_PATH}
+export LOTUS_PATH=${LOTUS_0_PATH}
+echo LOTUS_PATH=$LOTUS_PATH
 echo Wait for lotus is ready ...
 lotus wait-api
 head=0
 # Loop until the head is greater than 9
-while [[ $head -le 9 ]]; do
+while [[ $head -le 5 ]]; do
     head=$(lotus chain list | awk '{print $1}' | awk -F':' '{print $1}' | tail -1)
-    if [[ $head -le 9 ]]; then
-        echo "Current head: $head, which is not greater than 9. Waiting..."
+    if [[ $head -le 5 ]]; then
+        echo "Current head: $head, which is not greater than 5. Waiting..."
         sleep 1  # Wait for 4 seconds before checking again
     else
-        echo "The head is now greater than 9: $head"
+        echo "The head is now greater than 5: $head"
     fi
 done
 
 echo All ready. Lets go
-#myip=`nslookup curio | grep -v "#" | grep Address | awk '{print $2}'`
-myip="curio"
+myip=`nslookup curio | grep -v "#" | grep Address | awk '{print $2}'`
 
 if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
   echo Wait for lotus-miner is ready ...
@@ -64,12 +64,12 @@ if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
   CURIO_PID=$!
   sleep 20
   
-  until curio cli --machine "$myip":12300 wait-api; do
+  until curio cli --machine $myip:12300 wait-api; do
     echo "Waiting for the curio CLI to become ready..."
     sleep 5
   done
   
-  curio cli --machine "$myip":12300 storage attach --init --seal --store $CURIO_REPO_PATH
+  curio cli --machine $myip:12300 storage attach --init --seal --store $CURIO_REPO_PATH
   
   echo "Stopping temporary Curio node..."
   kill -15 $CURIO_PID || kill -9 $CURIO_PID
@@ -88,7 +88,7 @@ if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
     sleep 20
   # Wait for the node to be ready using curio cli
   echo "Waiting for Curio API to be ready..."
-  until curio cli --machine "$myip":12300 wait-api; do
+  until curio cli --machine $myip:12300 wait-api; do
     echo "Waiting for the curio CLI to become ready..."
     sleep 5
   done
@@ -119,7 +119,7 @@ if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
   echo "Importing private key via RPC..."
   curl -X POST -H "Content-Type: application/json" \
     -d "{\"jsonrpc\":\"2.0\",\"method\":\"CurioWeb.ImportPDPKey\",\"params\":[\"$PRIVATE_KEY_HEX\"],\"id\":1}" \
-    "http://${myip}:4701/api/webrpc/v0"
+    http://${myip}:4701/api/webrpc/v0
 
   # Create PDP service using RPC
   echo "Creating PDP service via RPC..."
@@ -127,7 +127,7 @@ if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
   JSON_PUB_KEY=$(echo "$PUB_KEY" | awk '{printf "%s\\n", $0}' | sed 's/\\n$//')
   curl -X POST -H "Content-Type: application/json" \
     -d "{\"jsonrpc\":\"2.0\",\"method\":\"CurioWeb.AddPDPService\",\"params\":[\"pdp\",\"$JSON_PUB_KEY\"],\"id\":2}" \
-    "http://${myip}:4701/api/webrpc/v0"
+    http://${myip}:4701/api/webrpc/v0
 
   # Create JWT token
   echo "Creating JWT token..."
