@@ -45,11 +45,10 @@ COPY ./main ./test/v1/main
 RUN npm install -g hardhat
 
 
-RUN ls -la /opt/antithesis
 # Clone and build filwizard
 RUN git clone https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
 
-
+RUN ls
 WORKDIR /opt/antithesis/FilWizard
 RUN git checkout api-properties
 RUN make build

@@ -20,7 +20,7 @@ echo "Current system time: $current_time"
 RPC_LOTUS="${RPC_LOTUS:-http://10.20.20.26:1235/rpc/v0}"
 
 # Waiting for the chain head to pass a certain height
-INIT_BLOCK_HEIGHT=11 
+INIT_BLOCK_HEIGHT=5
 BLOCK_HEIGHT_REACHED=0
 
 echo "Workload [entrypoint]: waiting for block height to reach ${INIT_BLOCK_HEIGHT}"
