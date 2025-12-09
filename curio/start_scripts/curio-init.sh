@@ -21,8 +21,6 @@ echo All ready. Lets go
 # myip=`nslookup curio | grep -v "#" | grep Address | awk '{print $2}'`
 myip=$(getent hosts curio | awk '{print $1}')
 
-echo In curio-init,myip:$myip
-
 if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
   echo Wait for lotus-miner is ready ...
   lotus wait-api
