@@ -133,7 +133,6 @@ services:
       - ./data/forest0:${FOREST_0_DATA_DIR}
       - ./shared/configs:${SHARED_CONFIGS}
       - ./data/curio:/var/lib/curio:rw
-      - ../curio/start_scripts/curio-init.sh:${CURIO_DATA_DIR}/curio-init.sh
       - ./data/lotus0:/root/devgen/lotus0
       - ./data/lotus1:/root/devgen/lotus1
       - ./data/forest:/root/devgen/forest
