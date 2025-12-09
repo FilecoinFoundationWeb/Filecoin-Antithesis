@@ -108,15 +108,6 @@ services:
     <<: [*filecoin_service]
     image: curio:${CURIO_TAG:-latest}
     container_name: curio
-    # volumes:
-    #   - ./data/curio:/var/lib/curio:rw
-    #   # - ./data/lotus0:${LOTUS_0_DATA_DIR}
-    #   # - ./data/lotus1:${LOTUS_1_DATA_DIR}
-    #   # - ./data/forest:${FOREST_0_DATA_DIR}
-    #   - ../curio/start_scripts/curio-init.sh:${CURIO_DATA_DIR}/curio-init.sh
-    environment:
-      - CURIO_IP=${CURIO_IP}
-      - CURIO_PDP_VERIFIER_ADDRESS=${CURIO_PDP_VERIFIER_ADDRESS}
     ports:
       - "4433:443"
       - "8080:80"
@@ -124,9 +115,6 @@ services:
       - "4701:4701"
       - "32100:32100"
     entrypoint: ["${CURIO_DATA_DIR}/curio-init.sh"]
-    # networks:
-    #   antithesis-net:
-    #     ipv4_address: ${CURIO_IP}
     depends_on:
       lotus0:
         condition: service_healthy
@@ -140,20 +128,24 @@ services:
     <<: [*filecoin_service]
     image: workload:latest
     container_name: workload
-    # volumes:
-    #   - ./data/lotus0:/root/devgen/lotus0
-    #   - ./data/lotus1:/root/devgen/lotus1
-    #   - ./data/forest:/root/devgen/forest
-    #   - ./data/curio:/root/devgen/curio
-    # networks:
-    #   antithesis-net:
-    #     ipv4_address: 10.20.20.30
+    volumes:
+      - ./data/lotus0:${LOTUS_0_DATA_DIR}
+      - ./data/lotus1:${LOTUS_1_DATA_DIR}
+      - ./data/forest0:${FOREST_0_DATA_DIR}
+      - ./shared/configs:${SHARED_CONFIGS}
+      - ./data/curio:/var/lib/curio:rw
+      - ../curio/start_scripts/curio-init.sh:${CURIO_DATA_DIR}/curio-init.sh
+      - ./data/lotus0:/root/devgen/lotus0
+      - ./data/lotus1:/root/devgen/lotus1
+      - ./data/forest:/root/devgen/forest
+      - ./data/curio:/root/devgen/curio
     depends_on:
       lotus0:
         condition: service_healthy
         
   # Yugabyte Database Service
   yugabyte:
+    <<: [*filecoin_service]
     image: yugabytedb/yugabyte:latest
     container_name: yugabyte
     init: true
@@ -166,6 +158,3 @@ services:
       - TINI_SUBREAPER=true
     volumes:
       - ./data/yugabyte:/home/yugabyte/yb_data
-    # networks:
-    #   antithesis-net:
-    #     ipv4_address: ${YUGABYTE_IP}

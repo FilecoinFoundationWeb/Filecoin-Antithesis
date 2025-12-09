@@ -20,6 +20,8 @@ DEPLOYMENTS_FILE="/opt/antithesis/FilWizard/workspace/deployments.json"
 
 echo FILECOIN_RPC="$FILECOIN_RPC"
 
+echo ETH_RPC_URL="$ETH_RPC_URL"
+
 if [ ! -f "$DEPLOYMENTS_FILE" ]; then
     filwizard contract deploy-local --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace --rpc-url "$FILECOIN_RPC" --create-deployer --bindings || exit 1
 fi

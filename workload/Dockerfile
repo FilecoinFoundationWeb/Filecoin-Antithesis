@@ -40,8 +40,6 @@ ENV PATH="$GOPATH/bin:$PATH"
 # Install abigen using Go (instead of problematic PPA)
 RUN go install github.com/ethereum/go-ethereum/cmd/abigen@latest
 WORKDIR /opt/antithesis 
-# COPY ./entrypoint ./entrypoint
-# COPY ./main ./test/v1/main
 RUN npm install -g hardhat
 
 # Clone and build filwizard
