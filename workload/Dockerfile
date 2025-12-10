@@ -47,6 +47,7 @@ RUN git clone https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
 RUN ls
 WORKDIR /opt/antithesis/FilWizard
 
+# Install forge dependencies:
 RUN git checkout api-properties
 RUN make build
 
