@@ -41,16 +41,11 @@ ENV PATH="$GOPATH/bin:$PATH"
 RUN go install github.com/ethereum/go-ethereum/cmd/abigen@latest
 WORKDIR /opt/antithesis 
 RUN npm install -g hardhat
-
 # Clone and build filwizard
 RUN git clone https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
 
 RUN ls
 WORKDIR /opt/antithesis/FilWizard
-
-# Install forge dependencies:
-RUN forge install foundry-rs/forge-std && \
-    forge install OpenZeppelin/openzeppelin-contracts
 
 RUN git checkout api-properties
 RUN make build

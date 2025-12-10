@@ -38,7 +38,12 @@ build-drand:
 build-lotus:
 	@echo "Building lotus for $(TARGET_ARCH) architecture..."
 	@echo "Lotus tag: $(lotus_tag)"
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(lotus_tag) -t lotus:latest -f lotus/Dockerfile lotus
+	
+.PHONY: build-curio
+build-curio:
+	@echo "Building curio for $(TARGET_ARCH) architecture..."
+	@echo "Curio tag: $(curio_tag)"
+	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(curio_tag) -t curio:latest -f curio/Dockerfile curio
 
 .PHONY: build-workload
 build-workload:
@@ -51,7 +56,7 @@ run-localnet:
 
 # Build everything and run local docker compose up
 .PHONY: all
-all: build-drand build-forest build-lotus build-workload run-localnet
+all: build-drand build-forest build-lotus build-workload build-curio run-localnet
 
 # Show current target architecture
 .PHONY: show-arch
