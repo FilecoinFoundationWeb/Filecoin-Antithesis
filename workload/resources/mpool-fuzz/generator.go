@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
@@ -65,7 +64,7 @@ func checkStateWait(ctx context.Context, api api.FullNode, msgCids []cid.Cid, mu
 		}
 	}
 
-	assert.Sometimes(!foundOnChain, "Mempool fuzz validation: No mutated messages should be found on chain - invalid message mining detected", map[string]interface{}{
+	AssertSometimes("MpoolFuzzer", !foundOnChain, "Mempool fuzz validation: No mutated messages should be found on chain - invalid message mining detected", map[string]interface{}{
 		"operation":      "mpool_fuzz_validation",
 		"total_messages": len(msgCids),
 		"requirement":    "Invalid messages should never be mined",
