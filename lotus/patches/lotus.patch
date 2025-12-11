@@ -86,4 +86,32 @@
      "DelayMultiplier": 2,
      "BaseDecisionBackoffTable": [1.3, 1.69, 2.2, 2.86, 3.71, 4.83, 6.27, 7.5],
      "HeadLookback": 4,
-	 
+diff --git a/cmd/lotus-seed/genesis.go b/cmd/lotus-seed/genesis.go
+index 12d03b2bc..d423285cf 100644
+--- a/cmd/lotus-seed/genesis.go
++++ b/cmd/lotus-seed/genesis.go
+@@ -5,6 +5,7 @@ import (
+ 	"encoding/json"
+ 	"fmt"
+ 	"os"
++	"sort"
+ 	"strconv"
+ 	"strings"
+ 	"time"
+@@ -140,7 +141,15 @@ var genesisAddMinerCmd = &cli.Command{
+ 		}
+ 
+ 		balance := cctx.Int64("balance")
+-		for mn, miner := range miners {
++
++		var minerKeys []string
++		for k := range miners {
++			minerKeys = append(minerKeys, k)
++		}
++		sort.Strings(minerKeys)
++
++		for _, mn := range minerKeys {
++			miner := miners[mn]
+ 			log.Infof("Adding miner %s to genesis template", mn)
+ 			{
+ 				id := uint64(genesis2.MinerStart) + uint64(len(template.Miners))
