@@ -27,7 +27,7 @@ if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
 
   if [ ! -f $CURIO_REPO_PATH/.init.setup ]; then
     export DEFAULT_WALLET=`lotus wallet default`
-    lotus-shed miner create --deposit-margin-factor 1.01 $DEFAULT_WALLET $DEFAULT_WALLET $DEFAULT_WALLET 2KiB
+    lotus-shed miner create --deposit-margin-factor 1.01 $DEFAULT_WALLET $DEFAULT_WALLET $DEFAULT_WALLET 8MiB
     touch $CURIO_REPO_PATH/.init.setup
   fi
 
@@ -61,7 +61,7 @@ if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
 
   # Add storage attachment
   echo "Starting Curio node to attach storage..."
-  curio run --nosync --layers seal,post,pdp-only,gui &
+  CURIO_FAKE_CPU=5 curio run --nosync --layers seal,post,pdp-only,gui &
   CURIO_PID=$!
   sleep 20
   
@@ -84,7 +84,7 @@ if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
   
   # Start Curio node first
   echo "Starting Curio node for PDP setup..."
-  curio run --nosync --layers seal,post,pdp-only,gui &
+  CURIO_FAKE_CPU=5 curio run --nosync --layers seal,post,pdp-only,gui &
   CURIO_PID=$!
     sleep 20
   # Wait for the node to be ready using curio cli
@@ -168,6 +168,5 @@ echo "  Service Registry: $SERVICE_REGISTRY_ADDRESS"
 echo "  USDFC: $USDFC_ADDRESS"
 
 echo Starting curio node ...
-exec curio run --nosync --name devnet --layers seal,post,pdp-only,gui
-
+CURIO_FAKE_CPU=5 curio run --nosync --name devnet --layers seal,post,pdp-only,gui
 sleep infinity
