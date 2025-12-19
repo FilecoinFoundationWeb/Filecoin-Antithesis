@@ -1,0 +1,33 @@
+From c36efa7c061bd4146687eba35fcf537d02dfa0c4 Mon Sep 17 00:00:00 2001
+From: Richard <richard.yao@antithesis.com>
+Date: Wed, 17 Dec 2025 13:52:32 -0500
+Subject: [PATCH] increase cpu avail to run in antithesis
+
+---
+ harmony/resources/resources.go | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/harmony/resources/resources.go b/harmony/resources/resources.go
+index 98ba6192..b11c7cc2 100644
+--- a/harmony/resources/resources.go
++++ b/harmony/resources/resources.go
+@@ -5,7 +5,6 @@ import (
+ 	"context"
+ 	"os/exec"
+ 	"regexp"
+-	"runtime"
+ 	"sync/atomic"
+ 	"time"
+ 
+@@ -144,7 +143,7 @@ func getResources() (res Resources, err error) {
+ 	}
+ 
+ 	res = Resources{
+-		Cpu: runtime.NumCPU(),
++		Cpu: 32,
+ 		Ram: mem.Available,
+ 		Gpu: getGPUDevices(),
+ 	}
+-- 
+2.50.1
+
