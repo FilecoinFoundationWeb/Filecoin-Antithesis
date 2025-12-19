@@ -577,44 +577,32 @@ index 5759a996..1e9062b3 100644
  	return config.MaxProvingPeriod, config.ChallengeWindow.Uint64(), nil
  }
 diff --git a/harmony/resources/resources.go b/harmony/resources/resources.go
-index 98ba6192..c02e3684 100644
+index 98ba6192..177a66fa 100644
 --- a/harmony/resources/resources.go
 +++ b/harmony/resources/resources.go
-@@ -3,9 +3,11 @@ package resources
- import (
- 	"bytes"
+@@ -5,7 +5,6 @@ import (
  	"context"
-+	"os"
  	"os/exec"
  	"regexp"
- 	"runtime"
-+	"strconv"
+-	"runtime"
  	"sync/atomic"
  	"time"
  
-@@ -143,9 +145,23 @@ func getResources() (res Resources, err error) {
+@@ -138,14 +137,14 @@ func getResources() (res Resources, err error) {
  		return Resources{}, err
  	}
  
-+	cpuCount := runtime.NumCPU()
-+	if s := os.Getenv("CURIO_FAKE_CPU"); s != "" {
-+		if val, err := strconv.Atoi(s); err == nil {
-+			cpuCount = val
-+		}
-+	}
-+
-+	ramCount := mem.Available
-+	if s := os.Getenv("CURIO_FAKE_RAM"); s != "" {
-+		if val, err := strconv.ParseUint(s, 10, 64); err == nil {
-+			ramCount = val
-+		}
-+	}
-+
+-	mem, err := h.Memory()
++	_, err = h.Memory()
+ 	if err != nil {
+ 		return Resources{}, err
+ 	}
+ 
  	res = Resources{
 -		Cpu: runtime.NumCPU(),
 -		Ram: mem.Available,
-+		Cpu: cpuCount,
-+		Ram: ramCount,
++		Cpu: 32,
++		Ram: 34359738368,
  		Gpu: getGPUDevices(),
  	}
 
