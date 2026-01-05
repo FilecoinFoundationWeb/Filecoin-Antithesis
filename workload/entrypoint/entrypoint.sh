@@ -73,5 +73,7 @@ fi
 echo "Workload [entrypoint]: Setting up synapse SDK..."
 /opt/antithesis/entrypoint/setup-synapse.sh
 
+echo "Done setting up Synapase SDK. Now going to run setup complete!"
+
 python3 -u /opt/antithesis/entrypoint/setup_complete.py
 sleep infinity

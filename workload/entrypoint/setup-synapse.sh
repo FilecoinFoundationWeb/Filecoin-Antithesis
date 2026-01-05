@@ -111,5 +111,3 @@ node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/sp-tool.js warm-ad
 node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/post-deploy-setup.js --mode client 
 ls
 node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/example-storage-e2e.js /opt/antithesis/synapse-sdk/README.md
-
-sleep infinity
