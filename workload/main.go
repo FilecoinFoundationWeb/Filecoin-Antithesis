@@ -7,7 +7,6 @@ import (
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
 	"github.com/filecoin-project/go-state-types/abi"
-	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/urfave/cli/v2"
 )
 
@@ -425,20 +424,22 @@ func contractCommands() *cli.Command {
 					return resources.PerformDeployTStore(c.Context, nodeConfig, tstoragePath)
 				},
 			},
-			{
-				Name:  "deploy-blsprecompile",
-				Usage: "Deploy BLSPreCompile contract",
-				Flags: []cli.Flag{
-					nodeFlag,
+			/*
+				{
+					Name:  "deploy-blsprecompile",
+					Usage: "Deploy BLSPreCompile contract",
+					Flags: []cli.Flag{
+						nodeFlag,
+					},
+					Action: func(c *cli.Context) error {
+						nodeConfig, err := getNodeConfig(c)
+						if err != nil {
+							return err
+						}
+						return resources.DeployBLSPreCompile(c.Context, nodeConfig)
+					},
 				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					return resources.DeployBLSPreCompile(c.Context, nodeConfig)
-				},
-			},
+			*/
 		},
 	}
 }
@@ -687,83 +688,79 @@ func stateCommands() *cli.Command {
 }
 
 func minerCommands() *cli.Command {
-	nodeFlag := &cli.StringFlag{
-		Name:     "node",
-		Usage:    "node name from config.json (Lotus1 or Lotus2)",
-		Required: true,
-	}
-
 	return &cli.Command{
-		Name:  "miner",
-		Usage: "Miner operations",
+		Name:        "miner",
+		Usage:       "Miner operations",
 		Subcommands: []*cli.Command{
-			{
-				Name:  "create",
-				Usage: "Create a new miner",
-				Flags: []cli.Flag{
-					nodeFlag,
-					&cli.IntFlag{
-						Name:  "sector-size",
-						Value: 2048,
-						Usage: "Sector size in bytes (default: 2048)",
+			/*
+				{
+					Name:  "create",
+					Usage: "Create a new miner",
+					Flags: []cli.Flag{
+						nodeFlag,
+						&cli.IntFlag{
+							Name:  "sector-size",
+							Value: 2048,
+							Usage: "Sector size in bytes (default: 2048)",
+						},
+						&cli.StringFlag{
+							Name:  "owner",
+							Usage: "Owner address (defaults to default wallet)",
+						},
+						&cli.StringFlag{
+							Name:  "worker",
+							Usage: "Worker address (defaults to default wallet)",
+						},
+						&cli.StringFlag{
+							Name:  "deposit-test",
+							Usage: "Test deposit scenarios (zero, negative, excess)",
+							Value: "normal",
+						},
 					},
-					&cli.StringFlag{
-						Name:  "owner",
-						Usage: "Owner address (defaults to default wallet)",
-					},
-					&cli.StringFlag{
-						Name:  "worker",
-						Usage: "Worker address (defaults to default wallet)",
-					},
-					&cli.StringFlag{
-						Name:  "deposit-test",
-						Usage: "Test deposit scenarios (zero, negative, excess)",
-						Value: "normal",
+					Action: func(c *cli.Context) error {
+						nodeConfig, err := getNodeConfig(c)
+						if err != nil {
+							return err
+						}
+						if nodeConfig == nil {
+							return nil
+						}
+
+						api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
+						if err != nil {
+							log.Printf("[ERROR] Failed to connect to node '%s': %v", nodeConfig.Name, err)
+							return nil
+						}
+						defer closer()
+						// Get required deposit from API
+						requiredDeposit, err := api.StateMinerCreationDeposit(c.Context, types.EmptyTSK)
+						if err != nil {
+							log.Printf("[ERROR] Failed to get miner creation deposit: %v", err)
+							return nil
+						}
+
+						// Handle deposit test scenarios
+						var testDeposit abi.TokenAmount
+						switch c.String("deposit-test") {
+						case "zero":
+							testDeposit = abi.NewTokenAmount(0)
+							log.Printf("[INFO] Testing zero deposit scenario")
+						case "negative":
+							testDeposit = abi.NewTokenAmount(-1)
+							log.Printf("[INFO] Testing negative deposit scenario")
+						case "excess":
+							// Double the required deposit
+							testDeposit = abi.NewTokenAmount(requiredDeposit.Int64() * 2)
+							log.Printf("[INFO] Testing excess deposit scenario (2x required amount)")
+						default:
+							testDeposit = requiredDeposit
+							log.Printf("[INFO] Using normal required deposit: %s", requiredDeposit)
+						}
+
+						return resources.CreateMiner(c.Context, api, testDeposit)
 					},
 				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					if nodeConfig == nil {
-						return nil
-					}
-
-					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
-					if err != nil {
-						log.Printf("[ERROR] Failed to connect to node '%s': %v", nodeConfig.Name, err)
-						return nil
-					}
-					defer closer()
-					// Get required deposit from API
-					requiredDeposit, err := api.StateMinerCreationDeposit(c.Context, types.EmptyTSK)
-					if err != nil {
-						log.Printf("[ERROR] Failed to get miner creation deposit: %v", err)
-						return nil
-					}
-
-					// Handle deposit test scenarios
-					var testDeposit abi.TokenAmount
-					switch c.String("deposit-test") {
-					case "zero":
-						testDeposit = abi.NewTokenAmount(0)
-						log.Printf("[INFO] Testing zero deposit scenario")
-					case "negative":
-						testDeposit = abi.NewTokenAmount(-1)
-						log.Printf("[INFO] Testing negative deposit scenario")
-					case "excess":
-						// Double the required deposit
-						testDeposit = abi.NewTokenAmount(requiredDeposit.Int64() * 2)
-						log.Printf("[INFO] Testing excess deposit scenario (2x required amount)")
-					default:
-						testDeposit = requiredDeposit
-						log.Printf("[INFO] Using normal required deposit: %s", requiredDeposit)
-					}
-
-					return resources.CreateMiner(c.Context, api, testDeposit)
-				},
-			},
+			*/
 		},
 	}
 }
