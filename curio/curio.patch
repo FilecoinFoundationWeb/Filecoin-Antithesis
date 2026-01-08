@@ -583,7 +583,7 @@ index 5759a996..1e9062b3 100644
  var PieceParkPollInterval = time.Second
  
 -const ParkMinFreeStoragePercent = 20
-+const ParkMinFreeStoragePercent = 10
++const ParkMinFreeStoragePercent = 5
  
  // ParkPieceTask gets a piece from some origin, and parks it in storage
  // Pieces are always f00, piece ID is mapped to pieceCID in the DB
