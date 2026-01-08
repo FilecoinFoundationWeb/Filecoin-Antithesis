@@ -42,6 +42,8 @@ WORKDIR /opt/curio
 RUN git checkout pdpv0
 COPY ./curio.patch ./curio.patch
 RUN git apply curio.patch
+COPY ./increase-cpu-avail-antithesis.patch ./increase-cpu-avail-antithesis
+RUN git apply increase-cpu-avail-antithesis.patch
 
 ### make configurable filecoin-ffi build
 ARG FFI_BUILD_FROM_SOURCE=0
