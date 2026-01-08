@@ -576,33 +576,15 @@ index 5759a996..1e9062b3 100644
 +
  	return config.MaxProvingPeriod, config.ChallengeWindow.Uint64(), nil
  }
-diff --git a/harmony/resources/resources.go b/harmony/resources/resources.go
-index 98ba6192..177a66fa 100644
---- a/harmony/resources/resources.go
-+++ b/harmony/resources/resources.go
-@@ -5,7 +5,6 @@ import (
- 	"context"
- 	"os/exec"
- 	"regexp"
--	"runtime"
- 	"sync/atomic"
- 	"time"
+--- a/tasks/piece/task_park_piece.go
++++ b/tasks/piece/task_park_piece.go
+@@ -25,7 +25,7 @@ import (
+ var log = logging.Logger("cu-piece")
+ var PieceParkPollInterval = time.Second
  
-@@ -138,14 +137,14 @@ func getResources() (res Resources, err error) {
- 		return Resources{}, err
- 	}
+-const ParkMinFreeStoragePercent = 20
++const ParkMinFreeStoragePercent = 10
  
--	mem, err := h.Memory()
-+	_, err = h.Memory()
- 	if err != nil {
- 		return Resources{}, err
- 	}
- 
- 	res = Resources{
--		Cpu: runtime.NumCPU(),
--		Ram: mem.Available,
-+		Cpu: 32,
-+		Ram: 34359738368,
- 		Gpu: getGPUDevices(),
- 	}
+ // ParkPieceTask gets a piece from some origin, and parks it in storage
+ // Pieces are always f00, piece ID is mapped to pieceCID in the DB
 
