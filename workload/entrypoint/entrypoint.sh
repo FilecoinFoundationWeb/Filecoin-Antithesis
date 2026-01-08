@@ -69,8 +69,8 @@ else
     cat ./workspace/deployments.json | jq '.'
 fi
 
-# Call setup-synapse.sh to configure synapse SDK
-echo "Workload [entrypoint]: Setting up synapse SDK..."
+# # Call setup-synapse.sh to configure synapse SDK
+# echo "Workload [entrypoint]: Setting up synapse SDK..."
 /opt/antithesis/entrypoint/setup-synapse.sh
 
 python3 -u /opt/antithesis/entrypoint/setup_complete.py

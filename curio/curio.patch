@@ -576,33 +576,3 @@ index 5759a996..1e9062b3 100644
 +
  	return config.MaxProvingPeriod, config.ChallengeWindow.Uint64(), nil
  }
-diff --git a/harmony/resources/resources.go b/harmony/resources/resources.go
-index 98ba6192..177a66fa 100644
---- a/harmony/resources/resources.go
-+++ b/harmony/resources/resources.go
-@@ -5,7 +5,6 @@ import (
- 	"context"
- 	"os/exec"
- 	"regexp"
--	"runtime"
- 	"sync/atomic"
- 	"time"
- 
-@@ -138,14 +137,14 @@ func getResources() (res Resources, err error) {
- 		return Resources{}, err
- 	}
- 
--	mem, err := h.Memory()
-+	_, err = h.Memory()
- 	if err != nil {
- 		return Resources{}, err
- 	}
- 
- 	res = Resources{
--		Cpu: runtime.NumCPU(),
--		Ram: mem.Available,
-+		Cpu: 32,
-+		Ram: 34359738368,
- 		Gpu: getGPUDevices(),
- 	}
-

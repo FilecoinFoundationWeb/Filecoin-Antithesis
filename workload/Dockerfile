@@ -46,12 +46,13 @@ RUN git clone https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
 
 RUN ls
 WORKDIR /opt/antithesis/FilWizard
-
+RUN git pull 
 # Install forge dependencies:
 RUN git checkout api-properties
 RUN make build
 
 RUN cp ./filwizard /usr/local/bin/filwizard
+RUN ls
 RUN filwizard contract clone-config --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace 
 RUN git clone https://github.com/parthshah1/synapse-sdk /opt/antithesis/synapse-sdk
 WORKDIR /opt/antithesis/synapse-sdk
@@ -77,7 +78,19 @@ RUN pnpm --filter @filoz/synapse-sdk run build
 
 WORKDIR /opt/antithesis 
 COPY ./entrypoint ./entrypoint
-COPY ./main ./test/v1/main
+#COPY ./main ./test/v1/main
+
+# Build the Go workload binary
+COPY ./go.mod ./go.sum ./workload/
+COPY ./main.go ./workload/
+COPY ./resources ./workload/resources
+COPY ./properties ./workload/properties
+COPY ./drivers ./workload/drivers
+WORKDIR /opt/antithesis/workload
+RUN go build -o /usr/local/bin/workload .
+
+# Create default config directory
+RUN mkdir -p /opt/antithesis/resources
 
 WORKDIR /opt/antithesis/FilWizard
 ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]

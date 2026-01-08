@@ -18,12 +18,12 @@ ENV_FILE="/opt/antithesis/synapse-sdk/.env.devnet"
 WORKSPACE_PATH="/opt/antithesis/FilWizard/workspace"
 DEPLOYMENTS_FILE="/opt/antithesis/FilWizard/workspace/deployments.json"
 
-echo FILECOIN_RPC="$FILECOIN_RPC"
+echo FILECOIN_RPC="http://lotus0:1234/rpc/v1"
 
-echo ETH_RPC_URL="$ETH_RPC_URL"
+echo ETH_RPC_URL="http://lotus0:1234/rpc/v1"
 
 if [ ! -f "$DEPLOYMENTS_FILE" ]; then
-    filwizard contract deploy-local --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace --rpc-url "$FILECOIN_RPC" --create-deployer --bindings || exit 1
+    filwizard contract deploy-local --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace --rpc-url "$FILECOIN_RPC" --create-deployer --bindings
 fi
 
 if [ ! -f "$DEPLOYMENTS_FILE" ]; then
@@ -112,4 +112,3 @@ node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/post-deploy-setup.
 ls
 node --env-file="$ENV_FILE" /opt/antithesis/synapse-sdk/utils/example-storage-e2e.js /opt/antithesis/synapse-sdk/README.md
 
-sleep infinity
