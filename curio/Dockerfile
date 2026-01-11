@@ -9,7 +9,7 @@ FROM docker.io/golang:latest
 COPY --from=lotus-builder /usr/local/bin /usr/local/bin
 
 # Now, proceed with the Curio build
-RUN apt-get update && apt-get install -y --no-install-recommends dnsutils git ca-certificates build-essential clang ocl-icd-opencl-dev ocl-icd-libopencl1 jq libhwloc-dev xxd
+RUN apt-get update && apt-get install -y --no-install-recommends dnsutils git ca-certificates build-essential clang ocl-icd-opencl-dev aria2 ocl-icd-libopencl1 jq libhwloc-dev xxd
 ENV XDG_CACHE_HOME="/tmp"
 
 ENV RUSTUP_HOME=/usr/local/rustup \

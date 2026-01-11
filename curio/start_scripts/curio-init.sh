@@ -27,7 +27,7 @@ if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
 
   if [ ! -f $CURIO_REPO_PATH/.init.setup ]; then
     export DEFAULT_WALLET=`lotus wallet default`
-    lotus-shed miner create --deposit-margin-factor 1.01 $DEFAULT_WALLET $DEFAULT_WALLET $DEFAULT_WALLET 8MiB
+    lotus-shed miner create --deposit-margin-factor 1.01 $DEFAULT_WALLET $DEFAULT_WALLET $DEFAULT_WALLET 2KiB
     touch $CURIO_REPO_PATH/.init.setup
   fi
 
