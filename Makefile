@@ -1,6 +1,7 @@
 # drand + lotus are considered more stable dependencies
 drand_tag = $(shell git ls-remote --tags https://github.com/drand/drand.git | grep -E 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1 | sed 's/.*refs\/tags\///')
 lotus_tag = $(shell git ls-remote https://github.com/filecoin-project/lotus.git HEAD | cut -f1)
+curio_tag = $(shell git ls-remote https://github.com/filecoin-project/curio.git refs/heads/pdpv0 | cut -f1)
 builder = docker
 forest_commit = $(shell git ls-remote https://github.com/ChainSafe/forest.git HEAD | cut -f1)
 
@@ -22,6 +23,10 @@ show-lotus-tag:
 .PHONY: show-forest-commit
 show-forest-commit:
 	@echo "Forest commit: $(forest_commit)"
+
+.PHONY: show-curio-tag
+show-curio-tag:
+	@echo "Curio tag: $(curio_tag)"
 .PHONY: build-forest
 build-forest:
 	@echo "Building forest for $(TARGET_ARCH) architecture..."
@@ -43,7 +48,7 @@ build-lotus:
 build-curio:
 	@echo "Building curio for $(TARGET_ARCH) architecture..."
 	@echo "Curio tag: $(curio_tag)"
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(curio_tag) -t curio:latest -f curio/Dockerfile curio
+	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(curio_tag) --build-arg=LOTUS_TAG=$(lotus_tag) -t curio:latest -f curio/Dockerfile curio
 
 .PHONY: build-workload
 build-workload:

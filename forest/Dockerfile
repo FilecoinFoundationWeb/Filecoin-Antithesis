@@ -25,9 +25,6 @@ WORKDIR /forest
 RUN git checkout ${GIT_COMMIT}
 
 COPY ./forest_config.toml.tpl .
-# Step 4: Copy and apply the patch (this changes more frequently, so it's placed later)
-# COPY ./forest.patch ./forest.patch
-# RUN git apply ./forest.patch
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so 
 RUN if [ "$LOCAL_BUILD" = "1" ]; then \
         make install-quick; \

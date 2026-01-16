@@ -10,9 +10,11 @@ This directory contains the workload implementation for testing Filecoin nodes u
 - `main/`: Test Composer commands for generating test cases
 - `resources/`: Helper functions and utilities
 - `entrypoint/`: Entry point scripts for workload execution
-  - `entrypoint.sh`: Main entrypoint that orchestrates contract deployment and SDK setup
-  - `setup-synapse.sh`: Configures Synapse SDK with deployed contract addresses
+  - `entrypoint.sh`: Main entrypoint that handles contract deployment and Curio environment setup
+  - `setup-synapse.sh`: Configures Synapse SDK with deployed contract addresses and registers service provider
   - `setup_complete.py`: Signals system readiness to Antithesis
+- `patches/`: Patch files for modifying dependencies
+  - `synapse-sdk.patch`: Patches Synapse SDK to support devnet pricing model and capability encoding
 
 ## FilWizard Integration
 
@@ -29,52 +31,147 @@ For detailed FilWizard documentation, see: https://github.com/parthshah1/FilWiza
 
 ## Runtime Contract Deployment
 
-The workload container automatically deploys Filecoin onchain cloud contracts during system initialization using FilWizard. This happens in the `entrypoint.sh` script before the system signals readiness.
+The workload container automatically deploys Filecoin onchain cloud contracts during system initialization using FilWizard. The deployment process is split across two scripts for better separation of concerns:
 
-### Deployment Process
+### Deployment Process Overview
 
-1. **Wait for Chain Readiness**: The entrypoint waits for the blockchain to reach a minimum block height (default: 5 blocks).
+The initialization process follows these steps:
 
-2. **Deploy Contracts**: Uses FilWizard to deploy contracts from the Filecoin Synapse configuration:
+1. **`entrypoint.sh`** handles contract deployment and Curio configuration
+2. **`setup-synapse.sh`** handles Synapse SDK setup and service provider registration
+
+### Step 1: Contract Deployment (`entrypoint.sh`)
+
+The `entrypoint.sh` script performs the following operations:
+
+1. **Time Synchronization**: Synchronizes system time with NTP servers
+2. **Wait for Chain Readiness**: Waits for the blockchain to reach a minimum block height (default: 5 blocks)
+3. **Deploy Contracts**: Uses FilWizard to deploy contracts from the Filecoin Synapse configuration:
    ```bash
    filwizard contract deploy-local --config /opt/antithesis/FilWizard/config/filecoin-synapse.json \
      --workspace ./workspace --rpc-url "$FILECOIN_RPC" --create-deployer --bindings
    ```
    
-   This command is provided by FilWizard and handles:
+   This command handles:
    - Contract compilation from source
    - Deployment to the Filecoin network
    - Contract address extraction and storage
    - Go binding generation for programmatic access
 
-3. **Extract Contract Addresses**: FilWizard stores contract addresses in `deployments.json`, which is then shared with other containers via shared volumes.
+4. **Extract Contract Addresses**: 
+   - Extracts service contract addresses from `workspace/filecoinwarmstorage/service_contracts/deployments.json` (flat object format)
+   - Extracts USDFC and Multicall3 from `workspace/deployments.json` (array format)
+   - Merges all addresses into a shared `/root/devgen/deployments.json` file
 
-4. **Configure Synapse SDK**: The `setup-synapse.sh` script:
-   - Extracts all contract addresses from FilWizard's `deployments.json`
-   - Uses FilWizard to create client and Storage Provider (SP) private keys via `filwizard wallet create`
-   - Uses FilWizard to fund accounts with USDFC tokens and FIL via `filwizard payments mint-private-key`
-   - Creates `.env.devnet` file with all configuration for Synapse SDK
-   - Shares configuration with Curio container
+5. **Create Curio Environment File**: Creates `/root/devgen/curio/.env.curio` with Curio-specific environment variables:
+   - `CURIO_DEVNET_PDP_VERIFIER_ADDRESS`
+   - `CURIO_DEVNET_FWSS_ADDRESS`
+   - `CURIO_DEVNET_SERVICE_REGISTRY_ADDRESS`
+   - `CURIO_DEVNET_PAYMENTS_ADDRESS`
+   - `CURIO_DEVNET_USDFC_ADDRESS`
+   - `CURIO_DEVNET_MULTICALL_ADDRESS`
+
+### Step 2: Synapse SDK Setup (`setup-synapse.sh`)
+
+The `setup-synapse.sh` script performs the following operations:
+
+1. **Load Contract Addresses**: Reads all contract addresses from the shared `/root/devgen/deployments.json` file
+
+2. **Create Wallets**:
+   - Loads deployer private key from `accounts.json` (created by FilWizard during deployment)
+   - Creates client wallet using `filwizard wallet create`
+   - Waits for and loads SP private key from Curio container (`/root/devgen/curio/private_key`)
+
+3. **Create Synapse Environment File**: Creates `/opt/antithesis/synapse-sdk/.env.localnet` with Synapse SDK configuration:
+   - Network settings (devnet, chain ID, RPC URLs)
+   - Contract addresses with `LOCALNET_*` prefix
+   - Private keys (deployer, SP, client)
+   - Service provider configuration
+
+4. **Mint Tokens**: Uses FilWizard to mint tokens for client and SP:
+   - Client: 1000 USDFC + 10 FIL
+   - SP: 10000 USDFC + 10 FIL
+
+5. **Register Service Provider**: Uses `post-deploy-setup.js` to:
+   - Register the service provider in the SP Registry
+   - Configure PDP (Proof of Data Possession) product offering
+   - Set up payment and storage configurations
+
+6. **Run E2E Tests**: Executes `example-storage-e2e.js` to verify end-to-end storage operations
 
 ### Deployed Contracts
 
+The following contracts are deployed and configured:
+
 - **USDFC**: ERC-20 token contract for payments and settlements
 - **Multicall3**: Batch transaction contract for efficient multi-call operations
-- **FilecoinWarmStorageService**: Main warm storage service contract
-- **FilecoinWarmStorageServiceStateView**: State view contract for querying storage service state
-- **ServiceProviderRegistry**: Registry contract for managing storage providers
-- **PDPVerifier**: Proof of Data Possession verifier contract for storage proofs
+- **FilecoinWarmStorageService (FWSS)**: Main warm storage service contract (proxy address used)
+- **FilecoinWarmStorageServiceStateView (FWSS_VIEW)**: State view contract for querying storage service state
+- **ServiceProviderRegistry (SP_REGISTRY)**: Registry contract for managing storage providers (proxy address used)
+- **PDPVerifier**: Proof of Data Possession verifier contract for storage proofs (proxy address used)
+- **FilecoinPay (PAYMENTS)**: Payment contract for handling storage payments
+
+**Note**: Proxy addresses are used for all service contracts to enable upgradeability. The implementation addresses are also stored but not used for interactions.
+
+### Contract Address Storage
+
+Contract addresses are stored in multiple locations:
+
+1. **`/root/devgen/deployments.json`**: Shared deployments file containing all contract addresses, accessible by both workload and Curio containers
+2. **`/root/devgen/curio/.env.curio`**: Curio-specific environment file with `CURIO_DEVNET_*` prefixed variables
+3. **`/opt/antithesis/synapse-sdk/.env.localnet`**: Synapse SDK environment file with `LOCALNET_*` prefixed variables
 
 ### Synapse SDK Integration
 
 The Synapse SDK is automatically set up to interact with deployed contracts:
-- Located at `/opt/antithesis/synapse-sdk`
-- Configured via `.env.devnet` file with all contract addresses
-- Provides JavaScript/TypeScript APIs for:
+
+- **Location**: `/opt/antithesis/synapse-sdk` (cloned from `FilOzone/synapse-sdk` master branch)
+- **Configuration**: `.env.localnet` file with all contract addresses and network settings
+- **Patch Applied**: `patches/synapse-sdk.patch` modifies the SDK to:
+  - Support devnet pricing model (per-day instead of per-month)
+  - Use proper capability encoding for PDP offerings
+  - Handle location format correctly (X.509 DN format)
+- **Utilities Used**:
+  - `post-deploy-setup.js`: Registers service provider and configures PDP product
+  - `example-storage-e2e.js`: Runs end-to-end storage tests
+- **APIs Provided**:
   - Storage provider registration
   - Storage deal creation and management
   - Payment processing
   - PDP proof submission and verification
+
+## Environment Variables
+
+The workload uses different environment variable naming conventions for different services:
+
+### Curio Environment Variables
+
+Curio uses `CURIO_DEVNET_*` prefixed variables in `/root/devgen/curio/.env.curio`:
+- `CURIO_DEVNET_PDP_VERIFIER_ADDRESS`
+- `CURIO_DEVNET_FWSS_ADDRESS`
+- `CURIO_DEVNET_SERVICE_REGISTRY_ADDRESS`
+- `CURIO_DEVNET_PAYMENTS_ADDRESS`
+- `CURIO_DEVNET_USDFC_ADDRESS`
+- `CURIO_DEVNET_MULTICALL_ADDRESS`
+
+### Synapse SDK Environment Variables
+
+Synapse SDK uses `LOCALNET_*` prefixed variables in `/opt/antithesis/synapse-sdk/.env.localnet`:
+- `NETWORK=devnet`
+- `LOCALNET_CHAIN_ID=31415926`
+- `LOCALNET_RPC_URL=http://lotus0:1234/rpc/v1`
+- `LOCALNET_RPC_WS_URL=ws://lotus0:1234/rpc/v1`
+- `LOCALNET_MULTICALL3_ADDRESS`
+- `LOCALNET_USDFC_ADDRESS`
+- `LOCALNET_WARM_STORAGE_CONTRACT_ADDRESS`
+- `LOCALNET_WARM_STORAGE_VIEW_ADDRESS`
+- `LOCALNET_SP_REGISTRY_ADDRESS`
+- `LOCALNET_PDP_VERIFIER_ADDRESS`
+- `LOCALNET_PAYMENTS_ADDRESS`
+- `DEPLOYER_PRIVATE_KEY`
+- `SP_PRIVATE_KEY`
+- `CLIENT_PRIVATE_KEY`
+- `SP_SERVICE_URL`
 
 ## Smart Contract Tooling
 
@@ -89,13 +186,40 @@ This environment provides several powerful tools for developing, compiling, depl
   - Payment operations and token minting
   
   FilWizard is the primary tool used for all contract deployment and wallet operations in this testing environment. It's integrated as a dependency and installed during the workload container build.
+  
+  **Accounts File**: FilWizard creates `workspace/accounts.json` with the following structure:
+  ```json
+  {
+    "accounts": {
+      "deployer": {
+        "privateKey": "...",
+        "address": "..."
+      },
+      "client": {
+        "privateKey": "...",
+        "address": "..."
+      }
+    }
+  }
+  ```
 
 - **Foundry**: A fast, portable, and modular toolkit for Ethereum application development written in Rust. Foundry includes:
   - **forge**: Compile, deploy, and test EVM-compatible smart contracts. Example: `forge build` to compile contracts, `forge test` to run Solidity tests, and `forge create` to deploy contracts.
   - **cast**: Interact with deployed contracts and send transactions. Example: `cast call` to query contract state, `cast send` to invoke contract methods.
   - **anvil**: Local Ethereum node for rapid testing and development. Example: `anvil` to start a local testnet for contract deployment and interaction.
 
-- **Synapse SDK**: JavaScript/TypeScript SDK for interacting with Filecoin storage services and deployed contracts. Provides high-level APIs for storage operations, provider management, and payment processing.
+- **Synapse SDK** ([GitHub](https://github.com/FilOzone/synapse-sdk)): JavaScript/TypeScript SDK for interacting with Filecoin storage services and deployed contracts. Provides high-level APIs for storage operations, provider management, and payment processing.
+  
+  The SDK is patched during the Docker build process to support:
+  - Devnet network configuration
+  - Per-day pricing model (instead of per-month)
+  - Proper PDP capability encoding
+  - X.509 DN location format
+  
+  **Key Utilities**:
+  - `utils/post-deploy-setup.js`: Registers service providers and configures PDP products
+  - `utils/example-storage-e2e.js`: End-to-end storage test suite
+  - `utils/sp-tool.js`: Service provider management tool (mainnet/calibration only)
 
 - **PDP (Proof of Data Possession)**: A set of smart contracts and cryptographic tools (from [FilOzone/pdp](https://github.com/FilOzone/pdp)) for testing data possession proofs and related contract logic. Example: Build and deploy PDP contracts for Filecoin storage proofs.
 

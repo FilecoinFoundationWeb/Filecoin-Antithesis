@@ -59,6 +59,26 @@ if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
     touch $CURIO_REPO_PATH/.init.config
   fi
 
+# Wait for .env.curio file with all contract addresses BEFORE starting curio with PDP layer
+echo "Waiting for .env.curio file with contract addresses..."
+while [ ! -f $CURIO_REPO_PATH/.env.curio ]; do
+  echo "Waiting for .env.curio file..."
+  sleep 5
+done
+
+# Source and export .env.curio to load all contract addresses (Curio-specific variable names)
+echo "Loading contract addresses from .env.curio..."
+set -a
+source ${CURIO_REPO_PATH}/.env.curio
+set +a
+
+echo "Using contract addresses:"
+echo "  PDP Verifier: $CURIO_DEVNET_PDP_VERIFIER_ADDRESS"
+echo "  FWSS: $CURIO_DEVNET_FWSS_ADDRESS"
+echo "  Service Registry: $CURIO_DEVNET_SERVICE_REGISTRY_ADDRESS"
+echo "  USDFC: $CURIO_DEVNET_USDFC_ADDRESS"
+echo "  Payments: $CURIO_DEVNET_PAYMENTS_ADDRESS"
+echo "  Multicall: $CURIO_DEVNET_MULTICALL_ADDRESS"
   # Add storage attachment
   echo "Starting Curio node to attach storage..."
   CURIO_FAKE_CPU=5 curio run --nosync --layers seal,post,pdp-only,gui &
@@ -144,28 +164,6 @@ if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
   touch $CURIO_REPO_PATH/.init.pdp
   echo "PDP service setup complete"
 fi
-
-# Wait for .env.devnet file with all contract addresses
-echo "Waiting for .env.devnet file with contract addresses..."
-while [ ! -f $CURIO_REPO_PATH/.env.devnet ]; do
-  echo "Waiting for .env.devnet file..."
-  sleep 5
-done
-
-# Source .env.devnet to load all contract addresses
-source $CURIO_REPO_PATH/.env.devnet
-
-# Export contract addresses with names expected by curio (from curio.patch)
-export CURIO_PDP_VERIFIER_ADDRESS=$PDP_VERIFIER_ADDRESS
-export RECORDKEEPER_CONTRACT=$WARM_STORAGE_CONTRACT_ADDRESS
-export SERVICE_REGISTRY_ADDRESS=$SP_REGISTRY_ADDRESS
-# USDFC_ADDRESS is already correctly named
-
-echo "Using contract addresses:"
-echo "  PDP Verifier: $CURIO_PDP_VERIFIER_ADDRESS"
-echo "  Recordkeeper (Warm Storage): $RECORDKEEPER_CONTRACT"
-echo "  Service Registry: $SERVICE_REGISTRY_ADDRESS"
-echo "  USDFC: $USDFC_ADDRESS"
 
 echo Starting curio node ...
 CURIO_FAKE_CPU=5 curio run --nosync --name devnet --layers seal,post,pdp-only,gui
