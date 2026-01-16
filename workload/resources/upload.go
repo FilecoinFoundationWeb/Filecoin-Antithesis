@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -559,4 +560,56 @@ func PerformDeployTStore(ctx context.Context, nodeConfig *NodeConfig, contractPa
 		log.Printf("TStore contract successfully deployed and tested on node '%s'.", nodeConfig.Name)
 		return nil
 	}, "TStore contract deployment and testing operation")
+}
+
+func DeployBLSPreCompile(ctx context.Context, nodeConfig *NodeConfig) error {
+	log.Printf("Deploying and invoking BLSPreCompile contract on node '%s'...", nodeConfig.Name)
+
+	api, closer, err := ConnectToNode(ctx, *nodeConfig)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+		return nil
+	}
+	defer closer()
+	head, err := api.ChainHead(ctx)
+	if err != nil {
+		log.Printf("[ERROR] Failed to get chain head: %v", err)
+		return nil
+	}
+	nv, err := api.StateNetworkVersion(ctx, head.Key())
+	if err != nil {
+		log.Printf("[ERROR] Failed to get network version: %v", err)
+		return nil
+	}
+	if nv < 27 {
+		log.Printf("[INFO] Network version is less than 27, skipping BLSPreCompile contract deployment")
+		return nil
+	}
+	tests := []string{
+		"G1AddTest",
+		"G1MsmTest",
+		"G2AddTest",
+		"G2MsmTest",
+		"MapFpToG1Test",
+		"MapFp2ToG2Test",
+		"PairingTest",
+	}
+
+	return RetryOperation(ctx, func() error {
+		for _, names := range tests {
+			filename := fmt.Sprintf("/opt/antithesis/resources/smart-contracts/%s.hex", names)
+			fromAddr, contractAddr := DeployContractFromFilename(ctx, api, filename)
+			if fromAddr.Empty() || contractAddr.Empty() {
+				log.Printf("[ERROR] Failed to deploy initial contract instance")
+				return nil
+			}
+
+			_, _, err := InvokeContractByFuncName(ctx, api, fromAddr, contractAddr, "runTests()", []byte{})
+			if err != nil {
+				log.Printf("[ERROR] Failed to invoke runTests(): %v", err)
+				return nil
+			}
+		}
+		return nil
+	}, "BLSPreCompile contract deployment operation")
 }

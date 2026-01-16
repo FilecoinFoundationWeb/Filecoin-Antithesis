@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
 	"github.com/filecoin-project/lotus/chain/types"
@@ -99,20 +98,19 @@ func CheckEthMethods(ctx context.Context) error {
 						log.Printf("  Block by Hash Hash: %s", ethBlockB.Hash)
 						log.Printf("  Block by Number ParentHash: %s", ethBlockA.ParentHash)
 						log.Printf("  Block by Hash ParentHash: %s", ethBlockB.ParentHash)
-						log.Printf("  Block by Number Number: %s", ethBlockA.Number)
-						log.Printf("  Block by Hash Number: %s", ethBlockB.Number)
-						log.Printf("  Block by Number Timestamp: %s", ethBlockA.Timestamp)
-						log.Printf("  Block by Hash Timestamp: %s", ethBlockB.Timestamp)
+						log.Printf("  Block by Number Number: %d", ethBlockA.Number)
+						log.Printf("  Block by Hash Number: %d", ethBlockB.Number)
+						log.Printf("  Block by Number Timestamp: %d", ethBlockA.Timestamp)
+						log.Printf("  Block by Hash Timestamp: %d", ethBlockB.Timestamp)
 						log.Printf("[ERROR] Block mismatch at height %d", i)
 						return nil
 					}
 
-					assert.Always(equal,
+					AssertAlways(node.Name, equal,
 						"ETH block consistency: Blocks should be identical regardless of retrieval method - API inconsistency detected",
 						map[string]interface{}{
 							"operation":      "eth_block_consistency",
 							"height":         i,
-							"node":           node.Name,
 							"blockByNumber":  ethBlockA,
 							"blockByHash":    ethBlockB,
 							"property":       "Block data consistency",
@@ -122,12 +120,11 @@ func CheckEthMethods(ctx context.Context) error {
 						})
 
 					// Additional specific field checks for better error reporting
-					assert.Always(ethBlockA.Hash == ethBlockB.Hash,
+					AssertAlways(node.Name, ethBlockA.Hash == ethBlockB.Hash,
 						"ETH block hash consistency: Block hashes must be identical - hash computation error detected",
 						map[string]interface{}{
 							"operation":     "eth_block_hash_consistency",
 							"height":        i,
-							"node":          node.Name,
 							"blockByNumber": ethBlockA.Hash,
 							"blockByHash":   ethBlockB.Hash,
 							"property":      "Block hash consistency",
@@ -135,12 +132,11 @@ func CheckEthMethods(ctx context.Context) error {
 							"details":       "Block hash must be identical across retrieval methods",
 						})
 
-					assert.Always(ethBlockA.Number == ethBlockB.Number,
+					AssertAlways(node.Name, ethBlockA.Number == ethBlockB.Number,
 						"ETH block number consistency: Block numbers must be identical - block height mismatch detected",
 						map[string]interface{}{
 							"operation":     "eth_block_number_consistency",
 							"height":        i,
-							"node":          node.Name,
 							"blockByNumber": ethBlockA.Number,
 							"blockByHash":   ethBlockB.Number,
 							"property":      "Block number consistency",
@@ -148,12 +144,11 @@ func CheckEthMethods(ctx context.Context) error {
 							"details":       "Block number must be identical across retrieval methods",
 						})
 
-					assert.Always(ethBlockA.ParentHash == ethBlockB.ParentHash,
+					AssertAlways(node.Name, ethBlockA.ParentHash == ethBlockB.ParentHash,
 						"ETH parent hash consistency: Parent hashes must be identical - chain linking error detected",
 						map[string]interface{}{
 							"operation":     "eth_parent_hash_consistency",
 							"height":        i,
-							"node":          node.Name,
 							"blockByNumber": ethBlockA.ParentHash,
 							"blockByHash":   ethBlockB.ParentHash,
 							"property":      "Parent hash consistency",
@@ -161,12 +156,11 @@ func CheckEthMethods(ctx context.Context) error {
 							"details":       "Parent hash must be identical across retrieval methods",
 						})
 
-					assert.Always(ethBlockA.Timestamp == ethBlockB.Timestamp,
+					AssertAlways(node.Name, ethBlockA.Timestamp == ethBlockB.Timestamp,
 						"ETH timestamp consistency: Block timestamps must be identical - timestamp mismatch detected",
 						map[string]interface{}{
 							"operation":     "eth_timestamp_consistency",
 							"height":        i,
-							"node":          node.Name,
 							"blockByNumber": ethBlockA.Timestamp,
 							"blockByHash":   ethBlockB.Timestamp,
 							"property":      "Block timestamp consistency",
@@ -310,7 +304,7 @@ func SendEthLegacyTransaction(ctx context.Context, nodeConfig *NodeConfig) error
 	}
 
 	log.Printf("[INFO] ETH legacy transaction check completed successfully")
-	assert.Sometimes(receipt.Status == 1, "ETH legacy transaction: Transaction should be mined successfully - mining failure detected", map[string]interface{}{
+	AssertSometimes(nodeConfig.Name, receipt.Status == 1, "ETH legacy transaction: Transaction should be mined successfully - mining failure detected", map[string]interface{}{
 		"operation": "eth_legacy_transaction",
 		"tx_hash":   txHash,
 	})
@@ -450,7 +444,7 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 	txHash := SubmitTransaction(ctx, api, &tx)
 	log.Printf("[INFO] Transaction submitted with hash: %s", txHash)
 
-	assert.Sometimes(txHash != ethtypes.EmptyEthHash, "ETH contract deployment: Transaction must be submitted successfully - submission failure detected", map[string]interface{}{
+	AssertSometimes(nodeConfig.Name, txHash != ethtypes.EmptyEthHash, "ETH contract deployment: Transaction must be submitted successfully - submission failure detected", map[string]interface{}{
 		"operation":   "eth_contract_deployment",
 		"tx_hash":     txHash.String(),
 		"deployer":    deployer.String(),
@@ -474,7 +468,7 @@ func DeploySmartContract(ctx context.Context, nodeConfig *NodeConfig, contractPa
 	}
 
 	// Assert transaction was mined successfully
-	assert.Sometimes(receipt.Status == 1, "ETH contract deployment: Transaction must be mined successfully - mining failure detected", map[string]interface{}{
+	AssertSometimes(nodeConfig.Name, receipt.Status == 1, "ETH contract deployment: Transaction must be mined successfully - mining failure detected", map[string]interface{}{
 		"operation": "eth_contract_deployment",
 		"tx_hash":   txHash,
 	})

@@ -47,6 +47,7 @@ func main() {
 			chainCommands(),
 			stateCommands(),
 			minerCommands(),
+			minerCommands(),
 			stressCommands(),
 			ethCommands(),
 		},
