@@ -1,7 +1,7 @@
 FROM scratch
 
-COPY docker-compose.yml /docker-compose.yml
-COPY docker-compose2.yml /docker-compose2.yml
+COPY docker-compose.yaml /docker-compose.yaml
+COPY docker-compose2.yaml /docker-compose2.yaml
 
 COPY ./.env /.env
 COPY ../data /data
