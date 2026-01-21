@@ -19,7 +19,7 @@ x-templates:
         condition: service_started
   needs_all_drand_healthy: &needs_all_drand_healthy
     depends_on:
-      drand0: 
+      drand0:
         condition: service_healthy
       drand1:
         condition: service_healthy
@@ -40,7 +40,7 @@ x-templates:
 
 services:
   drand0:
-    <<: [*filecoin_service]
+    <<: [ *filecoin_service ]
     container_name: drand0
     image: drand:latest
     entrypoint: ./start-drand0.sh
@@ -49,7 +49,7 @@ services:
       test: drand util ping http://drand0:8080
 
   drand1:
-    <<: [*filecoin_service, *needs_drand0_started]
+    <<: [ *filecoin_service, *needs_drand0_started ]
     container_name: drand1
     image: drand:latest
     entrypoint: ./start-drand1.sh
@@ -58,7 +58,7 @@ services:
       test: drand util ping http://drand1:8080
 
   drand2:
-    <<: [*filecoin_service, *needs_drand0_started]
+    <<: [ *filecoin_service, *needs_drand0_started ]
     container_name: drand2
     image: drand:latest
     entrypoint: ./start-drand2.sh
@@ -67,44 +67,44 @@ services:
       test: drand util ping http://drand2:8080
 
   lotus0:
-    <<: [*filecoin_service, *needs_all_drand_healthy]
+    <<: [ *filecoin_service, *needs_all_drand_healthy ]
     container_name: lotus0
     image: lotus:latest
-    entrypoint: ["./scripts/start-lotus.sh", "0"]
+    entrypoint: [ "./scripts/start-lotus.sh", "0" ]
     healthcheck:
       <<: *healthcheck_settings
       test: curl --fail http://lotus0:1234/health/livez
 
   lotus1:
-    <<: [*filecoin_service, *needs_lotus0_healthy]
+    <<: [ *filecoin_service, *needs_lotus0_healthy ]
     image: lotus:latest
     container_name: lotus1
-    entrypoint: ["./scripts/start-lotus.sh", "1"]
+    entrypoint: [ "./scripts/start-lotus.sh", "1" ]
     healthcheck:
       <<: *healthcheck_settings
       test: curl --fail http://lotus1:1234/health/livez
 
   lotus-miner0:
-    <<: [*filecoin_service, *needs_lotus0_healthy]
+    <<: [ *filecoin_service, *needs_lotus0_healthy ]
     image: lotus:latest
     container_name: lotus-miner0
-    entrypoint: ["./scripts/start-lotus-miner.sh", "0"]
+    entrypoint: [ "./scripts/start-lotus-miner.sh", "0" ]
 
   lotus-miner1:
-    <<: [*filecoin_service, *needs_lotus1_healthy]
+    <<: [ *filecoin_service, *needs_lotus1_healthy ]
     image: lotus:latest
     container_name: lotus-miner1
-    entrypoint: ["./scripts/start-lotus-miner.sh", "1"]
+    entrypoint: [ "./scripts/start-lotus-miner.sh", "1" ]
 
   forest0:
-    <<: [*filecoin_service, *needs_lotus0_healthy]
+    <<: [ *filecoin_service, *needs_lotus0_healthy ]
     image: forest:latest
     container_name: forest0
-    entrypoint: ["./scripts/start-forest.sh", "0"]
+    entrypoint: [ "./scripts/start-forest.sh", "0" ]
 
- # Curio service
+  # Curio service
   curio:
-    <<: [*filecoin_service]
+    <<: [ *filecoin_service ]
     image: curio:${CURIO_TAG:-latest}
     container_name: curio
     ports:
@@ -113,7 +113,7 @@ services:
       - "12300:12300"
       - "4701:4701"
       - "32100:32100"
-    entrypoint: ["${CURIO_DATA_DIR}/curio-init.sh"]
+    entrypoint: [ "${CURIO_DATA_DIR}/curio-init.sh" ]
     depends_on:
       lotus0:
         condition: service_healthy
@@ -124,7 +124,7 @@ services:
 
   #Workload service
   workload:
-    <<: [*filecoin_service]
+    <<: [ *filecoin_service ]
     image: workload:latest
     container_name: workload
     volumes:
@@ -135,15 +135,15 @@ services:
       - ./data/curio:/var/lib/curio:rw
       - ./data/lotus0:/root/devgen/lotus0
       - ./data/lotus1:/root/devgen/lotus1
-      - ./data/forest:/root/devgen/forest
+      - ./data/forest0:/root/devgen/forest0
       - ./data/curio:/root/devgen/curio
     depends_on:
       lotus0:
         condition: service_healthy
-        
+
   # Yugabyte Database Service
   yugabyte:
-    <<: [*filecoin_service]
+    <<: [ *filecoin_service ]
     image: yugabytedb/yugabyte:latest
     container_name: yugabyte
     init: true

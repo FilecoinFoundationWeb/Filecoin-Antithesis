@@ -2,11 +2,27 @@ package resources
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/filecoin-project/go-state-types/abi"
+)
+
+const (
+	// MinHeightForHealthCheck is the minimum chain height required before running health checks
+	MinHeightForHealthCheck = 20
+	// MinHeightForF3Check is the minimum chain height required for F3 status check
+	MinHeightForF3Check = 10
+	// DefaultMonitorDuration is the default duration for monitoring operations
+	DefaultMonitorDuration = 180 * time.Second
+	// DefaultHeightCheckInterval is the default interval between height checks
+	DefaultHeightCheckInterval = 7 * time.Second
+	// DefaultMaxConsecutiveStalls is the default max stalls before alerting
+	DefaultMaxConsecutiveStalls = 3
+	// HeightHistorySize is the number of heights to keep in history
+	HeightHistorySize = 4
 )
 
 // HealthMonitorConfig holds configuration for individual health checks
@@ -27,9 +43,9 @@ func DefaultHealthMonitorConfig() *HealthMonitorConfig {
 		EnableHeightProgression: true,
 		EnablePeerCount:         true,
 		EnableF3Status:          true,
-		MonitorDuration:         180 * time.Second,
-		HeightCheckInterval:     7 * time.Second,
-		MaxConsecutiveStalls:    3,
+		MonitorDuration:         DefaultMonitorDuration,
+		HeightCheckInterval:     DefaultHeightCheckInterval,
+		MaxConsecutiveStalls:    DefaultMaxConsecutiveStalls,
 	}
 }
 
@@ -38,9 +54,8 @@ type NodeHealthMonitor struct {
 	config            *Config
 	monitorConfig     *HealthMonitorConfig
 	heightHistory     map[string][]abi.ChainEpoch
-	lastTipsetChange  map[string]time.Time
 	consecutiveStalls map[string]int
-	mu                sync.Mutex
+	mu                sync.RWMutex
 }
 
 // NewNodeHealthMonitor creates a new health monitor instance
@@ -53,226 +68,172 @@ func NewNodeHealthMonitor(config *Config, monitorConfig *HealthMonitorConfig) *N
 		config:            config,
 		monitorConfig:     monitorConfig,
 		heightHistory:     make(map[string][]abi.ChainEpoch),
-		lastTipsetChange:  make(map[string]time.Time),
 		consecutiveStalls: make(map[string]int),
 	}
 }
 
-func CheckNodeSyncStatus(ctx context.Context, config *Config) error {
-	nodes := FilterLotusNodes(config.Nodes)
-	for _, node := range nodes {
-		api, closer, err := ConnectToNode(ctx, node)
-		if err != nil {
-			log.Printf("failed to connect to node %s: %v", node.Name, err)
-			continue
-		}
-		defer closer()
-		syncStatus, err := api.SyncState(ctx)
-		if err != nil {
-			log.Printf("failed to get sync status: %v", err)
-			continue
-		}
-		log.Printf("Node %s sync status: %+v", node.Name, syncStatus)
-		log.Printf("Node %s current height: %d", node.Name, syncStatus.ActiveSyncs[0].Height)
-	}
-	return nil
-}
-
-// ComprehensiveHealthCheck performs all health checks with backoff logic (uses default config)
+// ComprehensiveHealthCheck performs all health checks (uses default config)
 func ComprehensiveHealthCheck(ctx context.Context, config *Config) error {
 	return ComprehensiveHealthCheckWithConfig(ctx, config, DefaultHealthMonitorConfig())
 }
 
 // ComprehensiveHealthCheckWithConfig performs health checks based on configuration
 func ComprehensiveHealthCheckWithConfig(ctx context.Context, config *Config, monitorConfig *HealthMonitorConfig) error {
-	nodes := FilterLotusNodes(config.Nodes)
-	if len(nodes) > 0 {
-		api, closer, err := ConnectToNode(ctx, nodes[0])
-		if err != nil {
-			log.Printf("[ERROR] Failed to connect to node for epoch check: %v", err)
-			return nil
-		}
-		defer closer()
+	nodes := FilterV1Nodes(config.Nodes)
+	if len(nodes) == 0 {
+		return fmt.Errorf("no nodes available for health check")
+	}
 
-		head, err := api.ChainHead(ctx)
-		if err != nil {
-			log.Printf("[ERROR] Failed to get chain head for epoch check: %v", err)
-			return nil
-		}
+	// Check if chain height is sufficient
+	api, closer, err := ConnectToNode(ctx, nodes[0])
+	if err != nil {
+		return fmt.Errorf("failed to connect for epoch check: %w", err)
+	}
 
-		if head.Height() < 20 {
-			log.Printf("[INFO] Current epoch %d is less than required minimum (20). Skipping health checks to avoid false positives.", head.Height())
-			return nil
-		}
+	head, err := api.ChainHead(ctx)
+	closer()
+	if err != nil {
+		return fmt.Errorf("failed to get chain head: %w", err)
+	}
+
+	if head.Height() < MinHeightForHealthCheck {
+		log.Printf("[INFO] Current epoch %d < %d, skipping health checks", head.Height(), MinHeightForHealthCheck)
+		return nil
 	}
 
 	monitor := NewNodeHealthMonitor(config, monitorConfig)
 
-	log.Printf("[INFO] Starting comprehensive health check with config: %+v", monitorConfig)
+	log.Printf("[INFO] Starting comprehensive health check...")
 
-	// Check 1: Chain notify monitoring (if enabled)
-	if monitorConfig.EnableChainNotify {
-		log.Printf("[INFO] Running chain notify check...")
-		if err := monitor.CheckChainNotify(ctx); err != nil {
-			log.Printf("[ERROR] Chain notify check failed: %v", err)
-		}
-	} else {
-		log.Printf("[INFO] Chain notify check disabled")
-	}
+	var wg sync.WaitGroup
+	errChan := make(chan error, 4)
 
-	// Check 2: Height monitoring (if enabled)
-	if monitorConfig.EnableHeightProgression {
-		log.Printf("[INFO] Running height progression check...")
-		if err := monitor.CheckHeightProgression(ctx); err != nil {
-			log.Printf("[ERROR] Height progression check failed: %v", err)
-		}
-	} else {
-		log.Printf("[INFO] Height progression check disabled")
-	}
-
-	// Check 3: Peer count (if enabled)
+	// Run enabled checks concurrently
 	if monitorConfig.EnablePeerCount {
-		log.Printf("[INFO] Running peer count check...")
-		if err := monitor.CheckPeerCount(ctx); err != nil {
-			log.Printf("[ERROR] Peer count check failed: %v", err)
-		}
-	} else {
-		log.Printf("[INFO] Peer count check disabled")
-	}
-
-	// Check 4: F3 running status (if enabled)
-	if monitorConfig.EnableF3Status {
-		log.Printf("[INFO] Running F3 status check...")
-		if err := monitor.CheckF3Status(ctx); err != nil {
-			log.Printf("[ERROR] F3 status check failed: %v", err)
-		}
-	} else {
-		log.Printf("[INFO] F3 status check disabled")
-	}
-
-	log.Printf("[INFO] Comprehensive health check completed")
-	return nil
-}
-
-// CheckChainNotify monitors chain notifications using polling-based approach
-func (m *NodeHealthMonitor) CheckChainNotify(ctx context.Context) error {
-	log.Printf("[INFO] Starting chain notify monitoring...")
-	nodes := FilterV1Nodes(m.config.Nodes)
-
-	// Create a context with cancellation for all goroutines
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// Channel to collect errors from goroutines
-	errorChan := make(chan error, len(nodes))
-
-	// Launch a goroutine for each node
-	for _, node := range nodes {
-		node := node // Capture loop variable for goroutine
+		wg.Add(1)
 		go func() {
-			if err := m.streamNodeUpdates(ctx, node); err != nil {
-				log.Printf("[ERROR] node %s error: %v", node.Name, err)
-				errorChan <- nil
-			} else {
-				errorChan <- nil
+			defer wg.Done()
+			if err := monitor.CheckPeerCount(ctx); err != nil {
+				errChan <- fmt.Errorf("peer count: %w", err)
 			}
 		}()
 	}
 
-	// Wait for all goroutines to complete
-	for i := 0; i < len(nodes); i++ {
-		if err := <-errorChan; err != nil {
-			log.Printf("[ERROR] %v", err)
-			// Don't return immediately, wait for all nodes
-		}
+	if monitorConfig.EnableF3Status {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := monitor.CheckF3Status(ctx); err != nil {
+				errChan <- fmt.Errorf("F3 status: %w", err)
+			}
+		}()
 	}
 
-	log.Printf("[INFO] All nodes completed streaming")
+	if monitorConfig.EnableHeightProgression {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := monitor.CheckHeightProgression(ctx); err != nil {
+				errChan <- fmt.Errorf("height progression: %w", err)
+			}
+		}()
+	}
+
+	if monitorConfig.EnableChainNotify {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := monitor.CheckChainNotify(ctx); err != nil {
+				errChan <- fmt.Errorf("chain notify: %w", err)
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Collect errors
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
+	}
+
+	if len(errors) > 0 {
+		log.Printf("[WARN] Health check completed with %d errors: %v", len(errors), errors)
+	} else {
+		log.Printf("[INFO] Comprehensive health check completed successfully")
+	}
+
 	return nil
 }
 
-// streamNodeUpdates handles streaming for a single node using polling
-func (m *NodeHealthMonitor) streamNodeUpdates(ctx context.Context, node NodeConfig) error {
+// CheckChainNotify monitors chain notifications using polling
+func (m *NodeHealthMonitor) CheckChainNotify(ctx context.Context) error {
+	log.Printf("[INFO] Starting chain notify monitoring for %v...", m.monitorConfig.MonitorDuration)
+	nodes := FilterV1Nodes(m.config.Nodes)
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(ctx, m.monitorConfig.MonitorDuration)
+	defer cancel()
+
+	for _, node := range nodes {
+		wg.Add(1)
+		go func(n NodeConfig) {
+			defer wg.Done()
+			m.monitorNodeChain(ctx, n)
+		}(node)
+	}
+
+	wg.Wait()
+	log.Printf("[INFO] Chain notify monitoring completed")
+	return nil
+}
+
+// monitorNodeChain monitors a single node's chain progression
+func (m *NodeHealthMonitor) monitorNodeChain(ctx context.Context, node NodeConfig) {
 	api, closer, err := ConnectToNode(ctx, node)
 	if err != nil {
-		log.Printf("[ERROR] Failed to connect to node '%s': %v", node.Name, err)
-		return err
+		log.Printf("[ERROR] Failed to connect to %s: %v", node.Name, err)
+		return
 	}
 	defer closer()
 
-	// Get initial chain head
 	initialHead, err := api.ChainHead(ctx)
 	if err != nil {
-		log.Printf("[ERROR] Failed to get initial chain head for node '%s': %v", node.Name, err)
-		return err
+		log.Printf("[ERROR] Failed to get initial head for %s: %v", node.Name, err)
+		return
 	}
 
-	initialHeight := initialHead.Height() - 5
-	log.Printf("[INFO] Node '%s' starting at height: %d, TipSet: %s",
-		node.Name, initialHeight, initialHead.Cids())
-
-	// Stream updates for a configurable duration based on monitor config
-	monitorDuration := m.monitorConfig.MonitorDuration
-	if monitorDuration == 0 {
-		monitorDuration = 1 * time.Minute // Default fallback
-	}
-
-	log.Printf("[INFO] Node '%s' streaming updates for %v...", node.Name, monitorDuration)
-
-	// Poll every 7 seconds for new blocks
-	ticker := time.NewTicker(7 * time.Second)
+	lastHeight := initialHead.Height()
+	lastAdvance := time.Now()
+	ticker := time.NewTicker(DefaultHeightCheckInterval)
 	defer ticker.Stop()
 
-	timeout := time.After(monitorDuration)
-	lastReportedHeight := initialHeight
+	log.Printf("[INFO] Node %s starting at height %d", node.Name, lastHeight)
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[INFO] Context cancelled for node '%s'", node.Name)
-			return nil
-		case <-timeout:
-			log.Printf("[INFO] Exiting stream updates for node '%s'", node.Name)
-			return nil
+			return
 		case <-ticker.C:
 			currentHead, err := api.ChainHead(ctx)
 			if err != nil {
-				log.Printf("[WARN] Failed to get current chain head for node '%s': %v", node.Name, err)
+				log.Printf("[WARN] Failed to get head for %s: %v", node.Name, err)
 				continue
 			}
 
 			currentHeight := currentHead.Height()
-
-			// Check if there are new blocks since last check
-			if currentHeight > lastReportedHeight {
-				heightDiff := currentHeight - lastReportedHeight
-				log.Printf("[INFO] Node '%s' advanced %d epochs: %d → %d (TipSet: %s)",
-					node.Name, heightDiff, lastReportedHeight, currentHeight, currentHead.Cids())
-
-				lastReportedHeight = currentHeight
-
-				// Update last tipset change time and reset stall counter (guarded)
-				m.mu.Lock()
-				m.lastTipsetChange[node.Name] = time.Now()
-				m.consecutiveStalls[node.Name] = 0
-				m.mu.Unlock()
-			} else {
-				// Check if we've been stalled too long (guarded read)
-				m.mu.Lock()
-				lastChange, exists := m.lastTipsetChange[node.Name]
-				m.mu.Unlock()
-				if exists {
-					if time.Since(lastChange) > monitorDuration {
-						AssertAlways(node.Name, false, "Chain monitoring: Node should be advancing - chain stall detected", map[string]interface{}{
-							"operation":            "chain_monitoring",
-							"current_height":       currentHeight,
-							"last_reported_height": lastReportedHeight,
-							"property":             "Chain advancement",
-							"impact":               "Critical - indicates node stalls",
-							"stall_duration":       time.Since(lastChange),
-						})
-					}
-				}
+			if currentHeight > lastHeight {
+				log.Printf("[INFO] Node %s: %d → %d (+%d)",
+					node.Name, lastHeight, currentHeight, currentHeight-lastHeight)
+				lastHeight = currentHeight
+				lastAdvance = time.Now()
+			} else if time.Since(lastAdvance) > m.monitorConfig.MonitorDuration/2 {
+				AssertAlways(node.Name, false, "Chain should be advancing",
+					map[string]interface{}{
+						"height":         currentHeight,
+						"stall_duration": time.Since(lastAdvance).String(),
+					})
 			}
 		}
 	}
@@ -281,109 +242,115 @@ func (m *NodeHealthMonitor) streamNodeUpdates(ctx context.Context, node NodeConf
 // CheckHeightProgression monitors height progression for all nodes
 func (m *NodeHealthMonitor) CheckHeightProgression(ctx context.Context) error {
 	log.Printf("[INFO] Starting height progression monitoring...")
-
 	nodes := FilterV1Nodes(m.config.Nodes)
 
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(ctx, m.monitorConfig.MonitorDuration)
+	defer cancel()
+
 	for _, node := range nodes {
-		go func(node NodeConfig) {
-			if err := m.monitorHeightForNode(ctx, node); err != nil {
-				log.Printf("[ERROR] Height monitoring failed for node %s: %v", node.Name, err)
-			}
+		wg.Add(1)
+		go func(n NodeConfig) {
+			defer wg.Done()
+			m.monitorHeightForNode(ctx, n)
 		}(node)
 	}
 
-	// Monitor for configured duration
-	time.Sleep(m.monitorConfig.MonitorDuration)
-
+	wg.Wait()
+	log.Printf("[INFO] Height progression monitoring completed")
 	return nil
 }
 
 // monitorHeightForNode monitors height progression for a specific node
-func (m *NodeHealthMonitor) monitorHeightForNode(ctx context.Context, node NodeConfig) error {
+func (m *NodeHealthMonitor) monitorHeightForNode(ctx context.Context, node NodeConfig) {
 	api, closer, err := ConnectToNode(ctx, node)
 	if err != nil {
-		log.Printf("[ERROR] failed to connect to node %s: %v", node.Name, err)
-		return nil
+		log.Printf("[ERROR] Failed to connect to %s: %v", node.Name, err)
+		return
 	}
 	defer closer()
 
-	// Poll height at configured interval
 	ticker := time.NewTicker(m.monitorConfig.HeightCheckInterval)
 	defer ticker.Stop()
-
-	timeout := time.After(m.monitorConfig.MonitorDuration)
-	checkCount := 0
 
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
-		case <-timeout:
-			return nil
+			return
 		case <-ticker.C:
 			currentHead, err := api.ChainHead(ctx)
 			if err != nil {
-				log.Printf("[WARN] Failed to get chain head for node %s: %v", node.Name, err)
+				log.Printf("[WARN] Failed to get head for %s: %v", node.Name, err)
 				continue
 			}
 
 			currentHeight := currentHead.Height()
-			m.mu.Lock()
-			m.heightHistory[node.Name] = append(m.heightHistory[node.Name], currentHeight)
+			m.recordHeight(node.Name, currentHeight)
 
-			// Keep only last 4 heights
-			if len(m.heightHistory[node.Name]) > 4 {
-				m.heightHistory[node.Name] = m.heightHistory[node.Name][len(m.heightHistory[node.Name])-4:]
-			}
-			m.mu.Unlock()
-
-			log.Printf("[INFO] Node %s height check %d: %d", node.Name, checkCount+1, currentHeight)
-
-			// Check if height has been the same for 4 consecutive polls
-			m.mu.Lock()
-			if len(m.heightHistory[node.Name]) == 4 {
-				heights := append([]abi.ChainEpoch(nil), m.heightHistory[node.Name]...)
-				m.mu.Unlock()
-				if heights[0] == heights[1] && heights[1] == heights[2] && heights[2] == heights[3] {
-					m.mu.Lock()
-					m.consecutiveStalls[node.Name]++
-					stalls := m.consecutiveStalls[node.Name]
-					m.mu.Unlock()
-
-					if stalls >= m.monitorConfig.MaxConsecutiveStalls {
-						heightIncreasing := false
-						AssertAlways(node.Name, heightIncreasing, "Height monitoring: Node height should be increasing - consecutive stalls detected", map[string]interface{}{
-							"operation":          "height_monitoring",
-							"height":             heights[0],
+			if m.isStalled(node.Name) {
+				stalls := m.getStallCount(node.Name)
+				if stalls >= m.monitorConfig.MaxConsecutiveStalls {
+					AssertAlways(node.Name, false, "Height should be increasing",
+						map[string]interface{}{
+							"height":             currentHeight,
 							"consecutive_stalls": stalls,
-							"property":           "Height progression",
-							"impact":             "Critical - indicates node is stalled",
 						})
-					}
-				} else {
-					// Reset stall counter on height change
-					m.mu.Lock()
-					m.consecutiveStalls[node.Name] = 0
-					m.mu.Unlock()
 				}
-			} else {
-				m.mu.Unlock()
 			}
-
-			checkCount++
 		}
 	}
 }
 
+// recordHeight records a height measurement and checks for stalls
+func (m *NodeHealthMonitor) recordHeight(nodeName string, height abi.ChainEpoch) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.heightHistory[nodeName] = append(m.heightHistory[nodeName], height)
+
+	// Keep only last N heights
+	if len(m.heightHistory[nodeName]) > HeightHistorySize {
+		m.heightHistory[nodeName] = m.heightHistory[nodeName][1:]
+	}
+}
+
+// isStalled checks if a node's height has been static
+func (m *NodeHealthMonitor) isStalled(nodeName string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	heights := m.heightHistory[nodeName]
+	if len(heights) < HeightHistorySize {
+		return false
+	}
+
+	// Check if all heights are the same
+	for i := 1; i < len(heights); i++ {
+		if heights[i] != heights[0] {
+			m.consecutiveStalls[nodeName] = 0
+			return false
+		}
+	}
+
+	m.consecutiveStalls[nodeName]++
+	return true
+}
+
+// getStallCount returns the consecutive stall count for a node
+func (m *NodeHealthMonitor) getStallCount(nodeName string) int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.consecutiveStalls[nodeName]
+}
+
 // CheckPeerCount checks peer count for all nodes
 func (m *NodeHealthMonitor) CheckPeerCount(ctx context.Context) error {
-	log.Printf("[INFO] Starting peer count check...")
-
+	log.Printf("[INFO] Checking peer counts...")
 	nodes := FilterV1Nodes(m.config.Nodes)
 
 	for _, node := range nodes {
 		if err := m.checkNodePeerCount(ctx, node); err != nil {
-			log.Printf("[ERROR] Peer count check failed for node %s: %v", node.Name, err)
+			log.Printf("[ERROR] Peer count check failed for %s: %v", node.Name, err)
 		}
 	}
 
@@ -394,40 +361,34 @@ func (m *NodeHealthMonitor) CheckPeerCount(ctx context.Context) error {
 func (m *NodeHealthMonitor) checkNodePeerCount(ctx context.Context, node NodeConfig) error {
 	api, closer, err := ConnectToNode(ctx, node)
 	if err != nil {
-		log.Printf("[ERROR] failed to connect to node %s: %v", node.Name, err)
-		return nil
+		return fmt.Errorf("failed to connect: %w", err)
 	}
 	defer closer()
 
 	peers, err := api.NetPeers(ctx)
 	if err != nil {
-		log.Printf("[ERROR] failed to get peers for node %s: %v", node.Name, err)
-		return nil
+		return fmt.Errorf("failed to get peers: %w", err)
 	}
 
 	peerCount := len(peers)
 	log.Printf("[INFO] Node %s has %d peers", node.Name, peerCount)
 
-	// Assert that peer count is not 0 or less than 1
-	AssertAlways(node.Name, peerCount > 0, "Peer monitoring: Node should have active peer connections - network isolation detected", map[string]interface{}{
-		"operation":  "peer_monitoring",
-		"peer_count": peerCount,
-		"property":   "Peer connectivity",
-		"impact":     "Critical - indicates network isolation",
-	})
+	AssertAlways(node.Name, peerCount > 0, "Node should have peers",
+		map[string]interface{}{
+			"peer_count": peerCount,
+		})
 
 	return nil
 }
 
 // CheckF3Status checks if F3 is running on all nodes
 func (m *NodeHealthMonitor) CheckF3Status(ctx context.Context) error {
-	log.Printf("[INFO] Starting F3 status check...")
-
+	log.Printf("[INFO] Checking F3 status...")
 	nodes := FilterV1Nodes(m.config.Nodes)
 
 	for _, node := range nodes {
 		if err := m.checkNodeF3Status(ctx, node); err != nil {
-			log.Printf("[ERROR] F3 status check failed for node %s: %v", node.Name, err)
+			log.Printf("[ERROR] F3 status check failed for %s: %v", node.Name, err)
 		}
 	}
 
@@ -438,38 +399,31 @@ func (m *NodeHealthMonitor) CheckF3Status(ctx context.Context) error {
 func (m *NodeHealthMonitor) checkNodeF3Status(ctx context.Context, node NodeConfig) error {
 	api, closer, err := ConnectToNode(ctx, node)
 	if err != nil {
-		log.Printf("[ERROR] failed to connect to node %s: %v", node.Name, err)
-		return nil
+		return fmt.Errorf("failed to connect: %w", err)
 	}
 	defer closer()
+
 	head, err := api.ChainHead(ctx)
 	if err != nil {
-		log.Printf("[ERROR] failed to get chain head for node %s: %v", node.Name, err)
+		return fmt.Errorf("failed to get chain head: %w", err)
+	}
+
+	if head.Height() < MinHeightForF3Check {
+		log.Printf("[INFO] Node %s height %d < %d, skipping F3 check", node.Name, head.Height(), MinHeightForF3Check)
 		return nil
 	}
 
-	log.Printf("[INFO] Node %s chain head: %d", node.Name, head.Height())
-	if head.Height() < 10 {
-		log.Printf("[INFO] Node %s chain head is less than 10, skipping F3 status check", node.Name)
-		return nil
-	}
-	// Try to call F3IsRunning method
-	// Note: This method might not exist on all API versions, so we'll handle the error gracefully
 	f3Running, err := api.F3IsRunning(ctx)
 	if err != nil {
-		log.Printf("[ERROR] failed to get F3 status for node %s: %v", node.Name, err)
-		return nil
+		return fmt.Errorf("F3IsRunning failed: %w", err)
 	}
 
-	log.Printf("[INFO] Node %s F3 status: %v", node.Name, f3Running)
+	log.Printf("[INFO] Node %s F3 running: %v", node.Name, f3Running)
 
-	// Assert that F3 is running
-	AssertAlways(node.Name, f3Running, "F3 monitoring: F3 consensus service should be running - consensus failure detected", map[string]interface{}{
-		"operation":  "f3_monitoring",
-		"f3_running": f3Running,
-		"property":   "F3 service status",
-		"impact":     "Critical - F3 is required for consensus",
-	})
+	AssertAlways(node.Name, f3Running, "F3 should be running",
+		map[string]interface{}{
+			"f3_running": f3Running,
+		})
 
 	return nil
 }

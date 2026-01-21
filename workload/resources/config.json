@@ -3,27 +3,17 @@
     {
       "name": "Lotus0",
       "rpcurl": "http://lotus0:1234/rpc/v1",
-      "authtokenpath": "/root/devgen/lotus0/jwt"
-    },
-    {
-      "name": "Lotus0-V2",
-      "rpcurl": "http://lotus0:1234/rpc/v2",
-      "authtokenpath": "/root/devgen/lotus0/jwt"
+      "authtokenpath": "/root/devgen/lotus0/lotus0-jwt"
     },
     {
       "name": "Lotus1",
       "rpcurl": "http://lotus1:1234/rpc/v1",
-      "authtokenpath": "/root/devgen/lotus1/jwt"
+      "authtokenpath": "/root/devgen/lotus1/lotus1-jwt"
     },
     {
-      "name": "Lotus2-V2",
-      "rpcurl": "http://lotus0:1234/rpc/v2",
-      "authtokenpath": "/root/devgen/lotus0/jwt"
-    },
-    {
-      "name":"Forest0",
+      "name": "Forest0",
       "rpcurl": "http://forest0:3456/rpc/v1",
-      "authtokenpath":"/root/devgen/forest0/jwt"
+      "authtokenpath": "/root/devgen/forest0/forest0-jwt"
     }
   ],
   "defaultFundingAmount": "100000000000000000000"

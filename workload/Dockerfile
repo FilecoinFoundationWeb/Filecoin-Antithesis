@@ -11,7 +11,7 @@ RUN apt-get update -y && \
     curl -OL "https://golang.org/dl/go1.23.2.linux-${ARCH}.tar.gz" && \
     tar -C /usr/local -xzf "go1.23.2.linux-${ARCH}.tar.gz" && \
     rm "go1.23.2.linux-${ARCH}.tar.gz"
-
+RUN ls
 # Install Node.js and npm
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
@@ -42,12 +42,10 @@ RUN go install github.com/ethereum/go-ethereum/cmd/abigen@latest
 WORKDIR /opt/antithesis 
 RUN npm install -g hardhat
 # Clone and build filwizard
-RUN ls
 RUN git clone https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
 
 
 WORKDIR /opt/antithesis/FilWizard
-RUN ls
 RUN git pull
 # Install forge dependencies:
 RUN git checkout api-properties
@@ -80,10 +78,29 @@ RUN pnpm --filter @filoz/synapse-sdk run build
 RUN pnpm add -w ethers
 # Build SDK
 RUN pnpm --filter @filoz/synapse-sdk run build
-
+RUN ls
 WORKDIR /opt/antithesis 
 COPY ./entrypoint ./entrypoint
 COPY ./main ./test/v1/main
+
+# Copy Go source files for workload binary
+COPY ./resources ./resources
+COPY go.mod ./go.mod
+COPY go.sum ./go.sum
+COPY main.go ./main.go
+
+# Make all files in ./test/v1/main executable
+RUN chmod +x ./test/v1/main/*
+
+# Download Go dependencies
+RUN go mod download
+
+# Build the Go workload binary
+ENV CGO_ENABLED=1
+RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') go build -o ./workload ./main.go
+
+# Clean up source file after build
+RUN rm ./main.go
 
 WORKDIR /opt/antithesis/FilWizard
 ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]

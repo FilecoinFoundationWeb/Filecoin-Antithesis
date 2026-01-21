@@ -24,10 +24,14 @@ export CGO_CFLAGS="-D__BLST_PORTABLE__"
 lotus-miner --version
 lotus wallet import --as-default ${SHARED_CONFIGS}/.genesis-sector-${no}/pre-seal-${LOTUS_MINER_ACTOR_ADDRESS}.key
 
-if [ "$no" -eq 0 ]; then
-    lotus-miner init --genesis-miner --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${no} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
+if [ -f "${LOTUS_MINER_PATH}/config.toml" ]; then
+    echo "lotus-miner${no}: Repo already exists, skipping init..."
 else
-    lotus-miner init --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${no} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
+    if [ "$no" -eq 0 ]; then
+        lotus-miner init --genesis-miner --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${no} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
+    else
+        lotus-miner init --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${no} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
+    fi
 fi
 echo "lotus-miner${no}: setup complete"
 

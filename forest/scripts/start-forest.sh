@@ -4,6 +4,7 @@ no="$1"
 
 forest_data_dir="FOREST_${no}_DATA_DIR"
 export FOREST_DATA_DIR="${!forest_data_dir}"
+export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
 
 export FOREST_RPC_PORT=$FOREST_RPC_PORT
 export FOREST_P2P_PORT=$FOREST_P2P_PORT
@@ -41,22 +42,29 @@ export NETWORK_NAME=$NETWORK_NAME
 
 forest --version
 
-sed "s|\${FOREST_DATA_DIR}|$FOREST_DATA_DIR|g; s|\${FOREST_TARGET_PEER_COUNT}|$FOREST_TARGET_PEER_COUNT|g" /forest/forest_config.toml.tpl > ${FOREST_DATA_DIR}/forest_config.toml
-echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
-
 host_ip=$(getent hosts "forest${no}" | awk '{ print $1 }')
 
-echo "---------------------------"
-echo "ip address: $host_ip"
-echo "---------------------------"
+if [ ! -f "${FOREST_DATA_DIR}/jwt" ]; then
+    sed "s|\${FOREST_DATA_DIR}|$FOREST_DATA_DIR|g; s|\${FOREST_TARGET_PEER_COUNT}|$FOREST_TARGET_PEER_COUNT|g" /forest/forest_config.toml.tpl > ${FOREST_DATA_DIR}/forest_config.toml
+    echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
 
-# Perform basic initialization of the Forest node, including generating the admin token.
-forest --genesis "${SHARED_CONFIGS}/devgen.car" \
-       --config "${FOREST_DATA_DIR}/forest_config.toml" \
-       --save-token "${FOREST_DATA_DIR}/jwt" \
-       --no-healthcheck \
-       --skip-load-actors \
-       --exit-after-init
+    echo "---------------------------"
+    echo "ip address: $host_ip"
+    echo "---------------------------"
+
+    # Perform basic initialization of the Forest node, including generating the admin token.
+    forest --genesis "${SHARED_CONFIGS}/devgen.car" \
+        --config "${FOREST_DATA_DIR}/forest_config.toml" \
+        --save-token "${FOREST_DATA_DIR}/jwt" \
+        --no-healthcheck \
+        --skip-load-actors \
+        --exit-after-init
+else
+    echo "forest${no}: Node already initialized, skipping init..."
+    # Still need to regenerate config in case env vars changed, but skipping exit-after-init
+    sed "s|\${FOREST_DATA_DIR}|$FOREST_DATA_DIR|g; s|\${FOREST_TARGET_PEER_COUNT}|$FOREST_TARGET_PEER_COUNT|g" /forest/forest_config.toml.tpl > ${FOREST_DATA_DIR}/forest_config.toml
+    echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
+fi
 
 forest --genesis "${SHARED_CONFIGS}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
@@ -72,9 +80,29 @@ echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
 
 # forest node API needs to be up
 forest-cli wait-api
-echo "forest: collecting network info…"
+echo "forest${no}: collecting network info…"
 
-forest-cli net listen | head -n1 > "${FOREST_DATA_DIR}/forest${no}-ipv4addr"
+# Export artifacts similar to Lotus pattern
+# Store IPv4 address
+forest-cli net listen | grep -v "127.0.0.1" | grep -v "::1" | head -n 1 > "${FOREST_DATA_DIR}/forest${no}-ipv4addr"
+
+# Copy JWT with lotus-style naming for workload compatibility  
+cp "${FOREST_DATA_DIR}/jwt" "${FOREST_DATA_DIR}/forest${no}-jwt"
+
+# Export P2P ID
+forest-cli net id > "${FOREST_DATA_DIR}/forest${no}-p2pid" 2>/dev/null || echo "P2P ID export skipped"
+
+echo "forest${no}: Exported artifacts to ${FOREST_DATA_DIR}:"
+ls -la "${FOREST_DATA_DIR}/forest${no}-"* 2>/dev/null || true
+
+# Import all genesis miner pre-seal keys so F3 can sign messages
+echo "forest${no}: Importing genesis miner keys..."
+for PRESEAL_KEY_FILE in ${SHARED_CONFIGS}/.genesis-sector-*/pre-seal-*.key; do
+    if [ -f "$PRESEAL_KEY_FILE" ]; then
+        echo "Importing pre-seal key from $PRESEAL_KEY_FILE"
+        forest-wallet --remote-wallet import "$PRESEAL_KEY_FILE" || true
+    fi
+done
 
 # connecting to peers
 connect_with_retries() {

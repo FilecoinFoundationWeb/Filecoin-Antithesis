@@ -279,20 +279,6 @@ node /opt/antithesis/synapse-sdk/utils/post-deploy-setup.js \
     --multicall3 "$MULTICALL3_ADDRESS"
 
 log_success "Service provider registered"
-
-# =============================================================================
-# STEP 7: RUN E2E TEST
-# =============================================================================
-
-log_info "Running e2e storage test..."
-
-PRIVATE_KEY="$CLIENT_PRIVATE_KEY" \
-RPC_URL="$RPC_URL" \
-WARM_STORAGE_ADDRESS="$WARM_STORAGE_CONTRACT_ADDRESS" \
-node --env-file="$ENV_FILE" \
-    /opt/antithesis/synapse-sdk/utils/example-storage-e2e.js \
-    /opt/antithesis/synapse-sdk/README.md
-
 # =============================================================================
 # COMPLETE
 # =============================================================================

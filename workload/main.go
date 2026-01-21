@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/FilecoinFoundationWeb/Filecoin-Antithesis/resources"
@@ -46,7 +47,6 @@ func main() {
 			monitoringCommands(),
 			chainCommands(),
 			stateCommands(),
-			minerCommands(),
 			minerCommands(),
 			stressCommands(),
 			ethCommands(),
@@ -102,59 +102,36 @@ func walletCommands() *cli.Command {
 					if err != nil {
 						return err
 					}
-					if nodeConfig.Name == "Forest" {
+
+					// Forest specific handling
+					if nodeConfig.Name == "Forest" || strings.HasPrefix(nodeConfig.Name, "Forest") {
 						api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
 						if err != nil {
 							return err
 						}
 						defer closer()
-						return resources.CreateForestWallets(c.Context, api, c.Int("count"), abi.NewTokenAmount(1000000000000))
-					} else {
-						return resources.PerformCreateOperation(c.Context, nodeConfig, c.Int("count"), abi.NewTokenAmount(1000000000000))
+
+						// Find a Lotus node to fund from
+						lotusNodes := resources.FilterLotusNodes(config.Nodes)
+						if len(lotusNodes) == 0 {
+							log.Printf("[ERROR] No Lotus nodes available to fund Forest wallets")
+							return nil
+						}
+
+						// Pick first Lotus node
+						lotusNodeConfig := lotusNodes[0]
+						lotusApi, lotusCloser, err := resources.ConnectToNode(c.Context, lotusNodeConfig)
+						if err != nil {
+							log.Printf("[ERROR] Failed to connect to Lotus node %s for funding: %v", lotusNodeConfig.Name, err)
+							return err
+						}
+						defer lotusCloser()
+
+						return resources.CreateForestWallets(c.Context, api, lotusApi, c.Int("count"), abi.NewTokenAmount(1000000000000))
 					}
-				},
-			},
-			{
-				Name:  "fund",
-				Usage: "Fund forest genesis wallet",
-				Flags: []cli.Flag{
-					nodeFlag,
-				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
-					if err != nil {
-						return err
-					}
-					defer closer()
-					lotusNodeConfig := resources.NodeConfig{
-						Name:          "Lotus1",
-						RPCURL:        "http://lotus-1:1234/rpc/v1",
-						AuthTokenPath: "/root/devgen/lotus-1/jwt",
-					}
-					lotusapi, closer, err := resources.ConnectToNode(c.Context, lotusNodeConfig)
-					if err != nil {
-						return err
-					}
-					defer closer()
-					return resources.InitializeForestWallets(c.Context, api, lotusapi, 1, abi.NewTokenAmount(1000000000000000000))
-				},
-			},
-			{
-				Name:  "delete",
-				Usage: "Delete wallets",
-				Flags: []cli.Flag{
-					nodeFlag,
-				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					return resources.PerformDeleteOperation(c.Context, nodeConfig)
+
+					// Standard Lotus wallet creation
+					return resources.PerformCreateOperation(c.Context, nodeConfig, c.Int("count"), abi.NewTokenAmount(1000000000000))
 				},
 			},
 		},
@@ -186,7 +163,7 @@ func networkCommands() *cli.Command {
 					log.Printf("Connecting node '%s' to other nodes...", nodeConfig.Name)
 					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
 					if err != nil {
-						log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+						log.Printf("[ERROR] Failed to connect to node '%s': %v", nodeConfig.Name, err)
 						return nil
 					}
 					defer closer()
@@ -214,7 +191,7 @@ func networkCommands() *cli.Command {
 					log.Printf("Disconnecting node '%s' from other nodes...", nodeConfig.Name)
 					api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
 					if err != nil {
-						log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
+						log.Printf("[ERROR] Failed to connect to node '%s': %v", nodeConfig.Name, err)
 						return nil
 					}
 					defer closer()
@@ -232,18 +209,13 @@ func networkCommands() *cli.Command {
 				Usage: "Simulate a reorg by disconnecting, waiting, and reconnecting",
 				Flags: []cli.Flag{
 					nodeFlag,
-					&cli.BoolFlag{
-						Name:  "check-consensus",
-						Usage: "Check for running consensus scripts and exit early if detected",
-						Value: true,
-					},
 				},
 				Action: func(c *cli.Context) error {
 					nodeConfig, err := getNodeConfig(c)
 					if err != nil {
 						return err
 					}
-					return resources.PerformReorgOperation(c.Context, nodeConfig, c.Bool("check-consensus"))
+					return resources.PerformReorgOperation(c.Context, nodeConfig, false)
 				},
 			},
 		},
@@ -261,71 +233,6 @@ func mempoolCommands() *cli.Command {
 		Name:  "mempool",
 		Usage: "Mempool testing operations",
 		Subcommands: []*cli.Command{
-			{
-				Name:  "fuzz",
-				Usage: "Run mempool fuzzing",
-				Flags: []cli.Flag{
-					nodeFlag,
-					&cli.IntFlag{
-						Name:  "count",
-						Value: 100,
-						Usage: "Number of transactions to perform",
-					},
-					&cli.IntFlag{
-						Name:  "concurrency",
-						Value: 5,
-						Usage: "Number of concurrent operations",
-					},
-					&cli.StringFlag{
-						Name:  "strategy",
-						Value: "standard",
-						Usage: "Fuzzing strategy (standard, chained)",
-					},
-				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					return resources.PerformMempoolFuzz(
-						c.Context,
-						nodeConfig,
-						c.Int("count"),
-						c.Int("concurrency"),
-						c.String("strategy"),
-					)
-				},
-			},
-			{
-				Name:  "chained",
-				Usage: "Run chained transaction mempool fuzzing",
-				Flags: []cli.Flag{
-					nodeFlag,
-					&cli.IntFlag{
-						Name:  "count",
-						Value: 100,
-						Usage: "Number of transactions to perform",
-					},
-					&cli.IntFlag{
-						Name:  "concurrency",
-						Value: 5,
-						Usage: "Number of concurrent operations",
-					},
-				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					return resources.PerformMempoolFuzz(
-						c.Context,
-						nodeConfig,
-						c.Int("count"),
-						c.Int("concurrency"),
-						"chained",
-					)
-				},
-			},
 			{
 				Name:  "track",
 				Usage: "Track mempool size over time",
@@ -367,81 +274,10 @@ func mempoolCommands() *cli.Command {
 }
 
 func contractCommands() *cli.Command {
-	nodeFlag := &cli.StringFlag{
-		Name:     "node",
-		Usage:    "node name from config.json (Lotus1 or Lotus2)",
-		Required: true,
-	}
-
-	const (
-		simpleCoinPath = "/opt/antithesis/resources/smart-contracts/SimpleCoin.hex"
-		mcopyPath      = "/opt/antithesis/resources/smart-contracts/MCopy.hex"
-		tstoragePath   = "/opt/antithesis/resources/smart-contracts/TransientStorage.hex"
-	)
-
 	return &cli.Command{
-		Name:  "contracts",
-		Usage: "Smart contract operations",
-		Subcommands: []*cli.Command{
-			{
-				Name:  "deploy-simple-coin",
-				Usage: "Deploy SimpleCoin contract",
-				Flags: []cli.Flag{
-					nodeFlag,
-				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					return resources.PerformDeploySimpleCoin(c.Context, nodeConfig, simpleCoinPath)
-				},
-			},
-			{
-				Name:  "deploy-mcopy",
-				Usage: "Deploy MCopy contract",
-				Flags: []cli.Flag{
-					nodeFlag,
-				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					return resources.PerformDeployMCopy(c.Context, nodeConfig, mcopyPath)
-				},
-			},
-			{
-				Name:  "deploy-tstorage",
-				Usage: "Deploy Transient Storage contract",
-				Flags: []cli.Flag{
-					nodeFlag,
-				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					return resources.PerformDeployTStore(c.Context, nodeConfig, tstoragePath)
-				},
-			},
-			/*
-				{
-					Name:  "deploy-blsprecompile",
-					Usage: "Deploy BLSPreCompile contract",
-					Flags: []cli.Flag{
-						nodeFlag,
-					},
-					Action: func(c *cli.Context) error {
-						nodeConfig, err := getNodeConfig(c)
-						if err != nil {
-							return err
-						}
-						return resources.DeployBLSPreCompile(c.Context, nodeConfig)
-					},
-				},
-			*/
-		},
+		Name:        "contracts",
+		Usage:       "Smart contract operations (Deprecated)",
+		Subcommands: []*cli.Command{},
 	}
 }
 
@@ -465,20 +301,6 @@ func consensusCommands() *cli.Command {
 					return resources.PerformConsensusCheck(c.Context, &resources.Config{Nodes: filteredConfig}, c.Int64("height"))
 				},
 			},
-			{
-				Name:  "fault",
-				Usage: "Send consensus fault",
-				Action: func(c *cli.Context) error {
-					return resources.PerformSendConsensusFault(c.Context)
-				},
-			},
-			{
-				Name:  "finalized",
-				Usage: "Check finalized tipsets",
-				Action: func(c *cli.Context) error {
-					return resources.PerformCheckFinalizedTipsets(c.Context)
-				},
-			},
 		},
 	}
 }
@@ -488,41 +310,6 @@ func monitoringCommands() *cli.Command {
 		Name:  "monitor",
 		Usage: "Monitoring operations",
 		Subcommands: []*cli.Command{
-			{
-				Name:  "peers",
-				Usage: "Check peer connections",
-				Action: func(c *cli.Context) error {
-					return resources.CheckPeers()
-				},
-			},
-			{
-				Name:  "f3",
-				Usage: "Check F3 service status",
-				Action: func(c *cli.Context) error {
-					return resources.CheckF3Running()
-				},
-			},
-			{
-				Name:  "chain-notify",
-				Usage: "Monitor chain notifications for tipset changes",
-				Flags: []cli.Flag{
-					&cli.DurationFlag{
-						Name:  "duration",
-						Usage: "Duration to monitor (e.g., 30s, 1m, 2m)",
-						Value: 30 * time.Second,
-					},
-				},
-				Action: func(c *cli.Context) error {
-					monitorConfig := &resources.HealthMonitorConfig{
-						EnableChainNotify:       true,
-						EnableHeightProgression: false,
-						EnablePeerCount:         false,
-						EnableF3Status:          false,
-						MonitorDuration:         c.Duration("duration"),
-					}
-					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
-				},
-			},
 			{
 				Name:  "height-progression",
 				Usage: "Monitor height progression for all nodes",
@@ -552,33 +339,6 @@ func monitoringCommands() *cli.Command {
 						MonitorDuration:         c.Duration("duration"),
 						HeightCheckInterval:     c.Duration("interval"),
 						MaxConsecutiveStalls:    c.Int("max-stalls"),
-					}
-					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
-				},
-			},
-
-			{
-				Name:  "peer-count",
-				Usage: "Check peer count for all nodes",
-				Action: func(c *cli.Context) error {
-					monitorConfig := &resources.HealthMonitorConfig{
-						EnableChainNotify:       false,
-						EnableHeightProgression: false,
-						EnablePeerCount:         true,
-						EnableF3Status:          false,
-					}
-					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
-				},
-			},
-			{
-				Name:  "f3-status",
-				Usage: "Check F3 running status for all nodes",
-				Action: func(c *cli.Context) error {
-					monitorConfig := &resources.HealthMonitorConfig{
-						EnableChainNotify:       false,
-						EnableHeightProgression: false,
-						EnablePeerCount:         false,
-						EnableF3Status:          true,
 					}
 					return resources.ComprehensiveHealthCheckWithConfig(c.Context, config, monitorConfig)
 				},
@@ -655,6 +415,45 @@ func chainCommands() *cli.Command {
 					return resources.PerformCheckBackfill(c.Context, config)
 				},
 			},
+			{
+				Name:  "common-tipset",
+				Usage: "Resolve and print the common finalized tipset across all nodes",
+				Flags: []cli.Flag{
+					&cli.DurationFlag{
+						Name:  "timeout",
+						Value: 2 * time.Minute,
+						Usage: "Timeout for resolution",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					// Connect to V1 nodes only (excludes *-V2 nodes), includes Forest
+					v1Nodes := resources.FilterV1Nodes(config.Nodes)
+					var commonAPIs []resources.CommonAPI
+					for _, nc := range v1Nodes {
+						api, closer, err := resources.ConnectToCommonNode(c.Context, nc)
+						if err != nil {
+							log.Printf("[ERROR] Failed to connect to %s: %v", nc.Name, err)
+							continue
+						}
+						defer closer()
+						commonAPIs = append(commonAPIs, api)
+					}
+
+					if len(commonAPIs) == 0 {
+						log.Printf("[ERROR] No nodes connected")
+						return nil
+					}
+
+					ts, err := resources.GetCommonTipSet(c.Context, commonAPIs)
+					if err != nil {
+						log.Printf("[ERROR] Failed to get common tipset: %v", err)
+						return err
+					}
+
+					log.Printf("[SUCCESS] Common Finalized TipSet: Height %d, Key %s", ts.Height(), ts.Key())
+					return nil
+				},
+			},
 		},
 	}
 }
@@ -672,7 +471,7 @@ func stateCommands() *cli.Command {
 		Subcommands: []*cli.Command{
 			{
 				Name:  "check",
-				Usage: "Check state consistency",
+				Usage: "Check state consistency for a single node",
 				Flags: []cli.Flag{
 					nodeFlag,
 				},
@@ -684,6 +483,37 @@ func stateCommands() *cli.Command {
 					return resources.PerformStateCheck(c.Context, nodeConfig)
 				},
 			},
+			{
+				Name:  "compare",
+				Usage: "Compare state across all nodes from common finalized tipset",
+				Flags: []cli.Flag{
+					&cli.IntFlag{
+						Name:  "epochs",
+						Value: 10,
+						Usage: "Number of epochs to walk back and compare",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					log.Println("[INFO] Starting cross-node state comparison...")
+					return resources.PerformCrossNodeStateCheck(c.Context, config)
+				},
+			},
+			{
+				Name:  "compare-at-height",
+				Usage: "Compare state across all nodes at a specific height",
+				Flags: []cli.Flag{
+					&cli.Int64Flag{
+						Name:     "height",
+						Usage:    "Chain height to compare state at",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					height := abi.ChainEpoch(c.Int64("height"))
+					log.Printf("[INFO] Comparing state across all nodes at height %d...", height)
+					return resources.CompareStateAtHeight(c.Context, config.Nodes, height)
+				},
+			},
 		},
 	}
 }
@@ -691,141 +521,20 @@ func stateCommands() *cli.Command {
 func minerCommands() *cli.Command {
 	return &cli.Command{
 		Name:        "miner",
-		Usage:       "Miner operations",
-		Subcommands: []*cli.Command{
-			/*
-				{
-					Name:  "create",
-					Usage: "Create a new miner",
-					Flags: []cli.Flag{
-						nodeFlag,
-						&cli.IntFlag{
-							Name:  "sector-size",
-							Value: 2048,
-							Usage: "Sector size in bytes (default: 2048)",
-						},
-						&cli.StringFlag{
-							Name:  "owner",
-							Usage: "Owner address (defaults to default wallet)",
-						},
-						&cli.StringFlag{
-							Name:  "worker",
-							Usage: "Worker address (defaults to default wallet)",
-						},
-						&cli.StringFlag{
-							Name:  "deposit-test",
-							Usage: "Test deposit scenarios (zero, negative, excess)",
-							Value: "normal",
-						},
-					},
-					Action: func(c *cli.Context) error {
-						nodeConfig, err := getNodeConfig(c)
-						if err != nil {
-							return err
-						}
-						if nodeConfig == nil {
-							return nil
-						}
-
-						api, closer, err := resources.ConnectToNode(c.Context, *nodeConfig)
-						if err != nil {
-							log.Printf("[ERROR] Failed to connect to node '%s': %v", nodeConfig.Name, err)
-							return nil
-						}
-						defer closer()
-						// Get required deposit from API
-						requiredDeposit, err := api.StateMinerCreationDeposit(c.Context, types.EmptyTSK)
-						if err != nil {
-							log.Printf("[ERROR] Failed to get miner creation deposit: %v", err)
-							return nil
-						}
-
-						// Handle deposit test scenarios
-						var testDeposit abi.TokenAmount
-						switch c.String("deposit-test") {
-						case "zero":
-							testDeposit = abi.NewTokenAmount(0)
-							log.Printf("[INFO] Testing zero deposit scenario")
-						case "negative":
-							testDeposit = abi.NewTokenAmount(-1)
-							log.Printf("[INFO] Testing negative deposit scenario")
-						case "excess":
-							// Double the required deposit
-							testDeposit = abi.NewTokenAmount(requiredDeposit.Int64() * 2)
-							log.Printf("[INFO] Testing excess deposit scenario (2x required amount)")
-						default:
-							testDeposit = requiredDeposit
-							log.Printf("[INFO] Using normal required deposit: %s", requiredDeposit)
-						}
-
-						return resources.CreateMiner(c.Context, api, testDeposit)
-					},
-				},
-			*/
-		},
+		Usage:       "Miner operations (Deprecated)",
+		Subcommands: []*cli.Command{},
 	}
 }
 
 func stressCommands() *cli.Command {
-	nodeFlag := &cli.StringFlag{
-		Name:     "node",
-		Usage:    "node name from config.json (Lotus1 or Lotus2)",
-		Required: true,
-	}
-
 	return &cli.Command{
-		Name:  "stress",
-		Usage: "Stress test operations",
-		Subcommands: []*cli.Command{
-			{
-				Name:  "messages",
-				Usage: "Stress test with max size messages",
-				Flags: []cli.Flag{
-					nodeFlag,
-				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					return resources.PerformStressMaxMessageSize(c.Context, nodeConfig)
-				},
-			},
-			{
-				Name:  "p2p-bomb",
-				Usage: "Run P2P bomb",
-				Flags: []cli.Flag{
-					nodeFlag,
-				},
-				Action: func(c *cli.Context) error {
-					return resources.RunP2PBomb(c.Context, 100)
-				},
-			},
-			{
-				Name:  "block-fuzz",
-				Usage: "Run block fuzzing",
-				Flags: []cli.Flag{
-					nodeFlag,
-				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					return resources.PerformBlockFuzzing(c.Context, nodeConfig)
-				},
-			},
-		},
+		Name:        "stress",
+		Usage:       "Stress test operations (Deprecated in favor of mempool)",
+		Subcommands: []*cli.Command{},
 	}
 }
 
 func ethCommands() *cli.Command {
-	nodeFlag := &cli.StringFlag{
-		Name:     "node",
-		Usage:    "node name from config.json (Lotus1 or Lotus2)",
-		Required: true,
-	}
-
 	return &cli.Command{
 		Name:  "eth",
 		Usage: "Ethereum compatibility operations",
@@ -835,20 +544,6 @@ func ethCommands() *cli.Command {
 				Usage: "Check ETH methods consistency",
 				Action: func(c *cli.Context) error {
 					return resources.PerformEthMethodsCheck(c.Context)
-				},
-			},
-			{
-				Name:  "legacy-tx",
-				Usage: "Send legacy Ethereum transaction",
-				Flags: []cli.Flag{
-					nodeFlag,
-				},
-				Action: func(c *cli.Context) error {
-					nodeConfig, err := getNodeConfig(c)
-					if err != nil {
-						return err
-					}
-					return resources.SendEthLegacyTransaction(c.Context, nodeConfig)
 				},
 			},
 		},

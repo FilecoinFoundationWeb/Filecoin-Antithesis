@@ -75,10 +75,11 @@ fi
 lotus --version
 lotus wait-api
 
-lotus net listen > ${LOTUS_DATA_DIR}/ipv4addr
-cat ${LOTUS_DATA_DIR}/ipv4addr | awk 'NR==1 {print; exit}' > ${LOTUS_DATA_DIR}/lotus${no}-ipv4addr
+lotus net listen | grep -v "127.0.0.1" | grep -v "::1" | head -n 1 > ${LOTUS_DATA_DIR}/lotus${no}-ipv4addr
 lotus net id > ${LOTUS_DATA_DIR}/lotus${no}-p2pID
-lotus auth create-token --perm admin > ${LOTUS_DATA_DIR}/lotus${no}-jwt
+if [ ! -f "${LOTUS_DATA_DIR}/lotus${no}-jwt" ]; then
+    lotus auth create-token --perm admin > ${LOTUS_DATA_DIR}/lotus${no}-jwt
+fi
 
 # connecting to peers
 connect_with_retries() {

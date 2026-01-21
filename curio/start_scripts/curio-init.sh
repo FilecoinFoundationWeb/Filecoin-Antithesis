@@ -84,7 +84,7 @@ echo "  Multicall: $CURIO_DEVNET_MULTICALL_ADDRESS"
   CURIO_FAKE_CPU=5 curio run --nosync --layers seal,post,pdp-only,gui &
   CURIO_PID=$!
   sleep 20
-  
+  curio --version 
   until curio cli --machine $myip:12300 wait-api; do
     echo "Waiting for the curio CLI to become ready..."
     sleep 5

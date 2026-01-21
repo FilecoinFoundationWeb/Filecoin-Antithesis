@@ -1,10 +1,11 @@
 #!/bin/bash
 
+WORKLOAD="/opt/antithesis/workload"
 
 echo "Running comprehensive node health monitoring with all features enabled"
 
 # Run comprehensive check with extended duration for better monitoring
-/opt/antithesis/app monitor comprehensive \
+$WORKLOAD monitor comprehensive \
     --chain-notify \
     --height-progression \
     --peer-count \

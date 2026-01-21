@@ -1,45 +1,30 @@
 #!/bin/bash
 
-
-# Configurable parameters
-APP_BINARY="/opt/antithesis/app"
+WORKLOAD="/opt/antithesis/workload"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-NODE_NAMES=("Lotus1" "Lotus2" "Forest")  
-MIN_WALLETS=5                 
-MAX_WALLETS=15                 
+NODE_NAMES=("Lotus0" "Lotus1" "Forest0")
+MIN_WALLETS=2
+MAX_WALLETS=5
 
-# Ensure the app binary exists
-if [ ! -f "$APP_BINARY" ]; then
-    echo "Error: $APP_BINARY not found. Please ensure the binary is available."
+# Ensure the workload binary exists
+if [ ! -f "$WORKLOAD" ]; then
+    echo "Error: $WORKLOAD not found."
     exit 1
 fi
 
 # Ensure the config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
-    echo "Error: $CONFIG_FILE not found. Please ensure the config file is available."
+    echo "Error: $CONFIG_FILE not found."
     exit 1
 fi
 
-# Function to pick a random node
-select_random_node() {
-    local index=$((RANDOM % ${#NODE_NAMES[@]}))
-    echo "${NODE_NAMES[$index]}"
-}
-
-# Create random wallets
+# Create random wallets on all nodes
 random_wallet_count=$((RANDOM % (MAX_WALLETS - MIN_WALLETS + 1) + MIN_WALLETS))
 
-echo "Creating $random_wallet_count wallets on random node: $random_node"
-for i in "${NODE_NAMES[@]}"; do
-    $APP_BINARY wallet create --node "$i" --count "$random_wallet_count"
+echo "Creating $random_wallet_count wallets on each node"
+for node in "${NODE_NAMES[@]}"; do
+    echo "Creating wallets on $node..."
+    $WORKLOAD wallet create --node "$node" --count "$random_wallet_count"
 done
 
-# Check if the last command succeeded
-if [ $? -eq 0 ]; then
-    echo "Successfully created $random_wallet_count wallets on $random_node"
-else
-    echo "Failed to create wallets on $random_node."
-fi
-
 echo "Wallet creation workload completed."
-

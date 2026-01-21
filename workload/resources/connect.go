@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/filecoin-project/go-jsonrpc"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
-	"github.com/filecoin-project/lotus/api/v2api"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -22,9 +19,8 @@ import (
 
 type NodeConfig struct {
 	Name          string `json:"name"`
-	RPCURL        string `json:"rpcURL"`
-	AuthTokenPath string `json:"authTokenPath"`
-	Type          string `json:"type,omitempty"` // "lotus" or "forest"
+	RPCURL        string `json:"rpcurl"`
+	AuthTokenPath string `json:"authtokenpath"`
 }
 
 type Config struct {
@@ -33,10 +29,8 @@ type Config struct {
 }
 
 const (
-	maxRetries        = 3                // Fewer retries but longer waits
-	initialRetryDelay = 10 * time.Second // Start with a longer initial delay
-	maxRetryDelay     = 40 * time.Second // Max delay slightly longer than crash recovery
-	minRecoveryTime   = 30 * time.Second // Minimum time to wait for node recovery
+	maxRetries           = 3
+	connectionRetryDelay = 5 * time.Second
 )
 
 // LoadConfig reads and parses a JSON configuration file containing node information
@@ -50,7 +44,7 @@ func LoadConfig(filename string) (*Config, error) {
 	return &config, err
 }
 
-// RetryOperation executes an operation with retry logic
+// RetryOperation executes an operation with simple retry logic
 func RetryOperation(ctx context.Context, operation func() error, operationName string) error {
 	var err error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
@@ -60,111 +54,75 @@ func RetryOperation(ctx context.Context, operation func() error, operationName s
 		}
 
 		if attempt < maxRetries {
-			waitTime := minRecoveryTime
-			if attempt > 1 {
-				waitTime = initialRetryDelay * time.Duration(attempt)
-				if waitTime > maxRetryDelay {
-					waitTime = maxRetryDelay
-				}
-			}
-
-			log.Printf("[WARN] %s failed (attempt %d/%d): %v. Waiting %v before retry...",
-				operationName, attempt, maxRetries, err, waitTime)
+			log.Printf("[WARN] %s failed (attempt %d/%d): %v. Retrying in %v...",
+				operationName, attempt, maxRetries, err, connectionRetryDelay)
 
 			select {
 			case <-ctx.Done():
 				log.Printf("[ERROR] Context cancelled during %s: %v", operationName, ctx.Err())
-				return nil
-			case <-time.After(waitTime):
+				return ctx.Err()
+			case <-time.After(connectionRetryDelay):
 			}
 		}
 	}
 
 	log.Printf("[ERROR] %s failed after %d attempts: %v", operationName, maxRetries, err)
-	return nil
+	return err
 }
 
 // ConnectToNode establishes a connection to a Filecoin node with retry logic
-// It will attempt to connect maxRetries times with increasing delay between attempts
 func ConnectToNode(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(), error) {
 	var (
-		api    api.FullNode
+		res    api.FullNode
 		closer func()
 		err    error
 	)
 
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		api, closer, err = ConnectToNodeV1(ctx, nodeConfig)
-		if err == nil {
-			return api, closer, nil
-		}
+	opErr := RetryOperation(ctx, func() error {
+		res, closer, err = ConnectToNodeV1(ctx, nodeConfig)
+		return err
+	}, fmt.Sprintf("Connect to node %s", nodeConfig.Name))
 
-		if attempt < maxRetries {
-			waitTime := minRecoveryTime
-			if attempt > 1 {
-				waitTime = initialRetryDelay * time.Duration(attempt)
-				if waitTime > maxRetryDelay {
-					waitTime = maxRetryDelay
-				}
-			}
-
-			log.Printf("[WARN] Failed to connect to node %s (attempt %d/%d): %v. Waiting %v for node recovery...",
-				nodeConfig.Name, attempt, maxRetries, err, waitTime)
-
-			select {
-			case <-ctx.Done():
-				log.Printf("[INFO] Context cancelled while connecting to node %s", nodeConfig.Name)
-				return nil, nil, nil
-			case <-time.After(waitTime):
-			}
-		}
+	if opErr != nil {
+		return nil, nil, opErr
 	}
 
-	log.Printf("[ERROR] Failed to connect to node %s after %d attempts: %v", nodeConfig.Name, maxRetries, err)
-	return nil, nil, nil
+	return res, closer, nil
 }
 
 // ConnectToNodeV1 attempts a single connection to the node using the V1 RPC API
 func ConnectToNodeV1(ctx context.Context, nodeConfig NodeConfig) (api.FullNode, func(), error) {
 	authToken, err := ioutil.ReadFile(nodeConfig.AuthTokenPath)
 	if err != nil {
-		log.Printf("[ERROR] Failed to read auth token for node %s: %v", nodeConfig.Name, err)
-		return nil, nil, nil
+		return nil, nil, fmt.Errorf("failed to read auth token: %w", err)
 	}
 	finalAuthToken := strings.TrimSpace(string(authToken))
 	headers := map[string][]string{"Authorization": {"Bearer " + finalAuthToken}}
+
 	api, closer, err := client.NewFullNodeRPCV1(ctx, nodeConfig.RPCURL, headers)
 	if err != nil {
-		log.Printf("[ERROR] Failed to connect to node %s: %v", nodeConfig.Name, err)
-		return nil, nil, nil
+		return nil, nil, fmt.Errorf("failed to create RPC client: %w", err)
 	}
-	return api, closer, err
+	return api, closer, nil
 }
 
-// ConnectToNodeV2 establishes a connection to a Filecoin node using the V2 RPC API
-func ConnectToNodeV2(ctx context.Context, nodeConfig NodeConfig) (v2api.FullNode, func(), error) {
+// ConnectToCommonNode establishes a connection using the CommonAPI struct
+func ConnectToCommonNode(ctx context.Context, nodeConfig NodeConfig) (CommonAPI, func(), error) {
 	authToken, err := ioutil.ReadFile(nodeConfig.AuthTokenPath)
 	if err != nil {
-		log.Printf("[ERROR] Failed to read auth token for node %s: %v", nodeConfig.Name, err)
-		return nil, nil, nil
+		return CommonAPI{}, nil, fmt.Errorf("failed to read auth token: %w", err)
 	}
 	finalAuthToken := strings.TrimSpace(string(authToken))
 	headers := map[string][]string{"Authorization": {"Bearer " + finalAuthToken}}
-	api, closer, err := NewFullNodeRPCV2(ctx, nodeConfig.RPCURL, headers)
+
+	var res CommonAPI
+	closer, err := jsonrpc.NewMergeClient(ctx, nodeConfig.RPCURL, "Filecoin",
+		[]interface{}{&res}, headers)
+
 	if err != nil {
-		log.Printf("[ERROR] Failed to connect to node %s: %v", nodeConfig.Name, err)
-		return nil, nil, nil
+		return CommonAPI{}, nil, fmt.Errorf("failed to create common RPC client: %w", err)
 	}
-	return api, closer, err
-}
-
-// NewFullNodeRPCV2 creates a new http jsonrpc client for the /v2 API.
-func NewFullNodeRPCV2(ctx context.Context, addr string, requestHeader http.Header, opts ...jsonrpc.Option) (v2api.FullNode, jsonrpc.ClientCloser, error) {
-	var res v2api.FullNodeStruct
-	closer, err := jsonrpc.NewMergeClient(ctx, addr, "Filecoin",
-		api.GetInternalStructs(&res), requestHeader, append([]jsonrpc.Option{jsonrpc.WithErrors(api.RPCErrors)}, opts...)...)
-
-	return &res, closer, err
+	return res, closer, nil
 }
 
 // ConnectToOtherNodes connects the current node to all other nodes in the config with retries
@@ -174,38 +132,13 @@ func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, curre
 			continue
 		}
 
-		var err error
-		for attempt := 1; attempt <= maxRetries; attempt++ {
-			err = tryConnectToNode(ctx, currentNodeAPI, nodeConfig)
-			if err == nil {
-				break
-			}
-
-			if attempt < maxRetries {
-				// On first failure, wait at least the minimum recovery time
-				waitTime := minRecoveryTime
-				if attempt > 1 {
-					waitTime = initialRetryDelay * time.Duration(attempt)
-					if waitTime > maxRetryDelay {
-						waitTime = maxRetryDelay
-					}
-				}
-
-				log.Printf("[WARN] Failed to connect node %s to %s (attempt %d/%d): %v. Waiting %v for node recovery...",
-					currentNodeConfig.Name, nodeConfig.Name, attempt, maxRetries, err, waitTime)
-
-				select {
-				case <-ctx.Done():
-					log.Printf("[ERROR] Context cancelled while connecting nodes: %v", ctx.Err())
-					return nil
-				case <-time.After(waitTime):
-				}
-			}
-		}
+		err := RetryOperation(ctx, func() error {
+			return tryConnectToNode(ctx, currentNodeAPI, nodeConfig)
+		}, fmt.Sprintf("Connect node %s to %s", currentNodeConfig.Name, nodeConfig.Name))
 
 		if err != nil {
-			log.Printf("[ERROR] Failed to connect node %s to %s after %d attempts: %v",
-				currentNodeConfig.Name, nodeConfig.Name, maxRetries, err)
+			log.Printf("[ERROR] Failed to connect node %s to %s: %v", currentNodeConfig.Name, nodeConfig.Name, err)
+			continue
 		}
 
 		log.Printf("[INFO] Node %s successfully connected to node %s", currentNodeConfig.Name, nodeConfig.Name)
@@ -217,32 +150,27 @@ func ConnectToOtherNodes(ctx context.Context, currentNodeAPI api.FullNode, curre
 func tryConnectToNode(ctx context.Context, currentNodeAPI api.FullNode, targetNodeConfig NodeConfig) error {
 	otherNodeAPI, closer, err := ConnectToNode(ctx, targetNodeConfig)
 	if err != nil {
-		log.Printf("[ERROR] Failed to connect to target node: %v", err)
-		return nil
+		return err
 	}
 	defer closer()
 
 	otherPeerInfo, err := otherNodeAPI.NetAddrsListen(ctx)
 	if err != nil {
-		log.Printf("[ERROR] Failed to get peer info: %v", err)
-		return nil
+		return fmt.Errorf("failed to get peer info: %w", err)
 	}
 
-	err = currentNodeAPI.NetConnect(ctx, otherPeerInfo)
-	if err != nil {
-		log.Printf("[ERROR] Failed to connect to peer: %v", err)
-		return nil
+	if err := currentNodeAPI.NetConnect(ctx, otherPeerInfo); err != nil {
+		return fmt.Errorf("failed to connect to peer: %w", err)
 	}
 
-	return err
+	return nil
 }
 
 // DisconnectFromOtherNodes disconnects the current node from all connected peers
 func DisconnectFromOtherNodes(ctx context.Context, nodeAPI api.FullNode) error {
 	peers, err := nodeAPI.NetPeers(ctx)
 	if err != nil {
-		log.Printf("[ERROR] Failed to get peer list: %v", err)
-		return nil
+		return fmt.Errorf("failed to get peer list: %w", err)
 	}
 
 	for _, peer := range peers {
@@ -258,91 +186,75 @@ func DisconnectFromOtherNodes(ctx context.Context, nodeAPI api.FullNode) error {
 func SimulateReorg(ctx context.Context, nodeAPI api.FullNode) error {
 	peers, err := nodeAPI.NetPeers(ctx)
 	if err != nil {
-		log.Printf("[ERROR] Failed to get peer list: %v", err)
-		return nil
+		return fmt.Errorf("failed to get peer list: %w", err)
 	}
 
-	// Map to store peer IDs and their multiaddrs
 	peerMultiaddrs := make(map[peer.ID][]multiaddr.Multiaddr)
-
-	// Save multiaddrs for each peer before disconnecting
-	for _, peer := range peers {
-		log.Printf("[INFO] Saving multiaddrs for peer: %s", peer.ID.String())
-		peerMultiaddrs[peer.ID] = peer.Addrs
-
-		// Disconnect from the peer
-		if err := nodeAPI.NetDisconnect(ctx, peer.ID); err != nil {
-			log.Printf("[WARN] Failed to disconnect from peer %s: %v", peer.ID.String(), err)
-		} else {
-			log.Printf("[INFO] Successfully disconnected from peer: %s", peer.ID.String())
+	for _, p := range peers {
+		peerMultiaddrs[p.ID] = p.Addrs
+		if err := nodeAPI.NetDisconnect(ctx, p.ID); err != nil {
+			log.Printf("[WARN] Failed to disconnect from peer %s: %v", p.ID.String(), err)
 		}
 	}
 
-	// Wait for a few minutes before reconnecting
 	reconnectDelay := 5 * time.Minute
-	log.Printf("[INFO] Waiting %v before reconnecting to peers...", reconnectDelay)
+	log.Printf("[INFO] Waiting %v before reconnecting...", reconnectDelay)
 
 	select {
 	case <-ctx.Done():
-		log.Printf("[ERROR] Context cancelled while waiting to reconnect: %v", ctx.Err())
-		return nil
+		return ctx.Err()
 	case <-time.After(reconnectDelay):
 	}
 
-	// Reconnect to all peers using their saved multiaddrs
-	log.Printf("[INFO] Reconnecting to %d peers...", len(peerMultiaddrs))
 	for peerID, addrs := range peerMultiaddrs {
-		// Create AddrInfo for the peer
-		addrInfo := peer.AddrInfo{
-			ID:    peerID,
-			Addrs: addrs,
-		}
-
-		// Connect to the peer
+		addrInfo := peer.AddrInfo{ID: peerID, Addrs: addrs}
 		if err := nodeAPI.NetConnect(ctx, addrInfo); err != nil {
 			log.Printf("[WARN] Failed to reconnect to peer %s: %v", peerID.String(), err)
-		} else {
-			log.Printf("[INFO] Successfully reconnected to peer: %s", peerID.String())
 		}
 	}
 
 	return nil
 }
 
-// FilterLotusNodes returns a slice of NodeConfig containing only Lotus1 and Lotus2 nodes
-func FilterLotusNodes(nodes []NodeConfig) []NodeConfig {
-	var lotusNodes []NodeConfig
-	for _, node := range nodes {
-		if node.Name == "Lotus1" || node.Name == "Lotus2" {
-			lotusNodes = append(lotusNodes, node)
-		}
-	}
-	return lotusNodes
+// FilterV1Nodes returns all nodes (legacy name, maintained for compatibility)
+func FilterV1Nodes(nodes []NodeConfig) []NodeConfig {
+	return nodes
 }
 
-// FilterLotusNodes returns a slice of NodeConfig containing only Lotus1 and Lotus2 nodes
-func FilterV1Nodes(nodes []NodeConfig) []NodeConfig {
-	var lotusNodes []NodeConfig
-	for _, node := range nodes {
-		if node.Name == "Lotus1" || node.Name == "Lotus2" || node.Name == "Forest" {
-			lotusNodes = append(lotusNodes, node)
+// FilterLotusNodes returns only nodes with names starting with "Lotus"
+func FilterLotusNodes(nodes []NodeConfig) []NodeConfig {
+	var filtered []NodeConfig
+	for _, n := range nodes {
+		if strings.HasPrefix(n.Name, "Lotus") {
+			filtered = append(filtered, n)
 		}
 	}
-	return lotusNodes
+	return filtered
+}
+
+// FilterForestNodes returns only nodes with names starting with "Forest"
+func FilterForestNodes(nodes []NodeConfig) []NodeConfig {
+	var filtered []NodeConfig
+	for _, n := range nodes {
+		if strings.HasPrefix(n.Name, "Forest") {
+			filtered = append(filtered, n)
+		}
+	}
+	return filtered
 }
 
 // ChainPredicate encapsulates a chain condition.
 type ChainPredicate func(set *types.TipSet) bool
 
 // WaitTillChain waits for a chain condition specified by the predicate to be met
-// It monitors chain notifications and returns the tipset that satisfies the condition
 func WaitTillChain(ctx context.Context, api api.FullNode, pred ChainPredicate) *types.TipSet {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	heads, err := api.ChainNotify(ctx)
 	if err != nil {
-		log.Printf("Cannot get head!!")
+		log.Printf("[ERROR] ChainNotify failed: %v", err)
+		return nil
 	}
 
 	for chg := range heads {
@@ -358,138 +270,55 @@ func WaitTillChain(ctx context.Context, api api.FullNode, pred ChainPredicate) *
 	return nil
 }
 
-// FilterLotusNodesV1 returns only V1 Lotus nodes (Lotus1 and Lotus2)
-func FilterLotusNodesV1(nodes []NodeConfig) []NodeConfig {
-	var filteredNodes []NodeConfig
-	for _, node := range nodes {
-		if node.Name == "Lotus1" || node.Name == "Lotus2" {
-			filteredNodes = append(filteredNodes, node)
-		}
-	}
-	return filteredNodes
-}
-
-// FilterLotusNodesWithV2 returns only V2 Lotus nodes (Lotus1-V2 and Lotus2-V2)
-func FilterLotusNodesWithV2(nodes []NodeConfig) []NodeConfig {
-	var filteredNodes []NodeConfig
-	for _, node := range nodes {
-		if node.Name == "Lotus1-V2" || node.Name == "Lotus2-V2" {
-			filteredNodes = append(filteredNodes, node)
-		}
-	}
-	return filteredNodes
-}
-
-// IsConsensusOrEthScriptRunning checks if any consensus or ETH-related scripts are currently running
-// that require nodes to be connected for proper operation
-func IsConsensusOrEthScriptRunning() (bool, error) {
-	// List of consensus and ETH-related script patterns to check for
-	consensusPatterns := []string{
-		"consensus check",
-		"consensus finalized",
-		"monitor peers",
-		"monitor f3",
-		"chain backfill",
-		"state check",
-		"eth check",
-		"anytime_f3_finalized_tipsets",
-		"anytime_f3_running",
-		"anytime_print_peer_info",
-		"anytime_chain_backfill",
-		"anytime_state_checks",
-		"anytime_eth_methods_check",
-		"parallel_driver_eth_legacy_tx",
-	}
-
-	// Check for running processes
-	cmd := exec.Command("ps", "aux")
-	output, err := cmd.Output()
-	if err != nil {
-		log.Printf("[ERROR] Failed to check running processes: %v", err)
-		return false, nil
-	}
-
-	outputStr := strings.ToLower(string(output))
-
-	for _, pattern := range consensusPatterns {
-		if strings.Contains(outputStr, strings.ToLower(pattern)) {
-			log.Printf("[WARN] Detected running consensus/eth script: %s", pattern)
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
 // PerformConnectDisconnectOperation toggles connection for a node
 func PerformConnectDisconnectOperation(ctx context.Context, nodeConfig *NodeConfig, config *Config) error {
 	log.Printf("Toggling connection for node '%s'...", nodeConfig.Name)
 	api, closer, err := ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return nil
+		log.Printf("[ERROR] Failed to connect to node '%s': %v", nodeConfig.Name, err)
+		return err
 	}
 	defer closer()
 
-	var lotusNodes []NodeConfig
-	for _, node := range config.Nodes {
-		if node.Name == "Lotus1" || node.Name == "Lotus2" {
-			lotusNodes = append(lotusNodes, node)
-		}
-	}
+	// Connect/Disconnect against ALL nodes? Or just Lotus?
+	// Assuming all nodes for connectivity stress.
+	allNodes := FilterV1Nodes(config.Nodes)
 
 	return RetryOperation(ctx, func() error {
-		// Check current connections
 		peers, err := api.NetPeers(ctx)
 		if err != nil {
-			log.Printf("[ERROR] Failed to get peer list: %v", err)
-			return nil
+			return fmt.Errorf("failed to get peers: %w", err)
 		}
 
-		// If we have peers, disconnect; otherwise connect
 		if len(peers) > 0 {
 			log.Printf("Node '%s' has %d peers, disconnecting...", nodeConfig.Name, len(peers))
 			if err := DisconnectFromOtherNodes(ctx, api); err != nil {
-				log.Printf("[ERROR] Failed to disconnect node '%s' from other nodes: %v", nodeConfig.Name, err)
-				return nil
+				return err
 			}
 			log.Printf("Node '%s' disconnected successfully", nodeConfig.Name)
 		} else {
 			log.Printf("Node '%s' has no peers, connecting...", nodeConfig.Name)
-			if err := ConnectToOtherNodes(ctx, api, *nodeConfig, lotusNodes); err != nil {
-				log.Printf("[ERROR] Failed to connect node '%s' to other nodes: %v", nodeConfig.Name, err)
-				return nil
+			if err := ConnectToOtherNodes(ctx, api, *nodeConfig, allNodes); err != nil {
+				return err
 			}
 			log.Printf("Node '%s' connected successfully", nodeConfig.Name)
 		}
 		return nil
-	}, fmt.Sprintf("Connection toggle operation for node %s", nodeConfig.Name))
+	}, fmt.Sprintf("Connection toggle for %s", nodeConfig.Name))
 }
 
-// PerformReorgOperation simulates a reorg by disconnecting, waiting, and reconnecting
 func PerformReorgOperation(ctx context.Context, nodeConfig *NodeConfig, checkConsensus bool) error {
-	// Check for running consensus scripts if the flag is enabled
-	if checkConsensus {
-		isRunning, err := IsConsensusOrEthScriptRunning()
-		if err != nil {
-			log.Printf("[WARN] Failed to check for consensus/eth scripts: %v", err)
-		} else if isRunning {
-			log.Printf("[INFO] Consensus/ETH scripts detected running. Exiting reorg simulation early to avoid interference.")
-			return nil
-		}
-	}
-
 	log.Printf("Simulating reorg for node '%s'...", nodeConfig.Name)
 	api, closer, err := ConnectToNode(ctx, *nodeConfig)
 	if err != nil {
-		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return nil
+		log.Printf("[ERROR] Failed to connect to node '%s': %v", nodeConfig.Name, err)
+		return err
 	}
 	defer closer()
 
 	if err := SimulateReorg(ctx, api); err != nil {
-		log.Printf("failed to simulate reorg for node '%s': %v", nodeConfig.Name, err)
-		return nil
+		log.Printf("[ERROR] Failed to simulate reorg for node '%s': %v", nodeConfig.Name, err)
+		return err
 	}
 	log.Printf("Reorg simulation completed successfully for node '%s'", nodeConfig.Name)
 	return nil
