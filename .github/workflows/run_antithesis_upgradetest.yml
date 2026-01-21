@@ -27,6 +27,11 @@ on:
         required: true
         default: 'latest'
         description: The lotus image tag used for the test run
+      curio:
+        type: string
+        required: true
+        default: 'latest'
+        description: The curio image tag used for the test run
       workload:
         type: string
         required: true
@@ -62,12 +67,12 @@ jobs:
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
-          notebook_name: forest
+          notebook_name: filecoin
           tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }}
+          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};curio:${{ inputs.curio }}
           config_image: config:${{ github.event.inputs.config }}
           description: "Manual Upgrade Test"
           email_recipients: ${{ github.event.inputs.emails }}
