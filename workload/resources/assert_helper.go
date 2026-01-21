@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"runtime"
 	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
@@ -17,12 +16,6 @@ func EnhanceAssertDetails(details map[string]interface{}, nodeName string) map[s
 	details["node"] = nodeName
 	details["node_name"] = nodeName
 	details["node_type"] = getNodeType(nodeName)
-
-	// Add caller information
-	if _, file, line, ok := runtime.Caller(1); ok {
-		details["caller_file"] = file
-		details["caller_line"] = line
-	}
 
 	// Add timestamp
 	details["timestamp"] = time.Now().Format(time.RFC3339)
@@ -42,26 +35,16 @@ func AssertSometimes(nodeName string, condition bool, message string, details ma
 	assert.Sometimes(condition, nodeName+": "+message, details)
 }
 
-// AssertReachable is a helper that adds node name to assert.Reachable
-func AssertReachable(nodeName string, message string, details map[string]interface{}) {
-	details = EnhanceAssertDetails(details, nodeName)
-	assert.Reachable(nodeName+": "+message, details)
-}
-
-// AssertUnreachable is a helper that adds node name to assert.Unreachable
-func AssertUnreachable(nodeName string, message string, details map[string]interface{}) {
-	details = EnhanceAssertDetails(details, nodeName)
-	assert.Unreachable(nodeName+": "+message, details)
-}
-
-// getNodeType returns the type of node (Lotus or Forest)
+// getNodeType returns the type of node based on prefix matching
 func getNodeType(nodeName string) string {
-	switch {
-	case nodeName == "Forest":
+	if len(nodeName) >= 6 && nodeName[:6] == "Forest" {
 		return "Forest"
-	case nodeName == "Lotus1" || nodeName == "Lotus2":
-		return "Lotus"
-	default:
-		return "Unknown"
 	}
+	if len(nodeName) >= 5 && nodeName[:5] == "Lotus" {
+		return "Lotus"
+	}
+	if len(nodeName) >= 5 && nodeName[:5] == "Curio" {
+		return "Curio"
+	}
+	return "Unknown"
 }

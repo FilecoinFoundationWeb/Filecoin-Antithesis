@@ -11,7 +11,11 @@ on:
         required: true
         default: '42d68a5'
         description: A commit hash that can be found from (https://github.com/filecoin-project/curio)
-
+      lotus_tag:
+        type: string
+        required: true
+        default: 'latest'
+        description: Tag of lotus docker image
 jobs:
   antithesis:
     runs-on: ubuntu-latest
@@ -59,7 +63,9 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         build-args: |
+          BUILD_MODE=remote
           GIT_BRANCH=${{ github.event.inputs.curio_tag || steps.latest-curio-commit.outputs.commit-hash }}
+          LOTUS_TAG=${{ github.event.inputs.lotus_tag }}
         context: ./curio
         file: ./curio/Dockerfile
         push: true

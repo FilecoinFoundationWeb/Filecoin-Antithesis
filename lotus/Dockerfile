@@ -1,75 +1,65 @@
-# Dockerfile to build instrumented version of lotus
-FROM docker.io/golang:1.24.7-bookworm
+ARG GO_VERSION=1.25.1
 
-# Installing rust
-RUN apt-get update && \
-    apt-get install -y ca-certificates build-essential clang ocl-icd-opencl-dev ocl-icd-libopencl1 jq libhwloc-dev git && \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+FROM golang:$GO_VERSION
 
-ARG GIT_BRANCH="master"
+# installing jq, opencl, and hwloc (required for make 2k step)
+RUN apt-get update && apt-get install -y jq libhwloc-dev ocl-icd-opencl-dev && rm -rf /var/lib/apt/lists/*
 
-RUN git clone https://github.com/filecoin-project/lotus.git /lotus
+# cloning lotus
+ARG REF="master"
+RUN git clone --depth=1 https://github.com/filecoin-project/lotus.git --branch=${REF} /lotus
 WORKDIR /lotus
-RUN latest_version=$(git tag -l 'v*' | sort -V -r | head -n 1)
 
-RUN git checkout ${GIT_BRANCH}
-
-COPY ./lotus.patch ./lotus.patch
+# copy & apply lotus patch (local drand; setting bootstrap and finality epoch)
+COPY patches/lotus.patch lotus.patch
 RUN git apply lotus.patch
 
-# COPY ./make.patch ./make.patch
-# RUN git apply make.patch
+# copy & apply make patch (builds binaries with race detection)
+COPY patches/make.patch make.patch
+RUN git apply make.patch
 
-COPY ./config-1.toml .
-COPY ./config-2.toml .
+# required to initalize the submodules. we need their go.mod files to exist before we perform the go get below.
+RUN git submodule update --init --recursive
 
-RUN git submodule update --init
-
-# Perform code coverage instrumentation (source transformation)
+# install instrumentor
 RUN go get github.com/antithesishq/antithesis-sdk-go@latest
-RUN go get github.com/filecoin-project/go-jsonrpc@v0.8.0
 RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-instrumentor@latest
 RUN go mod tidy
+
+# compile lotus with instrumentor
 RUN mkdir /lotus_instrumented
 COPY ./exclusion.txt /exclusion.txt
 RUN antithesis-go-instrumentor -exclude /exclusion.txt /lotus /lotus_instrumented
-
 RUN mkdir -p /symbols
 RUN cp -r /lotus_instrumented/symbols/* /symbols
-
 WORKDIR /lotus_instrumented/customer/
 
-# Removing original source code
+# deleting original source code
 RUN rm -rf /lotus
 
-# Build 2k binary for lotus
-RUN make 2k
+# install runtime binaries (lotus-shed used in curio) (not using: 2k-lotus-worker)
+RUN make 2k-lotus 2k-lotus-miner 2k-lotus-seed 2k-lotus-shed
+
+# moving the binaries (with the same permissions) to /usr/local/bin so that we can run them globally
+RUN install -m 0755 lotus lotus-miner lotus-seed lotus-shed /usr/local/bin/
+
+# building binaries to check health and benchmarks
 RUN go build -o lotus-health ./cmd/lotus-health
 RUN go build -o lotus-bench ./cmd/lotus-bench
-# Check lotus version
-CMD ["./lotus","--version"]
 
-# Fetch parameters
+# download parameters needed for proving sectors
 RUN ./lotus fetch-params 2048
 
-# Pre-seal for the first miner
-RUN ./lotus-seed --sector-dir=/root/.genesis-sector-1 pre-seal --sector-size 2KiB --num-sectors 2 --miner-addr t01000 
-#Pre-seal for the second miner
-RUN ./lotus-seed --sector-dir=/root/.genesis-sector-2 pre-seal --sector-size 2KiB --num-sectors 3 --miner-addr t01001 
-# Create genesis template for first miner
-RUN ./lotus-seed genesis new --network-name="2k" localnet-1.json
-# Create genesis template for second miner 
-RUN ./lotus-seed genesis  new --network-name="2k" localnet-2.json
-# Add the first miner to the genesis template
-RUN ./lotus-seed aggregate-manifests "/root/.genesis-sector-1/pre-seal-t01000.json" "/root/.genesis-sector-2/pre-seal-t01001.json" > manifest.json
-RUN ./lotus-seed genesis add-miner localnet-1.json manifest.json
-# Add the second miner to the genesis template
-RUN ./lotus-seed genesis add-miner localnet-2.json manifest.json
-RUN install -C lotus-shed /usr/local/bin/lotus-shed
+# copy toml config
+COPY lotus-config.toml.template config.toml.template
 
-RUN make install
+# copy test composer script
+COPY scripts/lotus_bench.sh /opt/antithesis/test/v1/main/serial_driver_lotus_bench.sh
 
+# copy entrypoint scripts
+COPY scripts/start-lotus.sh ./scripts/start-lotus.sh
+COPY scripts/setup-genesis.sh ./scripts/setup-genesis.sh
+COPY scripts/start-lotus-miner.sh ./scripts/start-lotus-miner.sh
 
-
+# sleep infinity
 ENTRYPOINT ["sleep", "infinity"]

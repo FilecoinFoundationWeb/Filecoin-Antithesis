@@ -1,10 +1,12 @@
-# This is used only for building the Antithesis configuration image
-# See https://antithesis.com/docs/getting_started/setup.html#create-a-configuration-directory
 FROM scratch
 
-COPY ./docker-compose.yml /docker-compose.yml
-COPY ./data /data
+COPY docker-compose.yaml /docker-compose.yaml
+COPY docker-compose2.yaml /docker-compose2.yaml
+
+COPY ./.env /.env
+COPY ../data /data
 COPY ./drand /drand
 COPY ./lotus /lotus
 COPY ./forest /forest
-COPY ./.env /.env
+COPY ./curio /curio
+COPY ./yugabyte /yugabyte

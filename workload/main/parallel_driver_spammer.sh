@@ -1,12 +1,11 @@
 #!/bin/bash
 
-
-APP_BINARY="/opt/antithesis/app"
+WORKLOAD="/opt/antithesis/workload"
 CONFIG_FILE="/opt/antithesis/resources/config.json"
-NODE_NAMES=("Lotus1" "Lotus2" "Forest")
+NODE_NAMES=("Lotus0" "Lotus1" "Forest0")
 
-if [ ! -f "$APP_BINARY" ]; then
-    echo "Error: $APP_BINARY not found."
+if [ ! -f "$WORKLOAD" ]; then
+    echo "Error: $WORKLOAD not found."
     exit 1
 fi
 
@@ -17,27 +16,22 @@ fi
 
 # First try running spam without creating new wallets
 echo "Attempting to spam transactions with existing wallets..."
-$APP_BINARY mempool spam
+$WORKLOAD mempool spam
 
 # If spam failed, create wallets with higher funding
 if [ $? -ne 0 ]; then
     echo "Spam operation failed. Creating new well-funded wallets..."
     
-    # Create wallets on both nodes with much higher funding
-    # The exact amount needed is hard to predict, but 1B should be plenty
+    # Create wallets on all nodes
     for node in "${NODE_NAMES[@]}"; do
         echo "Creating well-funded wallets on $node..."
-        $APP_BINARY wallet create --node "$node" --count 2
-        
-        # Allow some time for wallet creation to complete
+        $WORKLOAD wallet create --node "$node" --count 3
         sleep 5
     done
     
-    # Allow time for blockchain to process transactions
     echo "Waiting for wallet creation to finalize..."
     sleep 10
     
     echo "Retrying spam operation with new wallets..."
-    $APP_BINARY mempool spam
+    $WORKLOAD mempool spam
 fi
-

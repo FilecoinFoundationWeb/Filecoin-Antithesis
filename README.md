@@ -2,209 +2,179 @@
 
 ## Purpose
 
-This README serves as a guide for both prospective and active contributers. We will walk through the setup structure, using Antithesis, best practices for contributions, and how to interpret the reports. You should be able to walk away with the purpose of continuous testing, why it is important, the current state of this project, and hopefully ideas to contribute!
+This repository provides a comprehensive testing framework for the Filecoin network using the [Antithesis](https://antithesis.com/) autonomous testing platform. It validates multiple Filecoin implementations (Lotus, Forest, Curio) through deterministic, fault-injected testing.
 
-## Setup
+## Setup Overview
 
-There are 9 containers running in this system: 3 make up a drand cluster (`drand-1`, `drand-2`, `drand-3`), 2 lotus nodes (`lotus-1`, `lotus-2`), 1 forest node (`forest`), 2 lotus miners (`lotus-miner-1`, `lotus-miner-2`), and 1 `workload` that ["makes the system go"](https://antithesis.com/docs/getting_started/basic_test_hookup/).
+The system runs 12 containers:
+- **Drand cluster**: `drand0`, `drand1`, `drand2` (randomness beacon)
+- **Lotus nodes**: `lotus0`, `lotus1` (Go implementation)
+- **Lotus miners**: `lotus-miner0`, `lotus-miner1`
+- **Forest node**: `forest0` (Rust implementation)
+- **Curio**: Storage provider with PDP support
+- **Yugabyte**: Database for Curio state
+- **Workload**: Test orchestration container
 
-The `workload` container has the [test commands](https://antithesis.com/docs/test_templates/first_test/#test-commands) where endpoints are called, smart contracts deployed, transactions requested, etc... There are also validations to assert correctness and guarantees also occur in this container using the [Antithesis SDK](https://antithesis.com/docs/using_antithesis/sdk/). We explain more on the SDK in a later section.
+## Quick Start
 
-## Github Files and Directories
+### Prerequisites
+- Docker and Docker Compose
+- Make
 
-In this repository, we have directories that build all the images referenced in the setup above. 
-
-We've made small patches for the Lotus and Forest nodes to work with a local Drand cluster. Antithesis is fully deterministic and requires our SUT to run without internet access (a source of nondeterminism).
-
-The `cleanup.sh` executable will clear the data directory. This data directory is used when running the docker-compose locally, so emptying this is necessary after shutting down the system.
-
-There are supplementary READMEs located in the drand, forest, lotus, and workload directories. These provide some description specific to their respective folders. 
-
-## Sanity Check Locally
-
-A good practice to confirm your test script works correctly in Antithesis is to run it locally. Here are the steps:
-
-1. Build each image required by the docker-compose.yml. We need a total of 4 images (`lotus:latest`, `forest:latest`, `drand:latest`, `workload:latest`). The build system supports both local development builds and instrumented builds for Antithesis testing.
-
-You can build all images using:
+### Build and Run
 ```bash
-# For local development (no instrumentation)
-make all LOCAL_BUILD=1
+# Build all images
+make build-all
 
-# For Antithesis instrumented builds
-make all LOCAL_BUILD=0
+# Start localnet
+make up
+
+# View logs
+make logs
+
+# Run tests
+docker exec workload /opt/antithesis/workload chain common-tipset
+docker exec workload /opt/antithesis/workload mempool spam
+
+# Stop and cleanup
+make cleanup
 ```
 
-You can also build individual services:
+### Available Make Commands
 ```bash
-# For local development builds
-make build-lotus LOCAL_BUILD=1     # Builds lotus without instrumentation
-make build-forest LOCAL_BUILD=1    # Builds forest without instrumentation
-make build-drand LOCAL_BUILD=1     # Builds drand without instrumentation
-make build-workload               # Builds workload (not affected by LOCAL_BUILD)
-
-# For Antithesis instrumented builds
-make build-lotus LOCAL_BUILD=0     # Builds lotus with instrumentation
-make build-forest LOCAL_BUILD=0    # Builds forest with instrumentation
-make build-drand LOCAL_BUILD=0     # Builds drand with instrumentation
+make help           # Show all commands
+make build-all      # Build all images
+make build-lotus    # Build Lotus image
+make build-forest   # Build Forest image  
+make build-drand    # Build Drand image
+make build-workload # Build workload image
+make build-curio    # Build Curio image
+make up             # Start containers (docker compose up -d)
+make down           # Stop containers
+make logs           # Follow logs
+make restart        # Restart containers
+make cleanup        # Stop and clean data
+make show-versions  # Show image version tags
 ```
 
-The build system will automatically detect your architecture (amd64/x86_64 or arm64/aarch64) and use the appropriate Go and Rust toolchains.
+## Workload CLI Commands
 
-For a full list of available build targets and options:
+All commands run inside the workload container:
 ```bash
-make help
+docker exec workload /opt/antithesis/workload <command>
 ```
 
-2. Run `docker-compose up` from the root directory to start all containers defined in `docker-compose.yml`
+### Available Commands
 
-3. After the workload container has signaled `setupComplete` (or printed `system is healthy`), you can run any test command 1 to many times via `docker exec`:
+| Command | Description |
+|---------|-------------|
+| `wallet create --node Lotus0 --count 5` | Create and fund wallets |
+| `network connect --node Lotus0` | Connect node to peers |
+| `network disconnect --node Lotus0` | Disconnect from peers |
+| `network reorg --node Lotus0` | Simulate reorg |
+| `mempool track --node Lotus0 --duration 5m` | Track mempool size |
+| `mempool spam` | Spam transactions across nodes |
+| `chain backfill` | Check chain index backfill (Lotus only) |
+| `chain common-tipset` | Get common finalized tipset |
+| `state check --node Lotus0` | Check state on single node |
+| `state compare --epochs 10` | Compare state across all nodes |
+| `state compare-at-height --height 100` | Compare state at specific height |
+| `consensus check` | Check tipset consensus |
+| `monitor comprehensive` | Full health check (peers, F3, height) |
+| `monitor height-progression --duration 1m` | Monitor height changes |
+| `eth check` | Check ETH API block consistency |
 
-`docker exec workload /opt/antithesis/test/v1/main/parallel_driver_create_wallets.sh`
+### Node Names (config.json)
+- `Lotus0` — First Lotus node
+- `Lotus1` — Second Lotus node
+- `Forest0` — Forest node
 
-4. We should see the command successfully complete. You've now validated this test is ready to run on the Antithesis platform! (Note that SDK assertions won't be evaluated locally).
+## Test Composer Scripts
 
-5. When finished, run `docker-compose down` to stop all the running containers. Complete a local iteration cycle by running the `cleanup.sh` command.
+Located in `workload/main/`:
 
-## Using Antithesis
+| Script | Purpose |
+|--------|---------|
+| `first_check.sh` | Initial setup validation |
+| `anytime_chain_backfill.sh` | Chain index backfill check |
+| `anytime_state_checks.sh` | State consistency checks |
+| `eventually_health_check.sh` | Health monitoring suite |
+| `eventually_comprehensive_health.sh` | Full health check |
+| `parallel_driver_create_wallets.sh` | Wallet creation |
+| `parallel_driver_spammer.sh` | Transaction spamming |
+| `parallel_driver_synapse_e2e.sh` | Synapse SDK e2e test |
 
-Antithesis is an autonomous testing platform that finds the bugs in your software, with perfect reproducibility to help you fix them.
+## Antithesis Integration
 
-### Antithesis Fault Injector
+### Fault Injection
+Antithesis automatically injects faults (crashes, network partitions, thread pausing) after the workload signals "setup complete".
 
-Antithesis generates various failure scenarios. The FileCoin system should be resilient to these faults since they happen in production! We automate the process of injecting faults (e.g., crashes, network partitions, thread pausing) into the system, as well as observing system metrics like unexpected container exits and memory usage.
+### SDK Assertions
+Test properties use the Antithesis Go SDK:
+- `assert.Always()` — Must always hold
+- `assert.Sometimes()` — Must hold at least once
+- `assert.Reachable()` — Code path must be reached
+- `assert.Unreachable()` — Code path must never be reached
 
-Note: Faults are not injected into the SUT until a "setup_complete" message is emitted. This message is emitted from the `entrypoint.py` script in the `workload` container.
+### Running Tests on Antithesis
+1. Push images to Antithesis registry
+2. Use GitHub Actions to trigger tests
+3. Review reports in Antithesis dashboard
 
-### Antithesis SDK & Test Properties
+## Directory Structure
 
-To generate test cases, Antithesis relies on **test properties** you define. This short video walks through defining SDK assertions within the `workload` container. Assertions can defined in any container in the SUT.
+```
+├── config/              # Docker compose and env files
+├── drand/               # Drand beacon build
+├── lotus/               # Lotus node build and scripts
+├── forest/              # Forest node build and scripts  
+├── curio/               # Curio storage provider build
+├── workload/            # Test workload
+│   ├── main/            # Test Composer scripts
+│   ├── resources/       # Go helper functions
+│   ├── entrypoint/      # Container startup scripts
+│   └── patches/         # SDK patches
+├── shared/              # Shared configs between containers
+├── data/                # Runtime data (mount point)
+├── Makefile             # Build commands
+├── docker-compose.yml   # Service definitions
+└── cleanup.sh           # Data cleanup script
+```
 
-[<img src="1.png">](https://drive.google.com/file/d/1x5VbelH-0WmMvIV4u8vWOgR046A0oubq/view?usp=drive_link)
+## Configuration
 
-### Triaging the Report and viewing your Test Properties
+### Environment Variables
+Located in `config/.env`:
+- Node data directories
+- Port configurations
+- Shared volume paths
 
-Triaging the reports is critical to determine if any of your test properties failed. This short video walks through the report test properties and how they relate to the assertions defined in the `workload` container.
+### Node Configuration
+Located in `workload/resources/config.json`:
+```json
+{
+  "nodes": [
+    {"name": "Lotus0", "rpcurl": "http://lotus0:1234/rpc/v1", "authtokenpath": "/root/devgen/lotus0/lotus0-jwt"},
+    {"name": "Lotus1", "rpcurl": "http://lotus1:1234/rpc/v1", "authtokenpath": "/root/devgen/lotus1/lotus1-jwt"},
+    {"name": "Forest0", "rpcurl": "http://forest0:3456/rpc/v1", "authtokenpath": "/root/devgen/forest0/forest0-jwt"}
+  ]
+}
+```
 
-[<img src="2.png">](https://drive.google.com/file/d/1ESQRLXBJitEv9H5e0mcAe6yWiylu0MPd/view?usp=drive_link)
+## Contributing
 
-### Running an Antithesis Test from GitHub
+1. Add CLI commands in `workload/main.go`
+2. Add helper functions in `workload/resources/`
+3. Add Test Composer scripts in `workload/main/` following naming conventions:
+   - `anytime_*` — Can run anytime
+   - `parallel_*` — Runs in parallel
+   - `eventually_*` — Eventual consistency checks
+   - `serial_*` — Sequential operations
+   - `first_*` — Initial setup
 
-To run a manual Antithesis Test, we have implemented GitHub actions. There is also a cron job for nightly 10 hour runs. This short video explains how to run these actions with the branch your test properties are defined on.
+## Documentation
 
-[<img src="3.png">](https://drive.google.com/file/d/1dFBuBnVcFcE-vSFsnIh-jcSVY5m9ALQK/view?usp=drive_link)
-
-### Antithesis Test Composer
-
-[The Antithesis Test Composer](https://antithesis.com/docs/test_templates/first_test/) is a framework that gives the Antithesis system control over what is being executed. Hundreds of thousands of different scenarios are executed during a long enough test. It looks for executables with a specific naming convention in a specific directory (explained in the video below).
-
-[<img src="4.png">](https://drive.google.com/file/d/1MLk_NAVMfq5BsBT_DPkiksqh5oSQpB2m/view?usp=drive_link)
-
-For more details, refer to the [Antithesis Documentation](https://antithesis.com/docs/introduction/how_antithesis_works/).
-
-## How to Contribute
-
-Contributions to the project can include iterating on test templates, improving test properties, or enhancing the setup. Below are guidelines for adding tests:
-
-1.  **Creating CLI Flags:**
-
-    -   Add a new CLI flag in `main.go`.
-    -   Use the helper RPC wrapper (`rpc.py`) for Forest, if needed.
-
-2.  **Test Structure:**
-
-    -   Place the new test in the `main` directory.
-    -   Follow naming conventions (e.g., `parallel_driver_test.sh`, `anytime_test.sh`).
-    -   Refer to [Antithesis Test Composer Reference](https://antithesis.com/docs/test_templates/test_composer_reference/) for templates.
-
-3.  **Examples:**
-
-    -   Initialize wallets using `first_check.sh`.
-    -   Run tests such as `anytime_node_height_progression.sh` or `parallel_driver_spammer.py`.
-
-## Testing Overview
-
-Our Filecoin testing framework comprehensively validates the entire Filecoin ecosystem through multiple testing categories and operations. Here's what we're testing:
-
-### Test Categories
-
-| Category | Purpose | Test Operations | Next Steps |
-|----------|---------|-----------------|------------|
-| **Wallet Management** | Validate wallet creation, funding, and deletion across nodes | • Create wallets with random counts (1-15) on random nodes<br>• Delete random number of wallets<br>• Initialize wallets with funding<br>• Verify wallet operations across Lotus1/Lotus2 | |
-| **Smart Contract Deployment** | Test EVM-compatible smart contract deployment and interaction | • Deploy SimpleCoin contract (ERC-20 token)<br>• Deploy MCopy contract (memory operations)<br>• Deploy TStorage contract (transient storage)<br>• Invoke contract methods and verify results | |
-| **Transaction Processing** | Validate mempool operations and transaction handling | • Spam transactions between wallets<br>• Mempool fuzzing with different strategies<br>• ETH legacy transaction testing<br>• Random transaction parameter generation | |
-| **Consensus & Finality** | Ensure consensus mechanisms work correctly | • Check F3 consensus running status<br>• Validate finalized tipsets match across nodes<br>• Chain walk validation (10 tipsets)<br>• Consensus fault injection testing | |
-| **Network Operations** | Test P2P networking and peer management | • Check peer connections across nodes<br>• Monitor network connectivity<br>• Validate node synchronization status<br>• Test network partition resilience | |
-| **State Consistency** | Verify blockchain state integrity | • State mismatch detection<br>• Chain index backfill validation<br>• Block height progression monitoring<br>• State consistency across nodes | |
-| **Ethereum Compatibility** | Test ETH API compatibility layer | • ETH methods consistency validation<br>• Block retrieval by number vs hash<br>• ETH RPC method testing<br>• Legacy transaction support | |
-| **Node Health & Monitoring** | Monitor node health and performance | • Forest node health checks<br>• Node synchronization status<br>• Block height progression timing<br>• System quiescence validation | |
-| **Stress Testing** | Validate system under load | • Maximum message size stress tests<br>• Concurrent transaction processing<br>• Memory and resource usage under load<br>• Performance degradation detection | |
-| **RPC & API Testing** | Validate API endpoints and responses | • RPC benchmark testing<br>• API response validation<br>• Method parameter testing<br>• Error handling validation | |
-
-### Test Execution Patterns
-
-**Parallel Drivers**: Execute operations concurrently across multiple nodes
-- `parallel_driver_*.sh` - Concurrent operations for load testing
-- `parallel_driver_*.py` - Python-based parallel operations
-
-**Anytime Tests**: Can run at any time during test execution
-- `anytime_*.sh` - Continuous monitoring and validation
-- `anytime_*.py` - Python-based anytime operations
-
-**Eventually Tests**: Validate eventual consistency properties
-- `eventually_*.py` - Long-running consistency checks
-
-**Serial Drivers**: Sequential operations for setup and cleanup
-- `serial_driver_*.sh` - Sequential operations
-- `serial_driver_*.py` - Python-based sequential operations
-
-**First Checks**: Initial setup and validation
-- `first_check.sh` - System initialization and wallet setup
-
-### Key Testing Features
-
-1. **Deterministic Testing**: All tests run in a fully deterministic environment without internet access
-2. **Fault Injection**: Antithesis automatically injects faults (crashes, network partitions, thread pausing)
-3. **Cross-Implementation Validation**: Tests both Lotus (Go) and Forest (Rust) implementations
-4. **Comprehensive Coverage**: Tests wallet, contract, consensus, networking, and API layers
-5. **Performance Monitoring**: Validates timing constraints and performance degradation
-6. **State Consistency**: Ensures blockchain state remains consistent across nodes
-7. **Ethereum Compatibility**: Validates ETH API compatibility layer functionality
-
-### Assertion Framework
-
-We use the Antithesis SDK to define test properties and assertions:
-- **Always Assertions**: Properties that must always hold true
-- **Sometimes Assertions**: Properties that should hold true in most cases
-- **Unreachable Assertions**: States that should never be reached
-- **Timing Assertions**: Performance and timing constraints
-
-## Todo
-
-### Completed Tasks
-
--   Implement comprehensive wallet management (create, fund, delete)
--   Deploy and test multiple smart contract types
--   Implement transaction spam and mempool fuzzing
--   Validate consensus mechanisms (F3, finalized tipsets)
--   Test network operations and peer management
--   Implement state consistency checks
--   Validate Ethereum compatibility layer
--   Create node health monitoring
--   Implement stress testing capabilities
--   Set up RPC and API testing framework
--   Integrate code coverage instrumentation
--   Create CI jobs for build, push, and testing automation
-
-### Longer-Term Goals
-
--   Integrate Curio for enhanced testing e2e deals
--   Filecoin Services (PDP, FS)
--   Implement fuzz testing for bad inputs
--   Expand Ethereum-based workloads
--   Add more sophisticated consensus testing
--   Expand smart contract testing scenarios
-
-## A Concrete Example
-
-Antithesis has [a public repository that tests ETCD](https://github.com/antithesishq/etcd-test-composer). It serves as a concrete example and a guide for using Test Composer and SDK assertions in various languages. You might find it helpful!
+- [Antithesis Documentation](https://antithesis.com/docs/)
+- [Lotus Documentation](https://lotus.filecoin.io/)
+- [Forest Documentation](https://chainsafe.github.io/forest/)
+- [FilWizard](https://github.com/parthshah1/FilWizard) — Contract deployment tool

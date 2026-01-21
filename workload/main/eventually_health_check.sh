@@ -1,18 +1,15 @@
 #!/bin/bash
 
+WORKLOAD="/opt/antithesis/workload"
 
 echo "Running Workload: Chain Backfill"
-/opt/antithesis/app chain backfill 
+$WORKLOAD chain backfill
 
-echo "Checking peers"
-/opt/antithesis/app monitor peers
-
-
-echo "Checking F3IsRunning status for all nodes"
-/opt/antithesis/app monitor f3
-
-echo "Asserting finalized tipsets are the same between two nodes"
-/opt/antithesis/app consensus finalized
+echo "Running comprehensive health check (includes peer count, F3 status)"
+$WORKLOAD monitor comprehensive --monitor-duration 30s
 
 echo "Running ETH methods consistency check"
-/opt/antithesis/app eth check
+$WORKLOAD eth check
+
+echo "Running consensus check"
+$WORKLOAD consensus check

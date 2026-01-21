@@ -1,85 +1,95 @@
 # Lotus Package
 
-This package contains the configuration and build files for the Lotus Filecoin implementation used in the testing environment.
+This package builds and configures Lotus Filecoin nodes and miners for the testing environment.
 
-## Files
+## Overview
 
-### Dockerfile
-- **Purpose**: Builds an instrumented version of Lotus with data race detection and coverage instrumentation
-
-### Configuration Files
-
-#### config-1.toml
-- **Purpose**: Configuration template for the first Lotus node
-- **Usage**: Used in `lotus-1.sh` startup script
-- **Features**: Contains network, libp2p, and node-specific settings
-
-#### config-2.toml
-- **Purpose**: Configuration template for the second Lotus node
-- **Usage**: Used in `lotus-2.sh` startup script
-- **Features**: Contains network, libp2p, and node-specific settings
-
-### Patches
-
-#### lotus.patch
-- **Purpose**: Custom modifications to Lotus source code for testing environment
-- **Key Changes**:
-  - Modifies Drand configuration to use local beacon servers instead of public ones
-  - Updates F3 consensus parameters (BootstrapEpoch: 20, Finality: 10)
-  - Fixes connection handling in hello protocol
-  - Adds dynamic Drand chain info loading from environment variables
-
-
-### Start Scripts Directory (`start_scripts/`)
-
-#### lotus-1.sh
-- **Purpose**: Primary Lotus node startup script
-- **Features**:
-  - Initializes the first Lotus full node
-  - Sets up data directory and configuration
-  - Handles genesis import and network bootstrapping
-  - Configures libp2p networking and peer discovery
-
-#### lotus-2.sh
-- **Purpose**: Secondary Lotus node startup script
-- **Features**:
-  - Starts additional Lotus full node for redundancy
-  - Connects to the primary node for network participation
-  - Uses different ports and data directories
-
-#### lotus-miner-1.sh
-- **Purpose**: First Lotus miner startup script
-- **Features**:
-  - Initializes mining operations for miner t01000
-  - Sets up sector management and storage
-  - Configures mining parameters and worker processes
-
-#### lotus-miner-2.sh
-- **Purpose**: Second Lotus miner startup script
-- **Features**:
-  - Initializes mining operations for miner t01001
-  - Sets up sector management and storage
-  - Configures mining parameters and worker processes
-
-### Testing and Benchmarking
-
-#### lotus_bench.sh
-- **Purpose**: Comprehensive benchmarking and testing script for Lotus nodes
-- **Features**:
-  - Tests various Filecoin RPC methods (ChainHead, WalletBalance, etc.)
-  - Tests Ethereum compatibility methods (eth_feeHistory, eth_getBlockByNumber)
-  - Performs random method selection and endpoint testing
-  - Generates random parameters for testing (epochs, block numbers, addresses)
-  - Validates responses and reports performance metrics
-
-## Usage
-
-The Lotus package provides a complete Filecoin node implementation with:
+Lotus is the reference Go implementation of Filecoin. This package provides:
 - Full node functionality for blockchain validation
 - Mining capabilities for block production
 - RPC API for client interactions
 - Ethereum compatibility layer
-- Data race detection for debugging
-- Comprehensive testing and benchmarking tools
 
-Each startup script configures and starts the appropriate Lotus component with the necessary parameters for the testing environment.
+## Building
+
+```bash
+make build-lotus
+```
+
+Or directly:
+```bash
+docker build -t lotus:latest -f lotus/Dockerfile lotus
+```
+
+## Nodes
+
+### Lotus0 (Primary)
+- RPC: `http://lotus0:1234/rpc/v1`
+- JWT: `/root/devgen/lotus0/lotus0-jwt`
+- Config: `config-0.toml`
+- Start script: `lotus-0.sh`
+
+### Lotus1 (Secondary)
+- RPC: `http://lotus1:1234/rpc/v1`
+- JWT: `/root/devgen/lotus1/lotus1-jwt`
+- Config: `config-1.toml`
+- Start script: `lotus-1.sh`
+
+## Miners
+
+### lotus-miner0
+- Miner ID: `t01000`
+- Start script: `lotus-miner-0.sh`
+- Depends on: lotus0
+
+### lotus-miner1
+- Miner ID: `t01001`
+- Start script: `lotus-miner-1.sh`
+- Depends on: lotus1
+
+## Patches (`lotus.patch`)
+
+Applied modifications for testing:
+- Local Drand configuration instead of public beacons
+- F3 consensus parameters (BootstrapEpoch: 20, Finality: 10)
+- Dynamic Drand chain info from environment variables
+
+## Configuration
+
+### Config Files
+- `config-0.toml` — Lotus0 configuration
+- `config-1.toml` — Lotus1 configuration
+
+### Key Settings
+- Network bootstrapping
+- LibP2P configuration
+- Peer discovery
+- API permissions
+
+## Artifacts Exported
+
+Each Lotus node exports to shared volume:
+- `lotus{N}-jwt` — API authentication token
+- `lotus{N}-ipv4addr` — Container IP address
+- `lotus{N}-p2pid` — P2P peer ID
+
+## Docker Compose
+
+Defined in `config/docker-compose.yml`:
+- lotus0: Port 1234 (RPC)
+- lotus1: Port 1234 (RPC)
+- lotus-miner0: Mining operations
+- lotus-miner1: Mining operations
+
+## API Features
+
+### Lotus-Specific (not in Forest)
+- `ChainValidateIndex` — Chain backfill check
+- Full wallet signing capabilities
+- Miner operations
+
+### CommonAPI Compatible
+- Chain operations
+- State queries
+- ETH methods
+- Wallet balance/list

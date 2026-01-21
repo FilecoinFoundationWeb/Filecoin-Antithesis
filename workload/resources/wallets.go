@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"time"
@@ -56,100 +57,94 @@ func InitializeWallets(ctx context.Context, api api.FullNode, numWallets int, fu
 	return nil
 }
 
-func InitializeForestWallets(ctx context.Context, api, lotusapi api.FullNode, numWallets int, fundingAmount abi.TokenAmount) error {
+// InitializeForestWallets funds a new wallet on Forest using funds from a Lotus node
+func InitializeForestWallets(ctx context.Context, forestApi, lotusApi api.FullNode, numWallets int, fundingAmount abi.TokenAmount) error {
+	wallet, err := CreateWallet(ctx, forestApi, types.KTBLS)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create wallet on Forest: %v", err)
+		return nil
+	}
+	log.Printf("Created wallet on Forest: %s", wallet)
 
-	wallet, err := CreateWallet(ctx, api, types.KTBLS)
+	genesisWallet, err := GetGenesisWallet(ctx, lotusApi)
 	if err != nil {
-		log.Printf("[ERROR] Failed to create wallet: %v", err)
+		log.Printf("[ERROR] Failed to get genesis wallet from Lotus: %v", err)
 		return nil
 	}
-	log.Printf("Created wallet: %s", wallet)
 
-	genesisWallet, err := GetGenesisWallet(ctx, lotusapi)
+	// Verify funds on Lotus
+	funds, err := lotusApi.WalletBalance(ctx, genesisWallet)
 	if err != nil {
-		log.Printf("[ERROR] Failed to get genesis wallet: %v", err)
+		log.Printf("[ERROR] Failed to get genesis wallet balance: %v", err)
 		return nil
 	}
-	funds, err := api.WalletBalance(ctx, genesisWallet)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get balance: %v", err)
-		return nil
-	}
-	fundingAmount = big.Div(funds, big.NewInt(4))
+	log.Printf("Genesis wallet balance: %s", funds)
 
-	err = SendFunds(ctx, api, genesisWallet, wallet, fundingAmount)
+	// Send funds FROM Lotus TO Forest wallet
+	err = SendFunds(ctx, lotusApi, genesisWallet, wallet, fundingAmount)
 	if err != nil {
-		log.Printf("[ERROR] Failed to send funds: %v", err)
+		log.Printf("[ERROR] Failed to send funds from Lotus: %v", err)
 		return nil
 	}
-	log.Printf("Sent funds to wallet: %s", wallet)
+	log.Printf("Sent %s from %s to %s", fundingAmount, genesisWallet, wallet)
 
-	err = api.WalletSetDefault(ctx, wallet)
+	// Set default on Forest
+	err = forestApi.WalletSetDefault(ctx, wallet)
 	if err != nil {
-		log.Printf("[ERROR] Failed to set default wallet: %v", err)
+		log.Printf("[ERROR] Failed to set default wallet on Forest: %v", err)
 		return nil
 	}
-	log.Printf("Set default wallet: %s", wallet)
-	time.Sleep(10 * time.Second)
-	err = CreateForestWallets(ctx, api, 3, abi.NewTokenAmount(100000000000000))
+	log.Printf("Set default wallet on Forest: %s", wallet)
+
+	// Wait for message propagation
+	time.Sleep(30 * time.Second)
+
+	// Create additional wallets
+	err = CreateForestWallets(ctx, forestApi, lotusApi, 3, abi.NewTokenAmount(100000000000000))
 	if err != nil {
-		log.Printf("[ERROR] Failed to create forest wallets: %v", err)
+		log.Printf("[ERROR] Failed to create additional forest wallets: %v", err)
 		return nil
 	}
 	return nil
 }
 
-func CreateForestWallets(ctx context.Context, api api.FullNode, numWallets int, fundingAmount abi.TokenAmount) error {
-	defaultWallet, err := api.WalletDefaultAddress(ctx)
+// CreateForestWallets creates additional wallets on Forest and funds them from Lotus (since Forest wallets may not have the signing key imported)
+func CreateForestWallets(ctx context.Context, forestApi, lotusApi api.FullNode, numWallets int, fundingAmount abi.TokenAmount) error {
+	defaultWallet, err := forestApi.WalletDefaultAddress(ctx)
+	if err != nil || defaultWallet.Empty() {
+		log.Printf("[WARN] No default wallet on Forest, attempting to initialize...")
+		return InitializeForestWallets(ctx, forestApi, lotusApi, 1, big.Mul(fundingAmount, big.NewInt(10)))
+	}
+
+	// Get Lotus genesis wallet to fund Forest wallets directly
+	lotusGenesis, err := GetGenesisWallet(ctx, lotusApi)
 	if err != nil {
-		log.Printf("[ERROR] Failed to get default wallet: %v", err)
-		return nil
+		return fmt.Errorf("failed to get Lotus genesis wallet: %w", err)
 	}
-	funds, err := api.WalletBalance(ctx, defaultWallet)
-	if err != nil {
-		log.Printf("[ERROR] Failed to get balance: %v", err)
-		return nil
-	}
-	nodeconfig := NodeConfig{
-		Name:          "Forest",
-		RPCURL:        "http://lotus-1:1234/rpc/v1",
-		AuthTokenPath: "/root/devgen/lotus-1/jwt",
-	}
-	lotusapi, closer, err := ConnectToNode(ctx, nodeconfig)
-	if err != nil {
-		log.Printf("[ERROR] Failed to connect to Lotus node: %v", err)
-		return nil
-	}
-	defer closer()
-	if funds == abi.NewTokenAmount(0) {
-		log.Printf("[ERROR] Default wallet has no balance")
-		InitializeForestWallets(ctx, api, lotusapi, 1, abi.NewTokenAmount(1000000000000000000))
-		return nil
-	}
-	log.Printf("Balance: %s", funds)
+
+	log.Printf("[INFO] Creating %d wallets on Forest, funding from Lotus genesis", numWallets)
+
 	createdWallets := 0
 	for i := 0; i < numWallets; i++ {
-		wallet, err := CreateWallet(ctx, api, types.KTBLS)
+		wallet, err := CreateWallet(ctx, forestApi, types.KTBLS)
 		if err != nil {
 			log.Printf("[ERROR] Failed to create wallet: %v", err)
-			return nil
-		}
-		err = SendFunds(ctx, api, defaultWallet, wallet, fundingAmount)
-		if err != nil {
-			log.Printf("Failed to fund wallet #%d: %v. Wallet was created but not funded.", i+1, err)
 			continue
 		}
-		log.Printf("Created and funded wallet #%d: %s with %s FIL", i+1, wallet, fundingAmount.String())
+
+		// Fund directly from Lotus genesis -> new Forest wallet
+		err = SendFunds(ctx, lotusApi, lotusGenesis, wallet, fundingAmount)
+		if err != nil {
+			log.Printf("[WARN] Failed to fund wallet #%d from Lotus: %v", i+1, err)
+			continue
+		}
+
+		log.Printf("Created and funded wallet #%d: %s with %s attoFIL", i+1, wallet, fundingAmount.String())
 		createdWallets++
 	}
 
 	if createdWallets == 0 {
-		log.Printf("[ERROR] Failed to create and fund any wallets")
-		return nil
-	}
-
-	if createdWallets < numWallets {
-		log.Printf("Warning: Only created %d out of %d requested wallets", createdWallets, numWallets)
+		return fmt.Errorf("failed to create and fund any wallets")
 	}
 
 	return nil
@@ -163,6 +158,41 @@ func CreateWallet(ctx context.Context, api api.FullNode, walletType types.KeyTyp
 		return address.Undef, nil
 	}
 	return wallet, nil
+}
+
+// EnsureWallet ensures there is a default wallet available.
+// It checks for a default address, lists existing ones, or creates a new one if necessary.
+func EnsureWallet(ctx context.Context, api api.FullNode) (address.Address, error) {
+	// 1. Check default
+	addr, err := api.WalletDefaultAddress(ctx)
+	if err == nil && !addr.Empty() {
+		return addr, nil
+	}
+
+	// 2. List
+	list, err := api.WalletList(ctx)
+	if err == nil && len(list) > 0 {
+		addr = list[0]
+		log.Printf("[INFO] Using existing wallet address: %s", addr)
+		if err := api.WalletSetDefault(ctx, addr); err != nil {
+			log.Printf("[WARN] Failed to set default wallet: %v", err)
+		}
+		return addr, nil
+	}
+
+	// 3. Create
+	log.Printf("[INFO] No wallet addresses found, creating a new one")
+	addr, err = api.WalletNew(ctx, types.KTSecp256k1)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create new wallet address: %v", err)
+		return address.Undef, err
+	}
+	log.Printf("[INFO] Created new wallet address: %s", addr)
+
+	if err := api.WalletSetDefault(ctx, addr); err != nil {
+		log.Printf("[WARN] Failed to set default wallet: %v", err)
+	}
+	return addr, nil
 }
 
 // SendFunds sends funds from one address to another, waiting for the transaction to be confirmed
@@ -461,7 +491,7 @@ func PerformCreateOperation(ctx context.Context, nodeConfig *NodeConfig, numWall
 		api, closer, err := ConnectToNode(ctx, *nodeConfig)
 		if err != nil {
 			log.Printf("Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-			return nil
+			return err
 		}
 
 		// Handle graceful connection failure
@@ -472,7 +502,7 @@ func PerformCreateOperation(ctx context.Context, nodeConfig *NodeConfig, numWall
 				continue
 			}
 			log.Printf("[WARN] Could not establish connection to node '%s' after 3 attempts, skipping wallet creation", nodeConfig.Name)
-			return nil
+			return fmt.Errorf("failed to connect to node %s", nodeConfig.Name)
 		}
 
 		defer closer()
@@ -488,42 +518,4 @@ func PerformCreateOperation(ctx context.Context, nodeConfig *NodeConfig, numWall
 	}
 
 	return nil
-}
-
-// PerformDeleteOperation deletes wallets on a specified node
-func PerformDeleteOperation(ctx context.Context, nodeConfig *NodeConfig) error {
-	log.Printf("Deleting wallets on node '%s'...", nodeConfig.Name)
-
-	api, closer, err := ConnectToNode(ctx, *nodeConfig)
-	if err != nil {
-		log.Printf("[ERROR] Failed to connect to Lotus node '%s': %v", nodeConfig.Name, err)
-		return nil
-	}
-	defer closer()
-
-	return RetryOperation(ctx, func() error {
-		allWallets, err := GetAllWalletAddressesExceptGenesis(ctx, api)
-		if err != nil {
-			log.Printf("[ERROR] Failed to list wallets on node '%s': %v", nodeConfig.Name, err)
-			return nil
-		}
-
-		if len(allWallets) == 0 {
-			log.Printf("No wallets available to delete on node '%s'", nodeConfig.Name)
-			return nil
-		}
-
-		// Delete a random number of wallets
-		rand.Seed(time.Now().UnixNano())
-		numToDelete := rand.Intn(len(allWallets)) + 1
-		walletsToDelete := allWallets[:numToDelete]
-
-		if err := DeleteWallets(ctx, api, walletsToDelete); err != nil {
-			log.Printf("[ERROR] Failed to delete wallets on node '%s': %v", nodeConfig.Name, err)
-			return nil
-		}
-
-		log.Printf("Deleted %d wallets successfully on node '%s'", numToDelete, nodeConfig.Name)
-		return nil
-	}, "Delete wallets operation")
 }
