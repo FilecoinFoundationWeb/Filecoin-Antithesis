@@ -32,6 +32,11 @@ on:
         required: true
         default: 'latest'
         description: The lotus image tag used for the test run
+      curio:
+        type: string
+        required: true
+        default: 'latest'
+        description: The curio image tag used for the test run
       workload:
         type: string
         required: true
@@ -43,6 +48,7 @@ on:
         default: 'latest'
         description: The config image tag used for the test run
 
+
 jobs:
   manual_run:
     if: github.event_name == 'workflow_dispatch'
@@ -53,12 +59,12 @@ jobs:
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
-          notebook_name: forest
+          notebook_name: filecoin
           tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }}
+          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};curio:${{ inputs.curio }};
           config_image: config:${{ github.event.inputs.config }}
           description: "Manual Test"
           email_recipients: ${{ github.event.inputs.emails }}
@@ -75,12 +81,12 @@ jobs:
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
-          notebook_name: forest
+          notebook_name: filecoin
           tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 12 hr nightly run"
           additional_parameters: |-
@@ -99,12 +105,12 @@ jobs:
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
-          notebook_name: forest
+          notebook_name: filecoin
           tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 12 hr nightly run #2"
           additional_parameters: |-
@@ -123,12 +129,12 @@ jobs:
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
-          notebook_name: forest
+          notebook_name: filecoin
           tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 3 hr noon run"
           additional_parameters: |-
