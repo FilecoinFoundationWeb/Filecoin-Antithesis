@@ -1,8 +1,10 @@
 # STAGE 1: Use the pre-built lotus image as a source for its binaries
 # This avoids rebuilding lotus and uses the same version as the rest of your environment.
-ARG LOTUS_REGISTRY=us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository
+# BUILD_MODE: "local" uses local lotus image, "remote" uses Antithesis registry
+ARG BUILD_MODE=local
 ARG LOTUS_TAG=latest
-FROM ${LOTUS_REGISTRY}/lotus:${LOTUS_TAG} as lotus-builder
+ARG ANTITHESIS_REGISTRY=us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository
+FROM ${BUILD_MODE:+${ANTITHESIS_REGISTRY}/}lotus:${LOTUS_TAG} as lotus-builder
 
 FROM docker.io/golang:latest
 

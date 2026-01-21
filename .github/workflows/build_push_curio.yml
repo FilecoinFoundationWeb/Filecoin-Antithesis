@@ -63,6 +63,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         build-args: |
+          BUILD_MODE=remote
           GIT_BRANCH=${{ github.event.inputs.curio_tag || steps.latest-curio-commit.outputs.commit-hash }}
           LOTUS_TAG=${{ github.event.inputs.lotus_tag }}
         context: ./curio
