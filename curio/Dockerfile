@@ -47,6 +47,9 @@ COPY ./curio.patch ./curio.patch
 RUN git apply curio.patch
 COPY ./increase-cpu-avail-antithesis.patch ./increase-cpu-avail-antithesis.patch
 RUN git apply increase-cpu-avail-antithesis.patch
+COPY ./reduce-reservations-size.patch ./reduce-reservations-size.patch
+RUN git apply reduce-reservations-size.patch
+
 
 ### make configurable filecoin-ffi build
 ARG FFI_BUILD_FROM_SOURCE=0
