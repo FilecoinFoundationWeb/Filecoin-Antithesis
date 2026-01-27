@@ -65,24 +65,7 @@ wait_for_file() {
 }
 
 # =============================================================================
-# STEP 1: TIME SYNCHRONIZATION
-# =============================================================================
-
-log_info "Synchronizing system time..."
-
-if ntpdate -q pool.ntp.org &>/dev/null; then
-    ntpdate -u pool.ntp.org || {
-        log_warn "Time sync failed. Container may need SYS_TIME capability."
-        log_warn "Run with: --cap-add SYS_TIME"
-    }
-else
-    log_warn "Unable to query NTP servers. Check network connectivity."
-fi
-
-log_info "Current system time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-
-# =============================================================================
-# STEP 2: WAIT FOR BLOCKCHAIN
+# WAIT FOR BLOCKCHAIN
 # =============================================================================
 
 log_info "Waiting for block height to reach ${INIT_BLOCK_HEIGHT}..."
@@ -104,7 +87,7 @@ done
 log_info "Blockchain ready at height ${BLOCK_HEIGHT_REACHED}"
 
 # =============================================================================
-# STEP 3: SETUP ENVIRONMENT
+# SETUP ENVIRONMENT
 # =============================================================================
 
 export FILECOIN_RPC
@@ -116,7 +99,7 @@ log_info "  FILECOIN_RPC: $FILECOIN_RPC"
 log_info "  LOTUS_0_DATA_DIR: $LOTUS_0_DATA_DIR"
 
 # =============================================================================
-# STEP 4: DEPLOY CONTRACTS
+# DEPLOY CONTRACTS
 # =============================================================================
 
 log_info "Deploying smart contracts via FilWizard..."
@@ -134,7 +117,7 @@ filwizard contract deploy-local \
 wait_for_file "$WORKSPACE_DEPLOYMENTS" "deployments.json"
 
 # =============================================================================
-# STEP 5: EXTRACT CONTRACT ADDRESSES
+# EXTRACT CONTRACT ADDRESSES
 # =============================================================================
 
 log_info "Extracting contract addresses..."
@@ -182,7 +165,7 @@ log_info "  USDFC:            $USDFC_ADDRESS"
 log_info "  Multicall3:       $MULTICALL3_ADDRESS"
 
 # =============================================================================
-# STEP 6: CREATE CURIO ENVIRONMENT FILE
+# CREATE CURIO ENVIRONMENT FILE
 # =============================================================================
 
 log_info "Creating Curio environment file..."
@@ -204,7 +187,7 @@ EOF
 log_info "Curio env file created: $CURIO_ENV_FILE"
 
 # =============================================================================
-# STEP 7: RUN WORKLOAD
+# RUN WORKLOAD
 # =============================================================================
 
 log_info "Contract deployment and environment setup complete!"

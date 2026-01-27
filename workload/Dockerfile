@@ -42,13 +42,14 @@ RUN go install github.com/ethereum/go-ethereum/cmd/abigen@latest
 WORKDIR /opt/antithesis 
 RUN npm install -g hardhat
 # Clone and build filwizard
+RUN pwd
 RUN git clone https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
 
 
 WORKDIR /opt/antithesis/FilWizard
 RUN git pull
 # Install forge dependencies:
-RUN git checkout api-properties
+RUN git checkout foc-testing
 RUN make build
 
 RUN cp ./filwizard /usr/local/bin/filwizard
@@ -56,7 +57,7 @@ RUN filwizard contract clone-config --config /opt/antithesis/FilWizard/config/fi
 RUN git clone https://github.com/FilOzone/synapse-sdk /opt/antithesis/synapse-sdk
 WORKDIR /opt/antithesis/synapse-sdk
 RUN git pull
-RUN git checkout master
+RUN git checkout 8aafdf1c0b8ba1b729898898aec4aeb47f5ac6a4
 
 # Copy and apply synapse-sdk patch
 COPY ./patches/synapse-sdk.patch /tmp/synapse-sdk.patch

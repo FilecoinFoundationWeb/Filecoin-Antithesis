@@ -1,0 +1,430 @@
+workload  | [0;32m[ENTRYPOINT][0m Waiting for block height to reach 5...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 0, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 0, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 0, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 0, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 0, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 0, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 0, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 0, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 1, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 1, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 2, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 2, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 3, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 3, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 3, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 4, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Current height: 4, waiting...
+workload  | [0;32m[ENTRYPOINT][0m Blockchain ready at height 6
+workload  | [0;32m[ENTRYPOINT][0m Environment configured:
+workload  | [0;32m[ENTRYPOINT][0m   FILECOIN_RPC: http://lotus0:1234/rpc/v1
+workload  | [0;32m[ENTRYPOINT][0m   LOTUS_0_DATA_DIR: /lotus0
+workload  | [0;32m[ENTRYPOINT][0m Deploying smart contracts via FilWizard...
+workload  |   Setting RPC_URL=http://lotus0:1234/rpc/v1 (from --rpc-url flag)
+workload  |   Setting ETH_RPC_URL=http://lotus0:1234/rpc/v1 (from --rpc-url flag)
+workload  |   Setting FILECOIN_RPC=http://lotus0:1234/rpc/v1 (from --rpc-url flag)
+workload  | Deployment order: USDFC -> Multicall3 -> FilecoinWarmStorage
+workload  | Creating new deployer account...
+workload  | Created ETH keystore at /opt/antithesis/FilWizard/workspace/keystore/UTC--2026-01-22T11-41-44.735739188Z--a316eedfe59f9cd7178bdd7560a1883ade622dd2 (password: filwizard)
+workload  | Created deployer account: 0xa316eedfe59f9cd7178bdd7560a1883ade622dd2
+workload  | Private key: 0x1bdb4be60e2c052487122c5bbd3d328a386b76d880c351899c0a41457050056f
+workload  | ====== Deploying USDFC from local clone ======
+workload  | Setting environment variables for USDFC...
+workload  | Environment variables:
+workload  |   FILECOIN_RPC=http://lotus0:1234/rpc/v1
+workload  |   CHAIN_ID=31415926
+workload  |   RPC_URL=http://lotus0:1234/rpc/v1
+workload  |   ETH_RPC_URL=http://lotus0:1234/rpc/v1
+workload  |   USDFC_INITIAL_MINT_AMOUNT_WEI=10000000000000000000
+workload  |   PRIVATE_KEY=0x1bdb4be60e2c052487122c5bbd3d328a386b76d880c351899c0a41457050056f
+workload  | Running forge create from directory: /opt/antithesis/FilWizard/workspace/usdfc
+workload  | Contract path: src/ERC20.sol:USDFC
+workload  | Extracted ABI using forge inspect for USDFC
+workload  | Saved ABI for USDFC to /opt/antithesis/FilWizard/workspace/contracts/usdfc.abi.json
+workload  | Generated Go bindings for USDFC at /opt/antithesis/FilWizard/workspace/contracts/usdfc.go
+workload  | Added deployer account to /opt/antithesis/FilWizard/workspace/accounts.json
+workload  | Warning: failed to save deployer account: failed to create ETH keystore: failed to create keystore: account already exists
+workload  | 
+workload  | Contract USDFC deployed successfully!
+workload  | Contract: USDFC
+workload  | Address: 0x63990a1b1bb7c56915f8fac6a402649646cf2131
+workload  | Transaction: 0x0000000000000000000000000000000000000000000000000000000000000000
+workload  | Deployer: 0xa316eedfe59f9cd7178bdd7560a1883ade622dd2
+workload  | ABI Path: /opt/antithesis/FilWizard/workspace/contracts/usdfc.abi.json
+workload  | Go Bindings: /opt/antithesis/FilWizard/workspace/contracts/usdfc.go
+workload  | Updating environment variables with new contract addresses...
+workload  |   Exported USDFC_ADDRESS=0x63990a1b1bb7c56915f8fac6a402649646cf2131
+workload  | ====== Finished USDFC ======
+workload  | 
+workload  | Calling USDFC.mint() with args: [0x1bdb4be60e2c052487122c5bbd3d328a386b76d880c351899c0a41457050056f 10000000000000000000]
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation... 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Transaction confirmed: 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Post-deployment action completed - TX: 0x6ffc49298a78e15c61b4cf9e1802e8be17095aa908c075d9f1b77c5d715e8ff8
+workload  | Waiting for transaction confirmation...
+workload  | ====== Deploying Multicall3 from local clone ======
+workload  | Setting environment variables for Multicall3...
+workload  | Environment variables:
+workload  |   ETH_RPC_URL=http://lotus0:1234/rpc/v1
+workload  |   FILECOIN_RPC=http://lotus0:1234/rpc/v1
+workload  |   CHAIN_ID=31415926
+workload  |   RPC_URL=http://lotus0:1234/rpc/v1
+workload  |   PRIVATE_KEY=0x1bdb4be60e2c052487122c5bbd3d328a386b76d880c351899c0a41457050056f
+workload  | Running forge create from directory: /opt/antithesis/FilWizard/workspace/multicall3
+workload  | Contract path: src/Multicall3.sol:Multicall3
+workload  | Extracted ABI using forge inspect for Multicall3
+workload  | Saved ABI for Multicall3 to /opt/antithesis/FilWizard/workspace/contracts/multicall3.abi.json
+workload  | Generated Go bindings for Multicall3 at /opt/antithesis/FilWizard/workspace/contracts/multicall3.go
+workload  | 
+workload  | Contract Multicall3 deployed successfully!
+workload  | Contract: Multicall3
+workload  | Address: 0x5b02dd7b63b9af8cd127acb4c8d52111c891fa72
+workload  | Transaction: 0x0000000000000000000000000000000000000000000000000000000000000000
+workload  | Deployer: 0xa316eedfe59f9cd7178bdd7560a1883ade622dd2
+workload  | ABI Path: /opt/antithesis/FilWizard/workspace/contracts/multicall3.abi.json
+workload  | Go Bindings: /opt/antithesis/FilWizard/workspace/contracts/multicall3.go
+workload  | Updating environment variables with new contract addresses...
+workload  |   Exported MULTICALL3_ADDRESS=0x5b02dd7b63b9af8cd127acb4c8d52111c891fa72
+workload  | ====== Finished Multicall3 ======
+workload  | 
+workload  | Waiting for transaction confirmation...
+workload  | ====== Deploying FilecoinWarmStorage from local clone ======
+workload  | Setting environment variables for FilecoinWarmStorage...
+workload  | Environment variables:
+workload  |   CHAIN_ID=31415926
+workload  |   SERVICE_DESCRIPTION=Synapse Service
+workload  |   USDFC_TOKEN_ADDRESS=0x63990a1b1bb7c56915f8fac6a402649646cf2131
+workload  |   AUTO_VERIFY=false
+workload  |   CHAIN=31415926
+workload  |   SERVICE_NAME=Synapse
+workload  |   RPC_URL=http://lotus0:1234/rpc/v1
+workload  |   ETH_RPC_URL=http://lotus0:1234/rpc/v1
+workload  |   FILECOIN_RPC=http://lotus0:1234/rpc/v1
+workload  |   DRY_RUN=false
+workload  |   PRIVATE_KEY=0x1bdb4be60e2c052487122c5bbd3d328a386b76d880c351899c0a41457050056f
+workload  | Clone commands already executed for FilecoinWarmStorage (found marker file), skipping...
+workload  | Waiting 10s for previous transactions to confirm before running custom script...
+workload  | Running custom deployment script: tools/deploy-all-warm-storage.sh
+workload  | 2026/01/22 11:51:17 Deployment script output: 🚀 Running in DEPLOYMENT mode - will actually deploy and upgrade contracts
+workload  | Deploying all Warm Storage contracts
+workload  | Detected Chain ID: 31415926 (devnet)
+workload  | ℹ️  Chain 31415926 not found in deployments.json, will use environment variables
+workload  | Service configuration:
+workload  |   Name: Synapse
+workload  |   Description: Synapse Service
+workload  | Network: devnet
+workload  | Configuration validation passed:
+workload  |   CHALLENGE_FINALITY=5
+workload  |   MAX_PROVING_PERIOD=120
+workload  |   CHALLENGE_WINDOW_SIZE=10
+workload  | Deploying contracts from address 0xA316EEdFE59f9cd7178bDD7560a1883aDe622dd2
+workload  | 🚀 Will deploy and broadcast all transactions
+workload  | 
+workload  | ========================================
+workload  | DEPLOYING...
+workload  | ========================================
+workload  | 
+workload  | [1mDeploying SessionKeyRegistry[0m
+workload  |   🔧 Using external deployment script...
+workload  | ℹ️  Chain 31415926 not found in deployments.json, will use environment variables
+workload  | Deploying SessionKeyRegistry from address 0xA316EEdFE59f9cd7178bDD7560a1883aDe622dd2...
+workload  | SessionKeyRegistry deployed at 0x84c4dF7EA6Fd9A567498eBf24b1dD200b58f3cFd
+workload  | 💾 Updating deployments.json: chain=31415926, contract=SESSION_KEY_REGISTRY_ADDRESS, address=0x84c4dF7EA6Fd9A567498eBf24b1dD200b58f3cFd
+workload  |   ✓ Updated SESSION_KEY_REGISTRY_ADDRESS=0x84c4dF7EA6Fd9A567498eBf24b1dD200b58f3cFd for chain 31415926
+workload  |   ✓ Updated metadata: commit=5e5e0a95ad52cb799c6db110c04d345a7bae7ab6, deployed_at=2026-01-22T11:44:54Z
+workload  | 
+workload  | ⏭️  Skipping automatic verification (export AUTO_VERIFY=true to enable)
+workload  |   ✅ Deployed at: 0x84c4dF7EA6Fd9A567498eBf24b1dD200b58f3cFd
+workload  | 💾 Updating deployments.json: chain=31415926, contract=SESSION_KEY_REGISTRY_ADDRESS, address=0x84c4dF7EA6Fd9A567498eBf24b1dD200b58f3cFd
+workload  |   ✓ Updated SESSION_KEY_REGISTRY_ADDRESS=0x84c4dF7EA6Fd9A567498eBf24b1dD200b58f3cFd for chain 31415926
+workload  | 
+workload  | [1mDeploying ProviderIdSet (EndorsementSet)[0m
+workload  |   ✅ Deployed at: 0x7f6693b8dDEC6078e6ec8f9DDee07C092e8b2117
+workload  | 💾 Updating deployments.json: chain=31415926, contract=ENDORSEMENT_SET_ADDRESS, address=0x7f6693b8dDEC6078e6ec8f9DDee07C092e8b2117
+workload  | Custom deployment script completed successfully
+workload  | Importing contract addresses from script output...
+workload  |   ✓ Updated ENDORSEMENT_SET_ADDRESS=0x7f6693b8dDEC6078e6ec8f9DDee07C092e8b2117 for chain 31415926
+workload  | 
+workload  | [1mDeploying PDPVerifier implementation[0m
+workload  |   ✅ Deployed at: 0x5f3Cd30C993e4cAa2e9dE3903957Ace09cf39Adf
+workload  | 💾 Updating deployments.json: chain=31415926, contract=PDP_VERIFIER_IMPLEMENTATION_ADDRESS, address=0x5f3Cd30C993e4cAa2e9dE3903957Ace09cf39Adf
+workload  |   ✓ Updated PDP_VERIFIER_IMPLEMENTATION_ADDRESS=0x5f3Cd30C993e4cAa2e9dE3903957Ace09cf39Adf for chain 31415926
+workload  | 
+workload  | [1mDeploying PDPVerifier proxy[0m
+workload  |   📦 Implementation: 0x5f3Cd30C993e4cAa2e9dE3903957Ace09cf39Adf
+workload  |   ✅ Deployed at: 0x428A2E6c9539a61699D7C567Fd1D829167d44B9C
+workload  | 💾 Updating deployments.json: chain=31415926, contract=PDP_VERIFIER_PROXY_ADDRESS, address=0x428A2E6c9539a61699D7C567Fd1D829167d44B9C
+workload  |   ✓ Updated PDP_VERIFIER_PROXY_ADDRESS=0x428A2E6c9539a61699D7C567Fd1D829167d44B9C for chain 31415926
+workload  | 
+workload  | [1mDeploying FilecoinPayV1[0m
+workload  |   ✅ Deployed at: 0xB3ff0A0fbC5af33F56D86ED4b3110c15A53B55c4
+workload  | 💾 Updating deployments.json: chain=31415926, contract=FILECOIN_PAY_ADDRESS, address=0xB3ff0A0fbC5af33F56D86ED4b3110c15A53B55c4
+workload  |   ✓ Updated FILECOIN_PAY_ADDRESS=0xB3ff0A0fbC5af33F56D86ED4b3110c15A53B55c4 for chain 31415926
+workload  | 
+workload  | [1mDeploying ServiceProviderRegistry implementation[0m
+workload  |   ✅ Deployed at: 0xca0Bc4C5d5d51e53C881bF9E70070360A8438CE5
+workload  | 💾 Updating deployments.json: chain=31415926, contract=SERVICE_PROVIDER_REGISTRY_IMPLEMENTATION_ADDRESS, address=0xca0Bc4C5d5d51e53C881bF9E70070360A8438CE5
+workload  |   ✓ Updated SERVICE_PROVIDER_REGISTRY_IMPLEMENTATION_ADDRESS=0xca0Bc4C5d5d51e53C881bF9E70070360A8438CE5 for chain 31415926
+workload  | 
+workload  | [1mDeploying ServiceProviderRegistry proxy[0m
+workload  |   📦 Implementation: 0xca0Bc4C5d5d51e53C881bF9E70070360A8438CE5
+workload  |   ✅ Deployed at: 0xA9A8C83250837AED4bd7562820d8ebF61f3711Bb
+workload  | 💾 Updating deployments.json: chain=31415926, contract=SERVICE_PROVIDER_REGISTRY_PROXY_ADDRESS, address=0xA9A8C83250837AED4bd7562820d8ebF61f3711Bb
+workload  |   ✓ Updated SERVICE_PROVIDER_REGISTRY_PROXY_ADDRESS=0xA9A8C83250837AED4bd7562820d8ebF61f3711Bb for chain 31415926
+workload  | 
+workload  | [1mDeploying SignatureVerificationLib[0m
+workload  |   ✅ Deployed at: 0x4f055b246E882e5Fb13ef9b22B43C1f08317a602
+workload  | 💾 Updating deployments.json: chain=31415926, contract=SIGNATURE_VERIFICATION_LIB_ADDRESS, address=0x4f055b246E882e5Fb13ef9b22B43C1f08317a602
+workload  |   ✓ Updated SIGNATURE_VERIFICATION_LIB_ADDRESS=0x4f055b246E882e5Fb13ef9b22B43C1f08317a602 for chain 31415926
+workload  | 
+workload  | [1mDeploying FilecoinWarmStorageService implementation[0m
+workload  |   📚 Using libraries: src/lib/SignatureVerificationLib.sol:SignatureVerificationLib:0x4f055b246E882e5Fb13ef9b22B43C1f08317a602
+workload  |   🔧 Constructor args: 6 arguments
+workload  |   ✅ Deployed at: 0x789dd095600095C5b4768E9d54F71692e12002BC
+workload  | 💾 Updating deployments.json: chain=31415926, contract=FWSS_IMPLEMENTATION_ADDRESS, address=0x789dd095600095C5b4768E9d54F71692e12002BC
+workload  |   ✓ Updated FWSS_IMPLEMENTATION_ADDRESS=0x789dd095600095C5b4768E9d54F71692e12002BC for chain 31415926
+workload  | 
+workload  | [1mDeploying FilecoinWarmStorageService proxy[0m
+workload  |   📦 Implementation: 0x789dd095600095C5b4768E9d54F71692e12002BC
+workload  |   ✅ Deployed at: 0x602e1Ad7b0e914a0cA438ba6F47676327FC35913
+workload  | 💾 Updating deployments.json: chain=31415926, contract=FWSS_PROXY_ADDRESS, address=0x602e1Ad7b0e914a0cA438ba6F47676327FC35913
+workload  |   ✓ Updated FWSS_PROXY_ADDRESS=0x602e1Ad7b0e914a0cA438ba6F47676327FC35913 for chain 31415926
+workload  | 
+workload  | [1mFilecoinWarmStorageServiceStateView[0m
+workload  |   🔧 Using external deployment script...
+workload  | Deploying FilecoinWarmStorageServiceStateView from address 0xA316EEdFE59f9cd7178bDD7560a1883aDe622dd2...
+workload  | FilecoinWarmStorageServiceStateView deployed at 0x34EE1D739434c9877c3A9FD00582c58fb07C7696
+workload  | 
+workload  | ⏭️  Skipping automatic verification (export AUTO_VERIFY=true to enable)
+workload  |   ✅ Deployed at: 0x34EE1D739434c9877c3A9FD00582c58fb07C7696
+workload  | 💾 Updating deployments.json: chain=31415926, contract=FWSS_VIEW_ADDRESS, address=0x34EE1D739434c9877c3A9FD00582c58fb07C7696
+workload  |   ✓ Updated FWSS_VIEW_ADDRESS=0x34EE1D739434c9877c3A9FD00582c58fb07C7696 for chain 31415926
+workload  | 
+workload  | [1mSetting view contract address[0m
+workload  |   🔧 Setting view address on FilecoinWarmStorageService...
+workload  | Setting view contract address on FilecoinWarmStorageService...
+workload  | View contract address set successfully
+workload  |   ✅ View address set
+workload  | 
+workload  | 
+workload  | ✅ Deployment completed successfully!
+workload  | 
+workload  | # DEPLOYMENT SUMMARY (devnet)
+workload  | PDPVerifier Implementation: 0x5f3Cd30C993e4cAa2e9dE3903957Ace09cf39Adf
+workload  | PDPVerifier Proxy: 0x428A2E6c9539a61699D7C567Fd1D829167d44B9C
+workload  | FilecoinPayV1 Contract: 0xB3ff0A0fbC5af33F56D86ED4b3110c15A53B55c4
+workload  | ServiceProviderRegistry Implementation: 0xca0Bc4C5d5d51e53C881bF9E70070360A8438CE5
+workload  | ServiceProviderRegistry Proxy: 0xA9A8C83250837AED4bd7562820d8ebF61f3711Bb
+workload  | FilecoinWarmStorageService Implementation: 0x789dd095600095C5b4768E9d54F71692e12002BC
+workload  | FilecoinWarmStorageService Proxy: 0x602e1Ad7b0e914a0cA438ba6F47676327FC35913
+workload  | FilecoinWarmStorageServiceStateView: 0x34EE1D739434c9877c3A9FD00582c58fb07C7696
+workload  | ProviderIdSet (EndorsementSet): 0x7f6693b8dDEC6078e6ec8f9DDee07C092e8b2117
+workload  | 
+workload  | Network Configuration (devnet):
+workload  | Challenge finality: 5 epochs
+workload  | Max proving period: 120 epochs
+workload  | Challenge window size: 10 epochs
+workload  | USDFC token address: 0x63990a1b1bb7c56915f8fac6a402649646cf2131
+workload  | FilBeam controller address: 0x5f7E5E2A756430EdeE781FF6e6F7954254Ef629A
+workload  | FilBeam beneficiary address: 0x1D60d2F5960Af6341e842C539985FA297E10d6eA
+workload  | Service name: Synapse
+workload  | Service description: Synapse Service
+workload  | 
+workload  | 📝 Updating deployment metadata...
+workload  |   ✓ Updated metadata: commit=5e5e0a95ad52cb799c6db110c04d345a7bae7ab6, deployed_at=2026-01-22T11:51:17Z
+workload  | DEBUG: Read 126 lines from script output
+workload  | DEBUG: Loaded 2 existing deployments
+workload  | DEBUG: Parsed contract filecoinwarmstorageservicestateview: 0x34EE1D739434c9877c3A9FD00582c58fb07C7696
+workload  | DEBUG: Parsed contract usdfc: 0x63990a1b1bb7c56915f8fac6a402649646cf2131 (heuristic)
+workload  | DEBUG: Parsed 2 contracts from script output
+workload  | DEBUG: Final deployments count: 3
+workload  | DEBUG: Successfully wrote 3 contracts to workspace/deployments.json
+workload  | Successfully imported contract addresses
+workload  | Warning: contract FilecoinWarmStorage not found in deployments after script execution
+workload  | 
+workload  | Contract FilecoinWarmStorage deployed successfully!
+workload  | Contract: FilecoinWarmStorage
+workload  | Address: 0x0000000000000000000000000000000000000000
+workload  | Transaction: 0x0000000000000000000000000000000000000000000000000000000000000000
+workload  | Deployer: 0x0000000000000000000000000000000000000000
+workload  | Updating environment variables with new contract addresses...
+workload  |   Resolved USDFC_TOKEN_ADDRESS: {address:USDFC} -> 0x63990a1b1bb7c56915f8fac6a402649646cf2131
+workload  |   Warning: failed to resolve export FILECOIN_WARM_STORAGE_ADDRESS for FilecoinWarmStorage: contract FilecoinWarmStorage not found in deployments
+workload  | ====== Finished FilecoinWarmStorage ======
+workload  | 
+workload  | Waiting for transaction confirmation...
+workload  | All deployments completed. Check deployments with: ./mpool-tx contract list
+workload  | [0;32m[ENTRYPOINT][0m Waiting for deployments.json...
+workload  | [0;32m[ENTRYPOINT][0m deployments.json found
+workload  | [0;32m[ENTRYPOINT][0m Extracting contract addresses...
+workload  | [0;32m[ENTRYPOINT][0m Contract addresses extracted:
+workload  | [0;32m[ENTRYPOINT][0m   PDP Verifier:     0x428A2E6c9539a61699D7C567Fd1D829167d44B9C
+workload  | [0;32m[ENTRYPOINT][0m   FWSS (Proxy):     0x602e1Ad7b0e914a0cA438ba6F47676327FC35913
+workload  | [0;32m[ENTRYPOINT][0m   FWSS View:        0x34EE1D739434c9877c3A9FD00582c58fb07C7696
+workload  | [0;32m[ENTRYPOINT][0m   SP Registry:      0xA9A8C83250837AED4bd7562820d8ebF61f3711Bb
+workload  | [0;32m[ENTRYPOINT][0m   Payments:         0xB3ff0A0fbC5af33F56D86ED4b3110c15A53B55c4
+workload  | [0;32m[ENTRYPOINT][0m   USDFC:            0x63990a1b1bb7c56915f8fac6a402649646cf2131
+workload  | [0;32m[ENTRYPOINT][0m   Multicall3:       0x5b02dd7b63b9af8cd127acb4c8d52111c891fa72
+workload  | [0;32m[ENTRYPOINT][0m Creating Curio environment file...
+workload  | [0;32m[ENTRYPOINT][0m Curio env file created: /root/devgen/curio/.env.curio
+workload  | [0;32m[ENTRYPOINT][0m Contract deployment and environment setup complete!
+workload  | [0;32m[ENTRYPOINT][0m Starting workload main process...
+workload  | [0;32m[SYNAPSE][0m Starting Synapse SDK setup...
+workload  | [0;32m[SYNAPSE][0m Environment:
+workload  | [0;32m[SYNAPSE][0m   Network: devnet
+workload  | [0;32m[SYNAPSE][0m   RPC URL: http://lotus0:1234/rpc/v1
+workload  | [0;32m[SYNAPSE][0m   LOTUS_0_DATA_DIR: /lotus0
+workload  | [0;32m[SYNAPSE][0m Loading contract addresses from deployments...
+workload  | [0;32m[SYNAPSE][0m Contract addresses loaded:
+workload  | [0;32m[SYNAPSE][0m   Warm Storage:  0x602e1Ad7b0e914a0cA438ba6F47676327FC35913
+workload  | [0;32m[SYNAPSE][0m   SP Registry:   0xA9A8C83250837AED4bd7562820d8ebF61f3711Bb
+workload  | [0;32m[SYNAPSE][0m   PDP Verifier:  0x428A2E6c9539a61699D7C567Fd1D829167d44B9C
+workload  | [0;32m[SYNAPSE][0m   USDFC:         0x63990a1b1bb7c56915f8fac6a402649646cf2131
+workload  | [0;32m[SYNAPSE][0m   Multicall3:    0x5b02dd7b63b9af8cd127acb4c8d52111c891fa72
+workload  | [0;32m[SYNAPSE][0m   Endorsement Set: 
+workload  | [0;32m[SYNAPSE][0m Loading private keys...
+workload  | [0;32m[SYNAPSE][0m Creating client wallet...
+workload  | Creating 1 Ethereum wallet(s):
+workload  | 
+workload  | Wallet 1:
+workload  |   Ethereum Address: 0xa25d49123aed860a4075beb2af69f570e67610e3
+workload  |   Filecoin Address: f410fujouser25wdauqdvx2zk62pvodthmehdlqbkyci
+workload  |   Private Key: b6f1c5016a3d05c0f69785024f9d5aa65d0fef3d3b84615fc81f3086f6248221
+workload  |   Saved account 'client' to /opt/antithesis/FilWizard/workspace/accounts.json
+workload  |   Funded with 5 FIL
+workload  | 
+workload  | Successfully created 1 Ethereum wallet(s)
+workload  | [0;32m[SYNAPSE] ✓[0m Client wallet created
+workload  | [0;32m[SYNAPSE][0m Waiting for SP private key from Curio...
+workload  | [0;32m[SYNAPSE][0m SP private key from Curio found
+workload  | [0;32m[SYNAPSE] ✓[0m SP private key loaded
+workload  | [0;32m[SYNAPSE][0m Creating synapse-sdk environment file...
+workload  | [0;32m[SYNAPSE] ✓[0m Environment file created: /opt/antithesis/synapse-sdk/.env.localnet
+workload  | [0;32m[SYNAPSE][0m Minting tokens for client and SP...
+workload  | [0;32m[SYNAPSE][0m   Minting 1000 USDFC for client...
+workload  | Minted 1000000000000000000000 wei to 0xa25d49123aeD860a4075bEb2af69f570E67610E3
+workload  | Mint transaction: 0x856411bcc3532d8af91e655e267dc8dd26e8e09f54575527d37717d4ede7e340
+workload  | Derived Ethereum address: 0xa25d49123aeD860a4075bEb2af69f570E67610E3
+workload  | Derived Filecoin address: f410fujouser25wdauqdvx2zk62pvodthmehdlqbkyci
+workload  | [0;32m[SYNAPSE][0m   Minting 10 FIL for client...
+workload  | Minted 0 wei to 0xa25d49123aeD860a4075bEb2af69f570E67610E3
+workload  | Mint transaction: 0x32c3b37fafdc1c171847d68d9dec51a4f945a47969ca11f08d6f6f036f23c88e
+workload  | Derived Ethereum address: 0xa25d49123aeD860a4075bEb2af69f570E67610E3
+workload  | Derived Filecoin address: f410fujouser25wdauqdvx2zk62pvodthmehdlqbkyci
+workload  | Funded 10 FIL to f410fujouser25wdauqdvx2zk62pvodthmehdlqbkyci
+workload  | Funding message CID: bafy2bzacedsscref4wx2holzdkwahlttz6ioqefunzsitdbcqbygb4wvp6guq
+workload  | [0;32m[SYNAPSE][0m   Minting 10000 USDFC for SP...
+workload  | Minted 10000000000000000000000 wei to 0x5b9B020fA3B9962760e9f7ac00e5515fBa838749
+workload  | Mint transaction: 0x33d4eb8d07f26c0f8a01eb0bbd66711206783279960d5fcd3fb06982511b25b8
+workload  | Derived Ethereum address: 0x5b9B020fA3B9962760e9f7ac00e5515fBa838749
+workload  | Derived Filecoin address: f410flonqed5dxglcoyhj66wabzkrl65ihb2jwlqtyui
+workload  | [0;32m[SYNAPSE][0m   Minting 10 FIL for SP...
+workload  | Minted 0 wei to 0x5b9B020fA3B9962760e9f7ac00e5515fBa838749
+workload  | Mint transaction: 0xf1d1ead9daffb1a862c898c9334be67361966164eead8576f45bab6bdb401c4b
+workload  | Derived Ethereum address: 0x5b9B020fA3B9962760e9f7ac00e5515fBa838749
+workload  | Derived Filecoin address: f410flonqed5dxglcoyhj66wabzkrl65ihb2jwlqtyui
+workload  | Funded 10 FIL to f410flonqed5dxglcoyhj66wabzkrl65ihb2jwlqtyui
+workload  | Funding message CID: bafy2bzacecpkormsvodjt7bqzdka2kec5vwklxjp5lnn5znonrhjwgy32fjme
+workload  | [0;32m[SYNAPSE] ✓[0m Tokens minted
+workload  | [0;32m[SYNAPSE][0m Registering service provider...
+workload  | [0;32m[SYNAPSE][0m Running post-deploy-setup.js...
+workload  | [0;32m[SYNAPSE][0m   Mode: provider
+workload  | [0;32m[SYNAPSE][0m   Network: devnet
+workload  | [0;32m[SYNAPSE][0m   SP Name: My Devnet Provider
+workload  | [0;32m[SYNAPSE][0m   SP Service URL: http://curio:80
+workload  | ℹ️  🚀 Running post-deploy setup in 'both' mode
+workload  | ℹ️  Arguments: {"mode":"both","network":"devnet","rpcUrl":"http://lotus0:1234/rpc/v1","warmStorageAddress":"0x602e1Ad7b0e914a0cA438ba6F47676327FC35913","spRegistryAddress":"0xA9A8C83250837AED4bd7562820d8ebF61f3711Bb","usdfcAddress":"0x63990a1b1bb7c56915f8fac6a402649646cf2131","multicall3Address":"0x5b02dd7b63b9af8cd127acb4c8d52111c891fa72"}
+workload  | ℹ️  Starting post-deployment setup for network: devnet
+workload  | ℹ️  Warm Storage contract address: 0x602e1Ad7b0e914a0cA438ba6F47676327FC35913
+workload  | ℹ️  Multicall3 address: 0x5b02dd7b63b9af8cd127acb4c8d52111c891fa72
+workload  | ℹ️  Using RPC: http://lotus0:1234/rpc/v1
+workload  | ℹ️  
+workload  | Deployer address: 0xA316EEdFE59f9cd7178bDD7560a1883aDe622dd2
+workload  | ℹ️  Service Provider address: 0x5b9B020fA3B9962760e9f7ac00e5515fBa838749
+workload  | ℹ️  
+workload  | Provider Configuration:
+workload  | ℹ️    Name: My Devnet Provider
+workload  | ℹ️    Service URL: http://curio:80
+workload  | ℹ️    Location: C=US;ST=Unknown;L=Unknown
+workload  | ℹ️    Storage Price: 5.0 USDFC/TiB/day
+workload  | ℹ️  Using provided ServiceProviderRegistry address: 0xA9A8C83250837AED4bd7562820d8ebF61f3711Bb
+workload  | ℹ️  
+workload  | 📋 Step 1: Service Provider Registration in Registry
+workload  | ℹ️  Registering new provider: My Devnet Provider
+workload  | ℹ️  Note: Registration requires a 5 FIL fee
+workload  | ✅ Provider registered with PDP product. Tx: 0x4807c10335f4154fda26d1c823c6590a2345acf94ee03a517f052a3569c56fe2
+workload  | ℹ️  Provider ID: 1
+workload  | ℹ️  
+workload  | 📦 Step 2: Verifying PDP Product Configuration
+workload  | ✅ Provider has active PDP product
+workload  | ℹ️    Service URL: http://curio:80
+workload  | ℹ️    Location: C=US;ST=Unknown;L=Unknown
+workload  | ℹ️    Storage Price: 5.0 USDFC/TiB/day
+workload  | ℹ️    Min Piece Size: 128 bytes
+workload  | ℹ️    Max Piece Size: 34091302912 bytes
+workload  | ℹ️  
+workload  | ✅ Step 3: Provider Approval in Warm Storage
+workload  | ℹ️  Adding provider ID 1 to Warm Storage approved list...
+workload  | ✅ Provider approved in Warm Storage. Tx: 0xbe6f03438807731a22a48758a339ea5e2e35226d7c77b43233a602d5b612cb38
+workload  | ℹ️  
+workload  | Client address: 0xa25d49123aeD860a4075bEb2af69f570E67610E3
+workload  | ℹ️  
+workload  | 💰 Client Payment Setup
+workload  | ℹ️  USDFC token address: 0x63990a1b1bb7c56915f8fac6a402649646cf2131 (override)
+workload  | ℹ️  Client USDFC balance: 1000.0 USDFC
+workload  | ℹ️  Current deposit balance: 0.0 USDFC
+workload  | ℹ️  Making initial deposit of 1.0 USDFC...
+workload  | ℹ️  Approving USDFC spending...
+workload  | ✅ USDFC spending approved. Tx: 0x288cc412fec869a895df1786fd9a4501c4d9504b8e82140513d9db1cc5731fba
+workload  | ✅ Initial deposit made. Tx: 0xe6455e79bad371042ea340d163c1237e9e00b7f9f66052915b0a465cb965afee
+workload  | ℹ️  Setting up service approvals for Warm Storage...
+workload  | ℹ️  Approving Warm Storage as operator...
+workload  | ℹ️    Rate allowance: 0.1 USDFC per epoch
+workload  | ℹ️    Lockup allowance: 10.0 USDFC
+workload  | ℹ️    Max lockup period: 86400 epochs
+workload  | ✅ Service approval set. Tx: 0x8fda1760e9f5fc037fd08e22ff6773e8e856c7e0e07c44573e87cabd2d8e55cd
+workload  | ℹ️  
+workload  | 📊 Setup Summary:
+workload  | ✅ Provider registered with ID: 1
+workload  | ✅ Provider name: My Devnet Provider
+workload  | ✅ Provider approved in Warm Storage: ✅
+workload  | ✅ Client payment approvals configured: ✅
+workload  | ℹ️  
+workload  | 🎉 Post-deployment setup complete! (mode: both)
+workload  | ℹ️  
+workload  | Next steps for provider:
+workload  | ℹ️  1. Ensure the Curio service is running at the configured URL
+workload  | ℹ️  2. Monitor the provider status using the SDK or contract calls
+workload  | ℹ️  
+workload  | Next steps for client:
+workload  | ℹ️  1. Use the Synapse SDK to create data sets and upload pieces
+workload  | ℹ️  2. Monitor your payment balance and approvals
+workload  | [0;32m[SYNAPSE] ✓[0m Service provider registered
+workload  | [0;32m[SYNAPSE] ✓[0m Synapse SDK setup complete!
+workload  | system is healthy
+[Kworkload exited with code 137

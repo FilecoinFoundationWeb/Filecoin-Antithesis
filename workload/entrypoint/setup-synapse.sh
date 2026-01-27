@@ -8,7 +8,6 @@
 # 3. Creating environment file for synapse-sdk
 # 4. Minting tokens for client and SP
 # 5. Registering service provider via post-deploy-setup.js
-# 6. Running e2e storage tests
 #
 # Prerequisites:
 #   - entrypoint.sh must have run first (deploys contracts)
@@ -125,6 +124,7 @@ PDP_VERIFIER_ADDRESS=$(jq -r '.PDP_VERIFIER_PROXY_ADDRESS // empty' "$DEPLOYMENT
 PAYMENTS_ADDRESS=$(jq -r '.FILECOIN_PAY_ADDRESS // empty' "$DEPLOYMENTS_FILE")
 USDFC_ADDRESS=$(jq -r '.USDFC_ADDRESS // empty' "$DEPLOYMENTS_FILE")
 MULTICALL3_ADDRESS=$(jq -r '.MULTICALL3_ADDRESS // empty' "$DEPLOYMENTS_FILE")
+ENDORSEMENT_SET_ADDRESS=$(jq -r '.ENDORSEMENT_SET_ADDRESS // empty' "$DEPLOYMENTS_FILE")
 
 log_info "Contract addresses loaded:"
 log_info "  Warm Storage:  $WARM_STORAGE_CONTRACT_ADDRESS"
@@ -132,6 +132,7 @@ log_info "  SP Registry:   $SP_REGISTRY_ADDRESS"
 log_info "  PDP Verifier:  $PDP_VERIFIER_ADDRESS"
 log_info "  USDFC:         $USDFC_ADDRESS"
 log_info "  Multicall3:    $MULTICALL3_ADDRESS"
+log_info "  Endorsement Set: $ENDORSEMENT_SET_ADDRESS"
 
 # =============================================================================
 # STEP 3: LOAD PRIVATE KEYS
@@ -189,6 +190,7 @@ LOCALNET_WARM_STORAGE_VIEW_ADDRESS=$WARM_STORAGE_VIEW_ADDRESS
 LOCALNET_SP_REGISTRY_ADDRESS=$SP_REGISTRY_ADDRESS
 LOCALNET_PDP_VERIFIER_ADDRESS=$PDP_VERIFIER_ADDRESS
 LOCALNET_PAYMENTS_ADDRESS=$PAYMENTS_ADDRESS
+LOCALNET_ENDORSEMENT_SET_ADDRESS=$ENDORSEMENT_SET_ADDRESS
 
 # Private Keys
 DEPLOYER_PRIVATE_KEY=$DEPLOYER_PRIVATE_KEY
@@ -260,7 +262,7 @@ export WARM_STORAGE_CONTRACT_ADDRESS
 export SP_REGISTRY_ADDRESS
 export USDFC_ADDRESS
 export MULTICALL3_ADDRESS
-
+export WARM_STORAGE_VIEW_ADDRESS
 cd /opt/antithesis/synapse-sdk
 
 log_info "Running post-deploy-setup.js..."
