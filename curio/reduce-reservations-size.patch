@@ -1,0 +1,13 @@
+diff --git a/lib/storiface/storage.go b/lib/storiface/storage.go
+index 62884d08..4d5996b0 100644
+--- a/lib/storiface/storage.go
++++ b/lib/storiface/storage.go
+@@ -35,7 +35,7 @@ type PieceNumber uint64
+ func (pn PieceNumber) Ref() SectorRef {
+ 	return SectorRef{
+ 		ID:        abi.SectorID{Miner: 0, Number: abi.SectorNumber(pn)},
+-		ProofType: abi.RegisteredSealProof_StackedDrg64GiBV1, // This only cares about TreeD which is the same for all sizes
++		ProofType: abi.RegisteredSealProof_StackedDrg2KiBV1_1, // lower this to 2 Kib for Antithesis tests
+ 	}
+ }
+ 
