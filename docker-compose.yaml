@@ -147,7 +147,13 @@ services:
     image: yugabytedb/yugabyte:latest
     container_name: yugabyte
     init: true
-    command: [ "bin/yugabyted", "start", "--base_dir=/home/yugabyte/yb_data", "--background=false" ]
+    # command: [ "bin/yugabyted", "start", "--base_dir=/home/yugabyte/yb_data", "--background=false", "--ui=false" ]
+    command: >
+      bash -lc '
+        bin/yugabyted start --base_dir=/home/yugabyte/yb_data --background=true --ui=false
+        tail -F \
+          /home/yugabyte/yb_data/data/yb-data/tserver/logs/yb-tserver.INFO 
+      '
     ports:
       - "5433:5433"
       - "9042:9042"

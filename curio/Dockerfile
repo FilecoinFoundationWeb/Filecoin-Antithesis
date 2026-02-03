@@ -43,6 +43,9 @@ RUN set -eux; \
 RUN git clone https://github.com/filecoin-project/curio.git /opt/curio
 WORKDIR /opt/curio
 RUN git checkout pdpv0
+RUN git config --global user.email "richard.yao@antithesis.com"
+RUN git config --global user.name "Richard"
+RUN git merge origin/antithesis-panic 
 COPY ./curio.patch ./curio.patch
 RUN git apply curio.patch
 COPY ./increase-cpu-avail-antithesis.patch ./increase-cpu-avail-antithesis.patch
