@@ -15,6 +15,8 @@ COPY --from=lotus-builder /usr/local/bin /usr/local/bin
 RUN apt-get update && apt-get install -y --no-install-recommends dnsutils git ca-certificates build-essential clang ocl-icd-opencl-dev aria2 ocl-icd-libopencl1 jq libhwloc-dev xxd
 ENV XDG_CACHE_HOME="/tmp"
 
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
@@ -40,19 +42,35 @@ RUN set -eux; \
     cargo --version; \
     rustc --version;
 
+    
 RUN git clone https://github.com/filecoin-project/curio.git /opt/curio
 WORKDIR /opt/curio
+
 RUN git checkout pdpv0
 RUN git config --global user.email "richard.yao@antithesis.com"
 RUN git config --global user.name "Richard"
-RUN git merge origin/antithesis-panic 
-COPY ./curio.patch ./curio.patch
-RUN git apply curio.patch
 COPY ./increase-cpu-avail-antithesis.patch ./increase-cpu-avail-antithesis.patch
 RUN git apply increase-cpu-avail-antithesis.patch
 COPY ./reduce-reservations-size.patch ./reduce-reservations-size.patch
 RUN git apply reduce-reservations-size.patch
+RUN git merge origin/antithesis-panic 
 
+RUN git submodule update --init
+
+COPY ./go_exclude.txt ./go_exclude.txt
+
+RUN go get github.com/antithesishq/antithesis-sdk-go@latest
+RUN go get github.com/filecoin-project/go-jsonrpc@v0.8.0
+RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-instrumentor@latest
+RUN go mod tidy
+
+RUN mkdir /curio_instrumented
+RUN antithesis-go-instrumentor -exclude ./go_exclude.txt /opt/curio /curio_instrumented 
+RUN mkdir -p /symbols
+RUN cp -r /curio_instrumented/symbols/* /symbols
+
+WORKDIR /curio_instrumented/customer
+RUN rm -r /opt/curio
 
 ### make configurable filecoin-ffi build
 ARG FFI_BUILD_FROM_SOURCE=0
