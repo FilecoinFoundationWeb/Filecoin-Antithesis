@@ -53,9 +53,6 @@ RUN ./lotus fetch-params 2048
 # copy toml config
 COPY lotus-config.toml.template config.toml.template
 
-# copy test composer script
-COPY scripts/lotus_bench.sh /opt/antithesis/test/v1/main/serial_driver_lotus_bench.sh
-
 # copy entrypoint scripts
 COPY scripts/start-lotus.sh ./scripts/start-lotus.sh
 COPY scripts/setup-genesis.sh ./scripts/setup-genesis.sh
