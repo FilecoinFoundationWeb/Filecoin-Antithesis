@@ -95,11 +95,11 @@ services:
     image: lotus:test
     container_name: lotus-miner1
     entrypoint: [ "./scripts/start-lotus-miner.sh", "1" ]
-  # forest0:
-  #   <<: [ *filecoin_service, *needs_lotus0_healthy ]
-  #   image: forest:latest
-  #   container_name: forest0
-  #   entrypoint: [ "./scripts/start-forest.sh", "0" ]
+  forest0:
+    <<: [ *filecoin_service, *needs_lotus0_healthy ]
+    image: forest:latest
+    container_name: forest0
+    entrypoint: [ "./scripts/start-forest.sh", "0" ]
 
   # # Curio service
   # curio:
@@ -127,16 +127,25 @@ services:
     image: workload:test
     container_name: workload
     environment:
-      - STRESS_NODES=lotus0,lotus1
+      - STRESS_NODES=lotus0,lotus1,forest0
       - STRESS_RPC_PORT=1234
+      - STRESS_FOREST_RPC_PORT=3456
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
-      - STRESS_WAIT_HEIGHT=10
-      - STRESS_WEIGHT_TRANSFER=10
-      - STRESS_WEIGHT_SHARED_STATE=1
-      - STRESS_WEIGHT_GAS_WAR=2
-      - STRESS_WEIGHT_HEAVY_COMPUTE=1
+      - STRESS_WAIT_HEIGHT=15
+      - STRESS_WEIGHT_TRANSFER=2
+      - STRESS_WEIGHT_GAS_WAR=1
       - STRESS_WEIGHT_ADVERSARIAL=2
+      - STRESS_WEIGHT_HEAVY_COMPUTE=1
       - STRESS_WEIGHT_CHAIN_MONITOR=3
+      - STRESS_WEIGHT_DEPLOY=1
+      - STRESS_WEIGHT_CONTRACT_CALL=1
+      - STRESS_WEIGHT_SELFDESTRUCT=1
+      - STRESS_WEIGHT_CONTRACT_RACE=1
+      - STRESS_WEIGHT_GAS_GUZZLER=2
+      - STRESS_WEIGHT_LOG_BLASTER=2
+      - STRESS_WEIGHT_MEMORY_BOMB=1
+      - STRESS_WEIGHT_STORAGE_SPAM=2
+      - STRESS_WEIGHT_REORG=0
     volumes:
       - ./shared/configs:/shared/configs
       - ./data/lotus0:/root/devgen/lotus0

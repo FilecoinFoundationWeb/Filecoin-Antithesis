@@ -10,7 +10,10 @@ require (
 	github.com/filecoin-project/go-jsonrpc v0.9.0
 	github.com/filecoin-project/go-state-types v0.18.0-dev
 	github.com/filecoin-project/lotus v1.34.3
+	github.com/ipfs/go-cid v0.5.0
 	github.com/urfave/cli/v2 v2.27.7
+	github.com/whyrusleeping/cbor-gen v0.3.1
+	golang.org/x/crypto v0.43.0
 )
 
 require (
@@ -58,7 +61,6 @@ require (
 	github.com/ipfs/boxo v0.35.0 // indirect
 	github.com/ipfs/go-block-format v0.2.3 // indirect
 	github.com/ipfs/go-blockservice v0.5.2 // indirect
-	github.com/ipfs/go-cid v0.5.0 // indirect
 	github.com/ipfs/go-cidutil v0.1.0 // indirect
 	github.com/ipfs/go-datastore v0.9.0 // indirect
 	github.com/ipfs/go-dsqueue v0.0.5 // indirect
@@ -114,7 +116,6 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.0.1 // indirect
 	github.com/whyrusleeping/bencher v0.0.0-20190829221104-bb6607aa8bba // indirect
-	github.com/whyrusleeping/cbor-gen v0.3.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
@@ -128,7 +129,6 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621 // indirect
 	golang.org/x/mod v0.28.0 // indirect
 	golang.org/x/net v0.45.0 // indirect

@@ -15,8 +15,9 @@ import (
 
 // NodeConfig holds the configuration for connecting to Filecoin nodes.
 type NodeConfig struct {
-	Names []string // Node hostnames (e.g. ["lotus0", "lotus1"])
-	Port  string   // RPC port (e.g. "1234")
+	Names      []string // Node hostnames (e.g. ["lotus0", "lotus1", "forest0"])
+	Port       string   // RPC port for Lotus nodes (e.g. "1234")
+	ForestPort string   // RPC port for Forest nodes (e.g. "3456")
 }
 
 // NewFilecoinClient creates an authenticated JSON-RPC client for a Filecoin node.
@@ -38,7 +39,11 @@ func ConnectNodes(ctx context.Context, cfg NodeConfig) (map[string]api.FullNode,
 			continue
 		}
 
-		addr := fmt.Sprintf("ws://%s:%s/rpc/v1", name, cfg.Port)
+		port := cfg.Port
+		if len(name) >= 6 && name[:6] == "forest" && cfg.ForestPort != "" {
+			port = cfg.ForestPort
+		}
+		addr := fmt.Sprintf("ws://%s:%s/rpc/v1", name, port)
 
 		// JWT token path: /root/devgen/<nodename>/<nodename>-jwt
 		tokenPath := fmt.Sprintf("/root/devgen/%s/%s-jwt", name, name)

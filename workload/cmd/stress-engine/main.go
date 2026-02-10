@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"workload/internal/chain"
@@ -16,9 +17,11 @@ import (
 	"github.com/antithesishq/antithesis-sdk-go/random"
 
 	"github.com/filecoin-project/go-address"
+	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
 	_ "github.com/filecoin-project/lotus/lib/sigs/secp"
+	"github.com/ipfs/go-cid"
 )
 
 // ---------------------------------------------------------------------------
@@ -42,7 +45,34 @@ var (
 
 	// Weighted action deck with names for logging
 	deck []namedAction
+
+	// Deployed contract registry (protected by contractsMu)
+	deployedContracts []deployedContract
+	contractsMu       sync.Mutex
+
+	// Contract bytecodes (loaded from embedded hex in contracts.go)
+	contractBytecodes map[string][]byte
+	contractTypes     []string // keys of contractBytecodes for random selection
+
+	// Pending deploy CIDs for deferred verification
+	pendingDeploys []pendingDeploy
+	pendingMu      sync.Mutex
 )
+
+type deployedContract struct {
+	addr     address.Address
+	ctype    string // "recursive", "selfdestruct", "simplecoin", etc.
+	deployer address.Address
+	deployKI *types.KeyInfo
+}
+
+type pendingDeploy struct {
+	msgCid   cid.Cid
+	ctype    string
+	deployer address.Address
+	deployKI *types.KeyInfo
+	epoch    abi.ChainEpoch
+}
 
 // namedAction pairs an action function with its name for logging
 type namedAction struct {
@@ -105,8 +135,9 @@ func pickWallet() (address.Address, *types.KeyInfo) {
 
 func connectNodes() {
 	cfg := chain.NodeConfig{
-		Names: strings.Split(envOrDefault("STRESS_NODES", "lotus0"), ","),
-		Port:  envOrDefault("STRESS_RPC_PORT", "1234"),
+		Names:      strings.Split(envOrDefault("STRESS_NODES", "lotus0"), ","),
+		Port:       envOrDefault("STRESS_RPC_PORT", "1234"),
+		ForestPort: envOrDefault("STRESS_FOREST_RPC_PORT", "3456"),
 	}
 
 	var err error
@@ -210,12 +241,23 @@ func buildDeck() {
 	}
 
 	actions := []weightedAction{
-		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 10},
-		{"DoSharedState", "STRESS_WEIGHT_SHARED_STATE", DoSharedState, 1},
-		{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 2},
-		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 1},
-		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 2},
-		{"DoChainMonitor", "STRESS_WEIGHT_CHAIN_MONITOR", DoChainMonitor, 3},
+		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 0},
+		{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 0},
+		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 0},
+		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 0},
+		{"DoChainMonitor", "STRESS_WEIGHT_CHAIN_MONITOR", DoChainMonitor, 0},
+		// FVM/EVM contract stress vectors
+		{"DoDeployContracts", "STRESS_WEIGHT_DEPLOY", DoDeployContracts, 2},
+		{"DoContractCall", "STRESS_WEIGHT_CONTRACT_CALL", DoContractCall, 3},
+		{"DoSelfDestructCycle", "STRESS_WEIGHT_SELFDESTRUCT", DoSelfDestructCycle, 1},
+		{"DoConflictingContractCalls", "STRESS_WEIGHT_CONTRACT_RACE", DoConflictingContractCalls, 2},
+		// Resource stress vectors
+		{"DoGasGuzzler", "STRESS_WEIGHT_GAS_GUZZLER", DoGasGuzzler, 0},
+		{"DoLogBlaster", "STRESS_WEIGHT_LOG_BLASTER", DoLogBlaster, 0},
+		{"DoMemoryBomb", "STRESS_WEIGHT_MEMORY_BOMB", DoMemoryBomb, 0},
+		{"DoStorageSpam", "STRESS_WEIGHT_STORAGE_SPAM", DoStorageSpam, 0},
+		// Network chaos / reorg vectors
+		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
 	}
 
 	deck = nil
@@ -250,6 +292,7 @@ func main() {
 	loadKeystore()
 	waitForChain()
 	initNonces()
+	initContractBytecodes()
 	buildDeck()
 
 	lifecycle.SetupComplete(map[string]any{
