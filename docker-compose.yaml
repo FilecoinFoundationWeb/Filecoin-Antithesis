@@ -101,27 +101,27 @@ services:
     container_name: forest0
     entrypoint: [ "./scripts/start-forest.sh", "0" ]
 
-  # # Curio service
-  # curio:
-  #   <<: [ *filecoin_service ]
-  #   image: curio:${CURIO_TAG:-latest}
-  #   container_name: curio
-  #   ports:
-  #     - "4433:443"
-  #     - "8080:80"
-  #     - "12300:12300"
-  #     - "4701:4701"
-  #     - "32100:32100"
-  #   entrypoint: [ "${CURIO_DATA_DIR}/curio-init.sh" ]
-  #   depends_on:
-  #     lotus0:
-  #       condition: service_healthy
-  #     yugabyte:
-  #       condition: service_started
-  #     workload:
-  #       condition: service_started
+  # Curio service
+  curio:
+    <<: [ *filecoin_service ]
+    image: curio:${CURIO_TAG:-latest}
+    container_name: curio
+    ports:
+      - "4433:443"
+      - "8080:80"
+      - "12300:12300"
+      - "4701:4701"
+      - "32100:32100"
+    entrypoint: [ "${CURIO_DATA_DIR}/curio-init.sh" ]
+    depends_on:
+      lotus0:
+        condition: service_healthy
+      yugabyte:
+        condition: service_started
+      workload:
+        condition: service_started
 
-  #Workload service
+  # Workload service
   workload:
     <<: [ *filecoin_service ]
     image: workload:test
@@ -152,24 +152,24 @@ services:
       - ./data/lotus1:/root/devgen/lotus1
       - ./data/forest0:/root/devgen/forest0
       - ./data/curio:/root/devgen/curio
-  # # Yugabyte Database Service
-  # yugabyte:
-  #   <<: [ *filecoin_service ]
-  #   image: yugabytedb/yugabyte:latest
-  #   container_name: yugabyte
-  #   init: true
-  #   # command: [ "bin/yugabyted", "start", "--base_dir=/home/yugabyte/yb_data", "--background=false", "--ui=false" ]
-  #   command: >
-  #     bash -lc '
-  #       bin/yugabyted start --base_dir=/home/yugabyte/yb_data --background=true --ui=false
-  #       tail -F \
-  #         /home/yugabyte/yb_data/data/yb-data/tserver/logs/yb-tserver.INFO 
-  #     '
-  #   ports:
-  #     - "5433:5433"
-  #     - "9042:9042"
-  #     - "15433:15433"
-  #   environment:
-  #     - TINI_SUBREAPER=true
-  #   volumes:
-  #     - ./data/yugabyte:/home/yugabyte/yb_data
+
+  # Yugabyte Database Service
+  yugabyte:
+    <<: [ *filecoin_service ]
+    image: yugabytedb/yugabyte:latest
+    container_name: yugabyte
+    init: true
+    command: >
+      bash -lc '
+        bin/yugabyted start --base_dir=/home/yugabyte/yb_data --background=true --ui=false
+        tail -F \
+          /home/yugabyte/yb_data/data/yb-data/tserver/logs/yb-tserver.INFO
+      '
+    ports:
+      - "5433:5433"
+      - "9042:9042"
+      - "15433:15433"
+    environment:
+      - TINI_SUBREAPER=true
+    volumes:
+      - ./data/yugabyte:/home/yugabyte/yb_data
