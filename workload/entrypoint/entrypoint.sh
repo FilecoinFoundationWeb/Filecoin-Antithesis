@@ -3,11 +3,16 @@
 # Workload Entrypoint Script
 # ==========================
 # This script initializes the workload container by:
+# 0. Generating pre-funded genesis wallets
 # 1. Synchronizing system time
 # 2. Waiting for the blockchain to reach a minimum height
-# 3. Deploying smart contracts via FilWizard
-# 4. Extracting and sharing contract addresses for other containers
-# 5. Creating environment files for Curio
+# 3. Setting up environment for contract deployment
+# 4. Deploying smart contracts via FilWizard
+# 5. Extracting and sharing contract addresses
+# 6. Creating environment file for Curio
+# 7. Running Synapse SDK setup (waits for Curio)
+# 8. Signaling setup complete to Antithesis
+# 9. Launching the stress engine
 #
 
 set -e
@@ -65,6 +70,14 @@ wait_for_file() {
 }
 
 # =============================================================================
+# STEP 0: GENERATE GENESIS WALLETS
+# =============================================================================
+
+log_info "Generating pre-funded genesis wallets..."
+/opt/antithesis/genesis-prep --count 100 --out /shared/configs
+log_info "Genesis wallet generation complete."
+
+# =============================================================================
 # STEP 1: TIME SYNCHRONIZATION
 # =============================================================================
 
@@ -88,13 +101,20 @@ log_info "Current system time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 log_info "Waiting for block height to reach ${INIT_BLOCK_HEIGHT}..."
 
 BLOCK_HEIGHT_REACHED=0
-while [ $INIT_BLOCK_HEIGHT -gt $BLOCK_HEIGHT_REACHED ]; do
-    BLOCK_HEIGHT_REACHED=$(curl -s -X POST "$RPC_LOTUS" \
+while [ "${INIT_BLOCK_HEIGHT}" -gt "${BLOCK_HEIGHT_REACHED}" ]; do
+    # Get height, default to 0 if curl fails or response is empty/null
+    RESPONSE=$(curl -s --max-time 5 -X POST "$RPC_LOTUS" \
         -H 'Content-Type: application/json' \
-        --data '{"jsonrpc":"2.0","id":1,"method":"Filecoin.ChainHead","params":[]}' \
-        | jq '.result.Height')
-    
-    if [ $INIT_BLOCK_HEIGHT -le $BLOCK_HEIGHT_REACHED ]; then
+        --data '{"jsonrpc":"2.0","id":1,"method":"Filecoin.ChainHead","params":[]}' 2>/dev/null || echo '{}')
+
+    BLOCK_HEIGHT_REACHED=$(echo "$RESPONSE" | jq -r '.result.Height // 0' 2>/dev/null)
+
+    # If jq failed or returned empty, set to 0
+    if [ -z "$BLOCK_HEIGHT_REACHED" ] || [ "$BLOCK_HEIGHT_REACHED" = "null" ]; then
+        BLOCK_HEIGHT_REACHED=0
+    fi
+
+    if [ "${INIT_BLOCK_HEIGHT}" -le "${BLOCK_HEIGHT_REACHED}" ]; then
         break
     fi
     log_info "Current height: ${BLOCK_HEIGHT_REACHED}, waiting..."
@@ -109,7 +129,15 @@ log_info "Blockchain ready at height ${BLOCK_HEIGHT_REACHED}"
 
 export FILECOIN_RPC
 export ETH_RPC_URL
-export FILECOIN_TOKEN=$(cat "$LOTUS_0_DATA_DIR/lotus0-jwt")
+
+JWT_FILE="/root/devgen/lotus0/lotus0-jwt"
+log_info "Waiting for JWT file ($JWT_FILE) to be created and non-empty..."
+while [ ! -s "$JWT_FILE" ]; do
+    sleep 2
+done
+log_info "JWT file ready."
+
+export FILECOIN_TOKEN=$(cat "$JWT_FILE")
 
 log_info "Environment configured:"
 log_info "  FILECOIN_RPC: $FILECOIN_RPC"
@@ -125,7 +153,7 @@ cd /opt/antithesis/FilWizard
 
 filwizard contract deploy-local \
     --config /opt/antithesis/FilWizard/config/filecoin-synapse.json \
-    --workspace ./workspace \
+    --workspace /opt/antithesis/FilWizard/workspace \
     --rpc-url "$FILECOIN_RPC" \
     --create-deployer \
     --bindings \
@@ -204,13 +232,28 @@ EOF
 log_info "Curio env file created: $CURIO_ENV_FILE"
 
 # =============================================================================
-# STEP 7: RUN WORKLOAD
+# STEP 7: RUN SYNAPSE SETUP (waits for Curio's private key)
 # =============================================================================
 
-log_info "Contract deployment and environment setup complete!"
-log_info "Starting workload main process..."
+log_info "Starting Synapse SDK setup..."
 /opt/antithesis/entrypoint/setup-synapse.sh
-python3 -u /opt/antithesis/entrypoint/setup_complete.py
 
-# Keep container running
-sleep infinity
+# =============================================================================
+# STEP 8: SIGNAL SETUP COMPLETE
+# =============================================================================
+
+log_info "All contracts deployed and services configured."
+log_info "Signaling setup complete to Antithesis..."
+
+if [ -f "/opt/antithesis/entrypoint/setup_complete.py" ]; then
+    python3 -u /opt/antithesis/entrypoint/setup_complete.py
+fi
+
+# =============================================================================
+# STEP 9: LAUNCH STRESS ENGINE
+# =============================================================================
+
+log_info "Launching stress engine..."
+
+# Replace shell with stress engine (blocks forever)
+exec /opt/antithesis/stress-engine

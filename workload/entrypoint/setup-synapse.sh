@@ -102,7 +102,7 @@ log_info "Starting Synapse SDK setup..."
 
 # Export Filecoin environment
 export FILECOIN_RPC="$RPC_URL"
-export FILECOIN_TOKEN=$(cat "$LOTUS_0_DATA_DIR/lotus0-jwt")
+export FILECOIN_TOKEN=$(cat "/root/devgen/lotus0/lotus0-jwt")
 
 log_info "Environment:"
 log_info "  Network: $NETWORK"

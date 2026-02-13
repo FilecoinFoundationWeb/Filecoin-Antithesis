@@ -7,16 +7,18 @@ FROM ubuntu:latest
 # Install necessary packages including Python and Go
 RUN apt-get update -y && \
     apt-get install -y python3 python3-pip python3-requests python3-filelock curl jq gcc ntpdate git && \
+    pip3 install antithesis cffi --break-system-packages && \
     ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && \
     curl -OL "https://golang.org/dl/go1.23.2.linux-${ARCH}.tar.gz" && \
     tar -C /usr/local -xzf "go1.23.2.linux-${ARCH}.tar.gz" && \
     rm "go1.23.2.linux-${ARCH}.tar.gz"
-RUN ls
+
 # Install Node.js and npm
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
     npm install -g npm@latest
 RUN npm install -g pnpm@latest
+
 # Install Rust and Foundry
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     . $HOME/.cargo/env && \
@@ -26,81 +28,61 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
 
 # Add Foundry to PATH
 ENV PATH="/root/.foundry/bin:${PATH}"
-RUN pip install antithesis cffi --break-system-packages
 
 # Set Go environment
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/go"
-RUN npm install -g solc
 ENV PATH="$GOPATH/bin:$PATH"
-# Install Hardhat (as some projects might need it)
 
-# Install Solidity compiler
-
-# Install abigen using Go (instead of problematic PPA)
+# Install abigen using Go
 RUN go install github.com/ethereum/go-ethereum/cmd/abigen@latest
-WORKDIR /opt/antithesis 
-RUN npm install -g hardhat
-# Clone and build filwizard
+
+WORKDIR /opt/antithesis
+
+# Clone and build FilWizard
 RUN git clone https://github.com/parthshah1/FilWizard /opt/antithesis/FilWizard
-
-
 WORKDIR /opt/antithesis/FilWizard
 RUN git pull
-# Install forge dependencies:
 RUN git checkout main
 RUN make build
-
 RUN cp ./filwizard /usr/local/bin/filwizard
-RUN filwizard contract clone-config --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace ./workspace 
+RUN filwizard contract clone-config --config /opt/antithesis/FilWizard/config/filecoin-synapse.json --workspace /opt/antithesis/FilWizard/workspace
+
+# Clone Synapse SDK at pinned commit
 RUN git clone https://github.com/FilOzone/synapse-sdk /opt/antithesis/synapse-sdk
 WORKDIR /opt/antithesis/synapse-sdk
 RUN git pull
 RUN git checkout 8aafdf1c0b8ba1b729898898aec4aeb47f5ac6a4
 
-# Copy and apply synapse-sdk patch
+# Apply synapse-sdk patch (must COPY before COPY . .)
 COPY ./patches/synapse-sdk.patch /tmp/synapse-sdk.patch
 RUN git apply /tmp/synapse-sdk.patch
 
 ENV NODE_OPTIONS="--max-old-space-size=8192"
 ENV CI=true
 
-# Install all workspace dependencies at once
+# Build Synapse SDK
 RUN pnpm install
-
-# Build core first (dependency of SDK)
 RUN pnpm --filter @filoz/synapse-core run build
-
-# Build SDK
 RUN pnpm --filter @filoz/synapse-sdk run build
-
-# Install ethers at root for utils scripts
 RUN pnpm add -w ethers
-# Build SDK
 RUN pnpm --filter @filoz/synapse-sdk run build
-RUN ls
-WORKDIR /opt/antithesis 
-COPY ./entrypoint ./entrypoint
-COPY ./main ./test/v1/main
 
-# Copy Go source files for workload binary
-COPY ./resources ./resources
-COPY go.mod ./go.mod
-COPY go.sum ./go.sum
-COPY main.go ./main.go
-
-# Make all files in ./test/v1/main executable
-RUN chmod +x ./test/v1/main/*
+# Copy workload source and build Go binaries
+WORKDIR /opt/antithesis
+COPY . .
 
 # Download Go dependencies
 RUN go mod download
 
-# Build the Go workload binary
+# Build both binaries
 ENV CGO_ENABLED=1
-RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') go build -o ./workload ./main.go
+RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') \
+    go build -o ./genesis-prep ./cmd/genesis-prep
+RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') \
+    go build -o ./stress-engine ./cmd/stress-engine
 
-# Clean up source file after build
-RUN rm ./main.go
+# Make entrypoint scripts executable
+RUN chmod +x ./entrypoint/entrypoint.sh
 
-WORKDIR /opt/antithesis/FilWizard
 ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]

@@ -1,147 +1,112 @@
 # Filecoin Antithesis Workload
 
-This directory contains the test workload for validating Filecoin nodes (Lotus, Forest) using the Antithesis testing platform.
+This directory contains the **stress engine** for validating Filecoin nodes (Lotus, Forest) using the [Antithesis](https://antithesis.com/) testing platform.
 
-## CLI Binary
+## Architecture
 
-The workload binary is located at `/opt/antithesis/workload` inside the container.
-
-```bash
-docker exec workload /opt/antithesis/workload <command>
-```
-
-## Available Commands
-
-### Wallet Management
-```bash
-wallet create --node Lotus0 --count 5   # Create and fund wallets
-```
-
-### Network Operations
-```bash
-network connect --node Lotus0           # Connect to peers
-network disconnect --node Lotus0        # Disconnect from peers
-network reorg --node Lotus0             # Simulate reorg
-```
-
-### Mempool Operations
-```bash
-mempool track --node Lotus0 --duration 5m --interval 5s   # Track mempool
-mempool spam                                               # Spam transactions
-```
-
-### Chain Operations
-```bash
-chain backfill         # Check chain index backfill (Lotus only)
-chain common-tipset    # Get common finalized tipset across all nodes
-```
-
-### State Operations
-```bash
-state check --node Lotus0           # Check state on single node
-state compare --epochs 10           # Compare state across all nodes
-state compare-at-height --height N  # Compare at specific height
-```
-
-### Consensus
-```bash
-consensus check                     # Check tipset consensus
-```
-
-### Monitoring
-```bash
-monitor height-progression --duration 1m --interval 5s   # Track height changes
-monitor comprehensive                                     # Full health check
-```
-
-### ETH Compatibility
-```bash
-eth check                           # Check ETH API block consistency
-```
-
-## Node Names
-
-Configured in `resources/config.json`:
-- **Lotus0** — Primary Lotus node (`http://lotus0:1234/rpc/v1`)
-- **Lotus1** — Secondary Lotus node (`http://lotus1:1234/rpc/v1`)
-- **Forest0** — Forest node (`http://forest0:3456/rpc/v1`)
-
-## Directory Structure
+The stress engine runs as a continuous loop, randomly picking weighted actions ("vectors") from a deck and executing them against the connected Filecoin nodes. Each vector targets a specific subsystem and uses Antithesis SDK assertions to verify safety and liveness properties.
 
 ```
-workload/
-├── main.go              # CLI entry point
-├── main/                # Test Composer scripts
-│   ├── anytime_*.sh     # Scripts that run anytime
-│   ├── eventually_*.sh  # Eventual consistency checks
-│   ├── parallel_*.sh    # Parallel execution scripts
-│   └── first_check.sh   # Initial setup
-├── resources/           # Go helper functions
-│   ├── config.json      # Node configuration
-│   ├── connect.go       # RPC connections
-│   ├── wallets.go       # Wallet operations
-│   ├── mempool_stress.go# Mempool spam
-│   ├── eth_methods.go   # ETH API checks
-│   ├── consensus.go     # Consensus checks
-│   ├── compute.go       # State comparison
-│   └── ...
-├── entrypoint/          # Container startup
-│   ├── entrypoint.sh    # Main entrypoint
-│   └── setup-synapse.sh # Synapse SDK setup
-└── patches/             # SDK patches
+entrypoint.sh → stress-engine binary
+  ├── Connects to lotus0, lotus1, forest0 via JSON-RPC
+  ├── Loads pre-funded wallets from shared keystore
+  ├── Initializes EVM contract bytecodes
+  └── Runs weighted action loop (pick → execute → assert)
 ```
 
-## Test Composer Scripts
+## Stress Vectors
 
-Located in `main/`:
+### Mempool & Transfers (`mempool_vectors.go`)
 
-| Script | Purpose |
-|--------|---------|
-| `first_check.sh` | Initial setup |
-| `anytime_chain_backfill.sh` | Chain index validation |
-| `anytime_state_checks.sh` | State consistency |
-| `eventually_health_check.sh` | Health monitoring |
-| `eventually_comprehensive_health.sh` | Full health check |
-| `parallel_driver_create_wallets.sh` | Wallet creation |
-| `parallel_driver_spammer.sh` | Transaction spam |
-| `parallel_driver_synapse_e2e.sh` | Synapse E2E test |
+| Vector | Env Var | Description |
+|--------|---------|-------------|
+| `DoTransferMarket` | `STRESS_WEIGHT_TRANSFER` | Random FIL transfers between wallets via random nodes |
+| `DoGasWar` | `STRESS_WEIGHT_GAS_WAR` | Mempool replacement: low-premium tx followed by same-nonce high-premium tx |
+| `DoAdversarial` | `STRESS_WEIGHT_ADVERSARIAL` | Double-spend races, invalid signatures, nonce races across nodes |
+
+### EVM/FVM Contracts (`evm_vectors.go`)
+
+| Vector | Env Var | Description |
+|--------|---------|-------------|
+| `DoDeployContracts` | `STRESS_WEIGHT_DEPLOY` | Deploy EVM contracts (recursive, delegatecall, simplecoin, selfdestruct, extrecursive) via EAM |
+| `DoContractCall` | `STRESS_WEIGHT_CONTRACT_CALL` | Invoke deployed contracts: deep recursion, delegatecall, token transfer, external calls |
+| `DoSelfDestructCycle` | `STRESS_WEIGHT_SELFDESTRUCT` | Deploy → destroy → cross-node state verification |
+| `DoConflictingContractCalls` | `STRESS_WEIGHT_CONTRACT_RACE` | Same-nonce conflicting contract calls to different nodes |
+
+### Consensus & Node Health (`consensus_vectors.go`)
+
+| Vector | Env Var | Description |
+|--------|---------|-------------|
+| `DoHeavyCompute` | `STRESS_WEIGHT_HEAVY_COMPUTE` | Re-execute `StateCompute` for recent epochs, verify roots match |
+| `DoChainMonitor` | `STRESS_WEIGHT_CHAIN_MONITOR` | 6 sub-checks (see below) |
+
+#### DoChainMonitor Sub-checks
+
+All state-sensitive checks use `ChainGetFinalizedTipSet` to avoid false positives during partition → reorg chaos.
+
+| Sub-check | What it verifies |
+|-----------|-----------------|
+| `tipset-consensus` | All nodes agree on tipset at a finalized height |
+| `height-progression` | All node heights within 10 epochs of each other |
+| `peer-count` | Every node has ≥1 peer |
+| `head-comparison` | Finalized tipset keys match across nodes |
+| `state-root-comparison` | Parent state roots match at finalized height |
+| `state-audit` | State roots + parent messages/receipts match at finalized height |
+
+## Configuration
+
+Weights are set via environment variables in `docker-compose.yaml`. Set a weight to `0` to disable a vector. Default weights are defined in `main.go:buildDeck()`.
+
+```yaml
+environment:
+  - STRESS_WEIGHT_TRANSFER=10
+  - STRESS_WEIGHT_GAS_WAR=2
+  - STRESS_WEIGHT_ADVERSARIAL=2
+  - STRESS_WEIGHT_HEAVY_COMPUTE=1
+  - STRESS_WEIGHT_CHAIN_MONITOR=3
+  - STRESS_WEIGHT_DEPLOY=5
+  - STRESS_WEIGHT_CONTRACT_CALL=3
+  - STRESS_WEIGHT_SELFDESTRUCT=1
+  - STRESS_WEIGHT_CONTRACT_RACE=2
+```
+
+Additional config:
+- `STRESS_NODES` — Comma-separated node names (e.g., `lotus0,lotus1`)
+- `STRESS_RPC_PORT` — RPC port for Lotus nodes (default `1234`)
+- `STRESS_KEYSTORE_PATH` — Path to pre-funded wallet keystore
+- `STRESS_WAIT_HEIGHT` — Block height to wait for before starting
+
+## Source Files
+
+```
+workload/cmd/stress-engine/
+├── main.go               # Entry point, deck builder, action loop
+├── helpers.go            # Shared: baseMsg, signMsg, pushMsg, nodeType
+├── mempool_vectors.go    # Transfer, gas war, adversarial vectors
+├── evm_vectors.go        # Contract deploy, invoke, selfdestruct, race
+├── consensus_vectors.go  # Heavy compute, chain monitor (6 sub-checks)
+└── contracts.go          # EVM bytecodes, deploy/invoke helpers, ABI encoding
+```
 
 ## Building
 
 ```bash
 cd workload
-docker build -t workload:latest .
+docker build -t workload:test .
 ```
 
-Or from root:
-```bash
-make build-workload
-```
+## Assertions
 
-## Integration
-
-### FilWizard
-Contract deployment uses [FilWizard](https://github.com/parthshah1/FilWizard) at `/usr/local/bin/filwizard`.
-
-### Synapse SDK
-Storage service testing uses Synapse SDK at `/opt/antithesis/synapse-sdk`.
-
-## Writing New Tests
-
-1. Add CLI command in `main.go`
-2. Add helper functions in `resources/`
-3. Create Test Composer script in `main/` with appropriate naming:
-   - `anytime_` — Runs anytime
-   - `parallel_` — Parallel execution
-   - `eventually_` — Eventual consistency
-   - `serial_` — Sequential execution
-
-### Assertions
-
-Use Antithesis SDK assertions:
+Uses Antithesis SDK assertions:
 ```go
-assert.Always(condition, "message", details)
-assert.Sometimes(condition, "message", details)
-assert.Reachable("message", details)
-assert.Unreachable("message", details)
+assert.Always(condition, "id", details)    // Must always hold (safety)
+assert.Sometimes(condition, "id", details) // Must hold at least once (liveness)
 ```
+
+Key assertion IDs:
+- `tipset_consensus` — Nodes agree on finalized tipsets
+- `cross_node_state_consistent` — State roots match at finalized heights
+- `state_root_post_fvm_consistent` — FVM execution produces same state
+- `invalid_signature_rejected` — Bad signatures are always rejected
+- `contract_deployed` — Contracts are successfully deployed
+- `state_audit_verified` — Messages/receipts consistent across nodes
