@@ -57,7 +57,6 @@ if [ ! -f "${FOREST_DATA_DIR}/jwt" ]; then
         --config "${FOREST_DATA_DIR}/forest_config.toml" \
         --save-token "${FOREST_DATA_DIR}/jwt" \
         --no-healthcheck \
-        --skip-load-actors \
         --exit-after-init
 else
     echo "forest${no}: Node already initialized, skipping init..."

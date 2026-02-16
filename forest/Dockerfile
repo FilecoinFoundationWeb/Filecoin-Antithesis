@@ -56,8 +56,8 @@ ENV FIL_PROOFS_PARAMETER_CACHE="/var/tmp/filecoin-proof-parameters"
 RUN forest-tool fetch-params --keys
 
 # Step 7: Cache actor bundle
-ENV FOREST_ACTOR_BUNDLE_PATH="/var/tmp/forest_actor_bundle.car.zst"
-RUN forest-tool state-migration actor-bundle $FOREST_ACTOR_BUNDLE_PATH
+#ENV FOREST_ACTOR_BUNDLE_PATH="/var/tmp/forest_actor_bundle.car.zst"
+#RUN forest-tool state-migration actor-bundle $FOREST_ACTOR_BUNDLE_PATH
 
 COPY scripts/start-forest.sh ./scripts/start-forest.sh
 
