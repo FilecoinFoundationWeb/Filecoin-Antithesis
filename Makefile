@@ -84,6 +84,11 @@ build-workload:
 	@echo "Building workload for $(TARGET_ARCH)..."
 	$(BUILD_CMD) -t workload:latest -f workload/Dockerfile workload
 
+.PHONY: build-filwizard
+build-filwizard:
+	@echo "Building filwizard for $(TARGET_ARCH)..."
+	$(BUILD_CMD) -t filwizard:latest -f filwizard/Dockerfile filwizard
+
 # ==========================================
 # Compose commands
 # ==========================================
@@ -115,7 +120,7 @@ build-nodes: build-lotus build-forest build-curio
 	@echo "Node images built."
 
 .PHONY: build-all
-build-all: build-drand build-lotus build-forest build-curio build-workload
+build-all: build-drand build-lotus build-forest build-curio build-workload build-filwizard
 	@echo "All images built."
 
 # ==========================================
@@ -146,6 +151,7 @@ help:
 	@echo "  make build-lotus      Build lotus image"
 	@echo "  make build-forest     Build forest image"
 	@echo "  make build-curio      Build curio image"
+	@echo "  make build-filwizard  Build filwizard image"
 	@echo "  make build-workload   Build workload image"
 	@echo ""
 	@echo "Build groups:"

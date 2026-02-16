@@ -33,6 +33,10 @@ x-templates:
     depends_on:
       lotus1:
         condition: service_healthy
+  needs_filwizard_healthy: &needs_filwizard_healthy
+    depends_on:
+      filwizard:
+        condition: service_healthy
   healthcheck_settings: &healthcheck_settings
     interval: 5s
     timeout: 2s
@@ -118,8 +122,29 @@ services:
         condition: service_healthy
       yugabyte:
         condition: service_started
-      workload:
+      filwizard:
         condition: service_started
+
+  # FilWizard: contract deployment + environment wiring
+  filwizard:
+    <<: [ *filecoin_service ]
+    image: filwizard:latest
+    container_name: filwizard
+    entrypoint: [ "/filwizard-entrypoint.sh" ]
+    volumes:
+      - ./shared/configs:/shared/configs
+      - ./data/lotus0:/shared/lotus0
+      - ./data/curio:/shared/curio
+      - ./shared:/shared
+      - ./filwizard/entrypoint.sh:/filwizard-entrypoint.sh
+    depends_on:
+      lotus0:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "test", "-f", "/tmp/healthy" ]
+      interval: 5s
+      timeout: 2s
+      retries: 120
 
   # Workload service
   workload:
@@ -148,6 +173,7 @@ services:
       - STRESS_WEIGHT_REORG=0
     volumes:
       - ./shared/configs:/shared/configs
+      - ./shared:/shared
       - ./data/lotus0:/root/devgen/lotus0
       - ./data/lotus1:/root/devgen/lotus1
       - ./data/forest0:/root/devgen/forest0
