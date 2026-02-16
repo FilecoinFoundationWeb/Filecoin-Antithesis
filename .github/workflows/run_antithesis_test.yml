@@ -10,7 +10,7 @@ on:
         type: string
         required: true
         default: 'filecoin'
-        description: Endpoint to run test
+        description: Endpoint to run test (filecoin or filecoin-foc)
       duration:
         type: string
         required: true
