@@ -62,7 +62,7 @@ jobs:
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
-          notebook_name: Endpoint:${{ inputs.endpoint }}
+          notebook_name: ${{ inputs.endpoint }}
           tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
