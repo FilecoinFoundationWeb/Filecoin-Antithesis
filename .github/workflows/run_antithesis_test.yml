@@ -6,6 +6,11 @@ on:
     - cron: '0 17 * * *' # noon EST
   workflow_dispatch:
     inputs:
+      endpoint:
+        type: string
+        required: true
+        default: 'filecoin'
+        description: Endpoint to run test
       duration:
         type: string
         required: true
@@ -57,7 +62,7 @@ jobs:
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
-          notebook_name: filecoin
+          notebook_name: Endpoint:${{ inputs.endpoint }}
           tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
