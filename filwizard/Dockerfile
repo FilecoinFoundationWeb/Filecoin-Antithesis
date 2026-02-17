@@ -46,9 +46,10 @@ RUN filwizard contract clone-config \
 
 # Copy scripts
 COPY scripts/register-service-provider.js /opt/filwizard/scripts/register-service-provider.js
+COPY scripts/warm-add.js /opt/filwizard/scripts/warm-add.js
 COPY scripts/package.json /opt/filwizard/scripts/package.json
 COPY scripts/export-environment.sh /opt/filwizard/scripts/export-environment.sh
-RUN chmod +x /opt/filwizard/scripts/register-service-provider.js /opt/filwizard/scripts/export-environment.sh
+RUN chmod +x /opt/filwizard/scripts/register-service-provider.js /opt/filwizard/scripts/warm-add.js /opt/filwizard/scripts/export-environment.sh
 # Install script dependencies locally (ethers.js)
 RUN cd /opt/filwizard/scripts && npm install
 

@@ -153,7 +153,19 @@ node /opt/filwizard/scripts/register-service-provider.js \
 
 log_info "Service provider registered"
 
-# ── 10. Signal healthy ──
+# ── 10. Add approved provider to warm storage ──
+log_info "Adding service provider to warm storage global whitelist..."
+
+export DEPLOYER_PRIVATE_KEY SP_PRIVATE_KEY
+
+node /opt/filwizard/scripts/warm-add.js \
+    --rpc-url "$FILECOIN_RPC" \
+    --warm-storage "$FWSS_PROXY_ADDRESS" \
+    --sp-registry "$SERVICE_PROVIDER_REGISTRY_PROXY_ADDRESS"
+
+log_info "Service provider added to global whitelist (ready for dapps)"
+
+# ── 11. Signal healthy ──
 log_info "FilWizard setup complete. Signaling healthy."
 touch /tmp/healthy
 
