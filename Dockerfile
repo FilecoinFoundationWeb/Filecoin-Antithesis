@@ -10,3 +10,4 @@ COPY ./lotus /lotus
 COPY ./forest /forest
 COPY ./curio /curio
 COPY ./yugabyte /yugabyte
+COPY ./filwizard /filwizard
