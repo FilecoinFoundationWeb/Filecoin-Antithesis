@@ -6,14 +6,17 @@ This repository provides a comprehensive testing framework for the Filecoin netw
 
 ## Setup Overview
 
-The system runs 12 containers:
+The system runs **9 containers** by default (12 with `--profile foc`):
 - **Drand cluster**: `drand0`, `drand1`, `drand2` (randomness beacon)
 - **Lotus nodes**: `lotus0`, `lotus1` (Go implementation)
 - **Lotus miners**: `lotus-miner0`, `lotus-miner1`
 - **Forest node**: `forest0` (Rust implementation)
+- **Workload**: Go stress engine container
+
+With `--profile foc` (Filecoin Open Contracts stack):
+- **FilWizard**: Contract deployment and environment wiring
 - **Curio**: Storage provider with PDP support
 - **Yugabyte**: Database for Curio state
-- **Workload**: Test orchestration container
 
 ## Quick Start
 
@@ -26,15 +29,14 @@ The system runs 12 containers:
 # Build all images
 make build-all
 
-# Start localnet
+# Start protocol stack (drand + lotus + forest + workload)
 make up
+
+# Start full FOC stack (adds filwizard + curio + yugabyte)
+./scripts/run-local.sh foc
 
 # View logs
 make logs
-
-# Run tests
-docker exec workload /opt/antithesis/workload chain common-tipset
-docker exec workload /opt/antithesis/workload mempool spam
 
 # Stop and cleanup
 make cleanup
@@ -101,11 +103,12 @@ Test properties use the Antithesis Go SDK:
 ## Directory Structure
 
 ```
-├── config/              # Docker compose and env files
 ├── drand/               # Drand beacon build
 ├── lotus/               # Lotus node build and scripts
 ├── forest/              # Forest node build and scripts
-├── curio/               # Curio storage provider build
+├── curio/               # Curio storage provider build  [--profile foc]
+├── filwizard/           # Contract deployment container [--profile foc]
+├── yugabyte/            # YugabyteDB for Curio         [--profile foc]
 ├── workload/            # Stress engine
 │   ├── cmd/stress-engine/  # Engine source
 │   │   ├── main.go            # Entry point, deck builder, action loop
@@ -116,8 +119,10 @@ Test properties use the Antithesis Go SDK:
 │   │   └── contracts.go       # EVM bytecodes, ABI encoding
 │   ├── entrypoint/         # Container startup scripts
 │   └── Dockerfile
-├── shared/              # Shared configs between containers
-├── data/                # Runtime data (mount point)
+├── scripts/             # Helper scripts (run-local.sh)
+├── data/                # Runtime data (git-ignored, created on start)
+├── shared/              # Shared configs between containers (git-ignored)
+├── versions.env         # Version pins — change to test a new client version
 ├── Makefile             # Build commands
 ├── docker-compose.yaml  # Service definitions
 └── cleanup.sh           # Data cleanup script
@@ -126,29 +131,20 @@ Test properties use the Antithesis Go SDK:
 ## Configuration
 
 ### Environment Variables
-Located in `config/.env`:
+Located in `.env`:
 - Node data directories
 - Port configurations
 - Shared volume paths
 
-### Node Configuration
-Located in `workload/resources/config.json`:
-```json
-{
-  "nodes": [
-    {"name": "Lotus0", "rpcurl": "http://lotus0:1234/rpc/v1", "authtokenpath": "/root/devgen/lotus0/lotus0-jwt"},
-    {"name": "Lotus1", "rpcurl": "http://lotus1:1234/rpc/v1", "authtokenpath": "/root/devgen/lotus1/lotus1-jwt"},
-    {"name": "Forest0", "rpcurl": "http://forest0:3456/rpc/v1", "authtokenpath": "/root/devgen/forest0/forest0-jwt"}
-  ]
-}
+### Version Pinning
+Located in `versions.env` — change these to test a specific upstream commit or tag:
+```env
+LOTUS_COMMIT=latest
+FOREST_COMMIT=latest
+CURIO_COMMIT=latest
 ```
 
-## Contributing
 
-1. Add a new vector function in the appropriate `*_vectors.go` file
-2. Register it in `main.go:buildDeck()` with a `STRESS_WEIGHT_*` env var
-3. Add the env var to `docker-compose.yaml`
-4. Use Antithesis assertions (`assert.Always`, `assert.Sometimes`) for properties
 
 ## Documentation
 

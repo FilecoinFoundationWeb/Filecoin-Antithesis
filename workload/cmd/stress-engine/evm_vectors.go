@@ -68,7 +68,7 @@ func DoDeployContracts() {
 	}
 	pendingMu.Unlock()
 
-	log.Printf("  [deploy] submitted %s deploy via %s (cid=%s)", ctype, nodeName, msgCid.String()[:16])
+	debugLog("  [deploy] submitted %s deploy via %s (cid=%s)", ctype, nodeName, msgCid.String()[:16])
 
 	assert.Sometimes(true, "contract_deploy_submitted", map[string]any{
 		"type": ctype,
@@ -119,7 +119,7 @@ func resolvePendingDeploys() {
 			})
 			contractsMu.Unlock()
 
-			log.Printf("  [deploy] confirmed %s at %s (actor=%d)", pd.ctype, idAddr, ret.ActorID)
+			debugLog("  [deploy] confirmed %s at %s (actor=%d)", pd.ctype, idAddr, ret.ActorID)
 			assert.Sometimes(true, "contract_deployed", map[string]any{
 				"type":     pd.ctype,
 				"actor_id": ret.ActorID,
@@ -158,7 +158,7 @@ func DoContractCall() {
 
 	subAction := rngIntn(4)
 	subNames := []string{"deep-recursion", "delegatecall-recursion", "simplecoin-transfer", "external-recursion"}
-	log.Printf("  [contract-call] sub-action: %s", subNames[subAction])
+	debugLog("  [contract-call] sub-action: %s", subNames[subAction])
 
 	switch subAction {
 	case 0:
@@ -192,7 +192,7 @@ func doDeepRecursion() {
 
 	msgCid, ok := invokeContract(node, c.deployer, c.deployKI, c.addr, calldata, "recursive-call")
 
-	log.Printf("  [contract-call] recursive depth=%d via %s ok=%v cid=%s",
+	debugLog("  [contract-call] recursive depth=%d via %s ok=%v cid=%s",
 		depth, nodeName, ok, cidStr(msgCid))
 
 	assert.Sometimes(ok, "contract_call_submitted", map[string]any{
@@ -221,7 +221,7 @@ func doDelegatecallRecursion() {
 
 	msgCid, ok := invokeContract(node, c.deployer, c.deployKI, c.addr, calldata, "delegatecall-call")
 
-	log.Printf("  [contract-call] delegatecall depth=%d via %s ok=%v cid=%s",
+	debugLog("  [contract-call] delegatecall depth=%d via %s ok=%v cid=%s",
 		depth, nodeName, ok, cidStr(msgCid))
 
 	assert.Sometimes(ok, "delegatecall_submitted", map[string]any{
@@ -258,7 +258,7 @@ func doSimpleCoinTransfer() {
 
 	msgCid, ok := invokeContract(node, c.deployer, c.deployKI, c.addr, calldata, "simplecoin-send")
 
-	log.Printf("  [contract-call] simplecoin send amount=%d via %s ok=%v cid=%s",
+	debugLog("  [contract-call] simplecoin send amount=%d via %s ok=%v cid=%s",
 		amount, nodeName, ok, cidStr(msgCid))
 
 	assert.Sometimes(ok, "simplecoin_transfer_submitted", map[string]any{
@@ -286,7 +286,7 @@ func doExternalRecursion() {
 
 	msgCid, ok := invokeContract(node, c.deployer, c.deployKI, c.addr, calldata, "ext-recursive-call")
 
-	log.Printf("  [contract-call] external recursion depth=%d via %s ok=%v cid=%s",
+	debugLog("  [contract-call] external recursion depth=%d via %s ok=%v cid=%s",
 		depth, nodeName, ok, cidStr(msgCid))
 
 	assert.Sometimes(ok, "external_recursion_submitted", map[string]any{
@@ -342,7 +342,7 @@ func DoSelfDestructCycle() {
 		return
 	}
 
-	log.Printf("  [selfdestruct] deployed at %s, now destroying...", contractAddr)
+	debugLog("  [selfdestruct] deployed at %s, now destroying...", contractAddr)
 
 	// Call destroy() on the contract
 	calldata, err := cborWrapCalldata(calcSelector("destroy()"))
@@ -376,7 +376,7 @@ func DoSelfDestructCycle() {
 		return
 	}
 
-	log.Printf("  [selfdestruct] destroyed %s, verifying across nodes...", contractAddr)
+	debugLog("  [selfdestruct] destroyed %s, verifying across nodes...", contractAddr)
 
 	// Verify actor state across nodes — both should agree on the contract state.
 	// Use the tipset from the confirmed destroy receipt (not ChainHead) to avoid
@@ -537,7 +537,7 @@ func DoConflictingContractCalls() {
 
 	nonces[c.deployer]++
 
-	log.Printf("[contract-race] conflicting sendCoin: nodeA=%s err=%v, nodeB=%s err=%v",
+	debugLog("[contract-race] conflicting sendCoin: nodeA=%s err=%v, nodeB=%s err=%v",
 		nodeA, errA, nodeB, errB)
 
 	assert.Sometimes(errA == nil || errB == nil, "conflicting_contract_call_accepted", map[string]any{
@@ -582,7 +582,7 @@ func DoGasGuzzler() {
 
 	msgCid, ok := invokeContract(node, c.deployer, c.deployKI, c.addr, calldata, "gas-guzzler")
 
-	log.Printf("  [gas-guzzler] iterations=%d via %s ok=%v cid=%s",
+	debugLog("  [gas-guzzler] iterations=%d via %s ok=%v cid=%s",
 		iterations, nodeName, ok, cidStr(msgCid))
 
 	assert.Sometimes(ok, "gas_guzzler_submitted", map[string]any{
@@ -614,7 +614,7 @@ func DoLogBlaster() {
 
 	msgCid, ok := invokeContract(node, c.deployer, c.deployKI, c.addr, calldata, "log-blaster")
 
-	log.Printf("  [log-blaster] count=%d via %s ok=%v cid=%s",
+	debugLog("  [log-blaster] count=%d via %s ok=%v cid=%s",
 		count, nodeName, ok, cidStr(msgCid))
 
 	assert.Sometimes(ok, "log_blaster_submitted", map[string]any{
@@ -646,7 +646,7 @@ func DoMemoryBomb() {
 
 	msgCid, ok := invokeContract(node, c.deployer, c.deployKI, c.addr, calldata, "memory-bomb")
 
-	log.Printf("  [memory-bomb] words=%d via %s ok=%v cid=%s",
+	debugLog("  [memory-bomb] words=%d via %s ok=%v cid=%s",
 		words, nodeName, ok, cidStr(msgCid))
 
 	assert.Sometimes(ok, "memory_bomb_submitted", map[string]any{
@@ -685,7 +685,7 @@ func DoStorageSpam() {
 
 	msgCid, ok := invokeContract(node, c.deployer, c.deployKI, c.addr, calldata, "storage-spam")
 
-	log.Printf("  [storage-spam] count=%d seed=%d via %s ok=%v cid=%s",
+	debugLog("  [storage-spam] count=%d seed=%d via %s ok=%v cid=%s",
 		count, seed, nodeName, ok, cidStr(msgCid))
 
 	assert.Sometimes(ok, "storage_spam_submitted", map[string]any{

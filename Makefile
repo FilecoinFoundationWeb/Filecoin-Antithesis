@@ -1,5 +1,6 @@
 # Filecoin Antithesis Docker Build Makefile
 # ==========================================
+-include versions.env
 
 # Git tags/commits for each image
 drand_tag = $(shell git ls-remote --tags https://github.com/drand/drand.git | grep -E 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1 | sed 's/.*refs\/tags\///')
@@ -94,19 +95,27 @@ build-filwizard:
 # ==========================================
 .PHONY: up
 up:
-	cd config && $(builder) compose up -d
+	$(builder) compose up -d
+
+.PHONY: up-foc
+up-foc:
+	$(builder) compose --profile foc up -d
 
 .PHONY: down
 down:
-	cd config && $(builder) compose down
+	$(builder) compose down
+
+.PHONY: down-foc
+down-foc:
+	$(builder) compose --profile foc down
 
 .PHONY: logs
 logs:
-	cd config && $(builder) compose logs -f
+	$(builder) compose logs -f
 
 .PHONY: restart
 restart:
-	cd config && $(builder) compose restart
+	$(builder) compose restart
 
 # ==========================================
 # Build groups
@@ -134,9 +143,13 @@ all: build-all up
 rebuild: down cleanup build-all up
 	@echo "Clean rebuild complete."
 
+.PHONY: rebuild-foc
+rebuild-foc: down-foc cleanup build-all up-foc
+	@echo "Clean rebuild (FOC) complete."
+
 .PHONY: cleanup
 cleanup:
-	cd config && $(builder) compose down 2>/dev/null || true
+	$(builder) compose down 2>/dev/null || true
 	./cleanup.sh
 
 # ==========================================
@@ -160,8 +173,10 @@ help:
 	@echo "  make build-all        Build all images"
 	@echo ""
 	@echo "Docker Compose:"
-	@echo "  make up               Start localnet (docker compose up -d)"
-	@echo "  make down             Stop localnet (docker compose down)"
+	@echo "  make up               Start all default services (drand + lotus + miners + forest + workload)"
+	@echo "  make up-foc           Start all + FOC services (curio + filwizard + yugabyte)"
+	@echo "  make down             Stop all default services"
+	@echo "  make down-foc         Stop all services including FOC"
 	@echo "  make logs             Follow logs (docker compose logs -f)"
 	@echo "  make restart          Restart all containers"
 	@echo ""

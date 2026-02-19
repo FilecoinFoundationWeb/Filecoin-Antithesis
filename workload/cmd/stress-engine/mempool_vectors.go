@@ -35,7 +35,7 @@ func DoTransferMarket() {
 	ok := pushMsg(node, msg, fromKI, "transfer")
 
 	if ok {
-		log.Printf("  [transfer] OK: %s -> %s via %s (amount=%s)",
+		debugLog("  [transfer] OK: %s -> %s via %s (amount=%s)",
 			fromAddr.String()[:12], toAddr.String()[:12], nodeName, amount.String())
 	}
 
@@ -118,7 +118,7 @@ func DoGasWar() {
 		"high_premium": "50000",
 	})
 
-	log.Printf("  [gas-war] nonce=%d: Tx_A(low)=%v, Tx_B(high)=%v",
+	debugLog("  [gas-war] nonce=%d: Tx_A(low)=%v, Tx_B(high)=%v",
 		currentNonce, errA == nil, errB == nil)
 }
 
@@ -134,7 +134,7 @@ func DoGasWar() {
 func DoAdversarial() {
 	subAction := rngIntn(3)
 	subNames := []string{"double-spend", "invalid-sig", "nonce-race"}
-	log.Printf("  [adversarial] sub-action: %s", subNames[subAction])
+	debugLog("  [adversarial] sub-action: %s", subNames[subAction])
 
 	switch subAction {
 	case 0:
@@ -202,7 +202,7 @@ func doDoubleSpend() {
 	// Nonce is consumed regardless
 	nonces[fromAddr]++
 
-	log.Printf("[adversarial] double-spend: nodeA=%s err=%v, nodeB=%s err=%v", nodeA, errA, nodeB, errB)
+	debugLog("[adversarial] double-spend: nodeA=%s err=%v, nodeB=%s err=%v", nodeA, errA, nodeB, errB)
 
 	// Safety: at least one should eventually be accepted, but both being
 	// "accepted" into mempool is OK — only one should make it on-chain.

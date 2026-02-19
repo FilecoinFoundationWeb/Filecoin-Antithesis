@@ -311,15 +311,14 @@ func main() {
 		idx := rngIntn(len(deck))
 		action := deck[idx]
 
-		// Log every action execution
-		log.Printf("[engine] running: %s", action.name)
+		debugLog("[engine] running: %s", action.name)
 		action.fn()
 
 		actionCounts[action.name]++
 		iteration++
 
-		// Periodic summary every 100 iterations
-		if iteration%100 == 0 {
+		// Periodic summary every 500 iterations
+		if iteration%500 == 0 {
 			log.Printf("[engine] === iteration %d summary ===", iteration)
 			for name, count := range actionCounts {
 				log.Printf("[engine]   %s: %d", name, count)

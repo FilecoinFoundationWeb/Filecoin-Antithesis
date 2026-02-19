@@ -90,7 +90,7 @@ func DoHeavyCompute() {
 		epochsChecked++
 	}
 
-	log.Printf("  [heavy-compute] OK: verified %d epochs on %s", epochsChecked, nodeName)
+	debugLog("  [heavy-compute] OK: verified %d epochs on %s", epochsChecked, nodeName)
 
 	assert.Sometimes(epochsChecked > 0, "heavy_compute_verified", map[string]any{
 		"node":           nodeName,
@@ -121,7 +121,7 @@ const (
 func DoChainMonitor() {
 	subCheck := rngIntn(6)
 	checkNames := []string{"tipset-consensus", "height-progression", "peer-count", "head-comparison", "state-root-comparison", "state-audit"}
-	log.Printf("  [chain-monitor] sub-check: %s", checkNames[subCheck])
+	debugLog("  [chain-monitor] sub-check: %s", checkNames[subCheck])
 
 	switch subCheck {
 	case 0:
@@ -413,7 +413,7 @@ func doStateRootComparison() {
 	})
 
 	if statesMatch {
-		log.Printf("  [chain-monitor] OK: all %d nodes agree at height %d (finalized=%d)", len(nodeKeys), checkHeight, finalizedHeight)
+		debugLog("  [chain-monitor] OK: all %d nodes agree at height %d (finalized=%d)", len(nodeKeys), checkHeight, finalizedHeight)
 		assert.Sometimes(true, "shared_state_verified", map[string]any{
 			"height": checkHeight,
 		})
@@ -525,7 +525,7 @@ func doStateAudit() {
 		}
 	}
 
-	log.Printf("  [chain-monitor] OK: state-audit height %d, roots match, msgs/receipts consistent", checkHeight)
+	debugLog("  [chain-monitor] OK: state-audit height %d, roots match, msgs/receipts consistent", checkHeight)
 
 	assert.Sometimes(true, "state_audit_verified", map[string]any{
 		"height": checkHeight,

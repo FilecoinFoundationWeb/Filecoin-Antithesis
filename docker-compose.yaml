@@ -73,7 +73,7 @@ services:
   lotus0:
     <<: [ *filecoin_service, *needs_all_drand_healthy ]
     container_name: lotus0
-    image: lotus:test
+    image: lotus:latest
     entrypoint: [ "./scripts/start-lotus.sh", "0" ]
     healthcheck:
       <<: *healthcheck_settings
@@ -81,49 +81,68 @@ services:
 
   lotus1:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
-    image: lotus:test
+    image: lotus:latest
     container_name: lotus1
     entrypoint: [ "./scripts/start-lotus.sh", "1" ]
     healthcheck:
       <<: *healthcheck_settings
       test: curl --fail http://lotus1:1234/health/livez
 
-  lotus-miner0:
-    <<: [ *filecoin_service, *needs_lotus0_healthy ]
-    image: lotus:test
-    container_name: lotus-miner0
-    entrypoint: [ "./scripts/start-lotus-miner.sh", "0" ]
-
-  lotus-miner1:
-    <<: [ *filecoin_service, *needs_lotus1_healthy ]
-    image: lotus:test
-    container_name: lotus-miner1
-    entrypoint: [ "./scripts/start-lotus-miner.sh", "1" ]
   forest0:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
     image: forest:latest
     container_name: forest0
     entrypoint: [ "./scripts/start-forest.sh", "0" ]
 
-  # Curio service
-  curio:
+  # Workload service (core profile — always runs)
+  workload:
     <<: [ *filecoin_service ]
-    image: curio:${CURIO_TAG:-latest}
-    container_name: curio
-    ports:
-      - "4433:443"
-      - "8080:80"
-      - "12300:12300"
-      - "4701:4701"
-      - "32100:32100"
-    entrypoint: [ "${CURIO_DATA_DIR}/curio-init.sh" ]
-    depends_on:
-      lotus0:
-        condition: service_healthy
-      yugabyte:
-        condition: service_started
-      filwizard:
-        condition: service_started
+    image: workload:latest
+    container_name: workload
+    environment:
+      - STRESS_NODES=lotus0,lotus1,forest0
+      - STRESS_RPC_PORT=1234
+      - STRESS_FOREST_RPC_PORT=3456
+      - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
+      - STRESS_WAIT_HEIGHT=15
+      - STRESS_WEIGHT_TRANSFER=2
+      - STRESS_WEIGHT_GAS_WAR=1
+      - STRESS_WEIGHT_ADVERSARIAL=2
+      - STRESS_WEIGHT_HEAVY_COMPUTE=3
+      - STRESS_WEIGHT_CHAIN_MONITOR=6
+      - STRESS_WEIGHT_DEPLOY=1
+      - STRESS_WEIGHT_CONTRACT_CALL=1
+      - STRESS_WEIGHT_SELFDESTRUCT=1
+      - STRESS_WEIGHT_CONTRACT_RACE=1
+      - STRESS_WEIGHT_GAS_GUZZLER=2
+      - STRESS_WEIGHT_LOG_BLASTER=2
+      - STRESS_WEIGHT_MEMORY_BOMB=1
+      - STRESS_WEIGHT_STORAGE_SPAM=2
+      - STRESS_WEIGHT_REORG=0
+    volumes:
+      - ./shared/configs:/shared/configs
+      - ./shared:/shared
+      - ./data/lotus0:/root/devgen/lotus0
+      - ./data/lotus1:/root/devgen/lotus1
+      - ./data/forest0:/root/devgen/forest0
+      - ./data/curio:/root/devgen/curio
+
+  lotus-miner0:
+    <<: [ *filecoin_service, *needs_lotus0_healthy ]
+    image: lotus:latest
+    container_name: lotus-miner0
+    entrypoint: [ "./scripts/start-lotus-miner.sh", "0" ]
+
+  lotus-miner1:
+    <<: [ *filecoin_service, *needs_lotus1_healthy ]
+    image: lotus:latest
+    container_name: lotus-miner1
+    entrypoint: [ "./scripts/start-lotus-miner.sh", "1" ]
+
+  # ===========================================================================
+  # foc profile: Filecoin On-Chain Cloud services (filwizard + yugabyte + curio)
+  # Start with: docker compose --profile foc up -d
+  # ===========================================================================
 
   # FilWizard: contract deployment + environment wiring
   filwizard:
@@ -145,39 +164,7 @@ services:
       interval: 5s
       timeout: 2s
       retries: 120
-
-  # Workload service
-  workload:
-    <<: [ *filecoin_service ]
-    image: workload:test
-    container_name: workload
-    environment:
-      - STRESS_NODES=lotus0,lotus1,forest0
-      - STRESS_RPC_PORT=1234
-      - STRESS_FOREST_RPC_PORT=3456
-      - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
-      - STRESS_WAIT_HEIGHT=15
-      - STRESS_WEIGHT_TRANSFER=2
-      - STRESS_WEIGHT_GAS_WAR=1
-      - STRESS_WEIGHT_ADVERSARIAL=2
-      - STRESS_WEIGHT_HEAVY_COMPUTE=1
-      - STRESS_WEIGHT_CHAIN_MONITOR=3
-      - STRESS_WEIGHT_DEPLOY=1
-      - STRESS_WEIGHT_CONTRACT_CALL=1
-      - STRESS_WEIGHT_SELFDESTRUCT=1
-      - STRESS_WEIGHT_CONTRACT_RACE=1
-      - STRESS_WEIGHT_GAS_GUZZLER=2
-      - STRESS_WEIGHT_LOG_BLASTER=2
-      - STRESS_WEIGHT_MEMORY_BOMB=1
-      - STRESS_WEIGHT_STORAGE_SPAM=2
-      - STRESS_WEIGHT_REORG=0
-    volumes:
-      - ./shared/configs:/shared/configs
-      - ./shared:/shared
-      - ./data/lotus0:/root/devgen/lotus0
-      - ./data/lotus1:/root/devgen/lotus1
-      - ./data/forest0:/root/devgen/forest0
-      - ./data/curio:/root/devgen/curio
+    profiles: [ foc ]
 
   # Yugabyte Database Service
   yugabyte:
@@ -199,3 +186,25 @@ services:
       - TINI_SUBREAPER=true
     volumes:
       - ./data/yugabyte:/home/yugabyte/yb_data
+    profiles: [ foc ]
+
+  # Curio service
+  curio:
+    <<: [ *filecoin_service ]
+    image: curio:${CURIO_TAG:-latest}
+    container_name: curio
+    ports:
+      - "4433:443"
+      - "8080:80"
+      - "12300:12300"
+      - "4701:4701"
+      - "32100:32100"
+    entrypoint: [ "${CURIO_DATA_DIR}/curio-init.sh" ]
+    depends_on:
+      lotus0:
+        condition: service_healthy
+      yugabyte:
+        condition: service_started
+      filwizard:
+        condition: service_started
+    profiles: [ foc ]

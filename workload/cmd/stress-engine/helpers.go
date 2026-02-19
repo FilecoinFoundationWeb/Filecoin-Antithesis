@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -11,6 +12,16 @@ import (
 	"github.com/filecoin-project/lotus/lib/sigs"
 	"github.com/ipfs/go-cid"
 )
+
+// debugLogging gates verbose per-action logs. Set STRESS_DEBUG=1 to enable.
+var debugLogging = os.Getenv("STRESS_DEBUG") == "1"
+
+// debugLog prints only when STRESS_DEBUG=1 is set.
+func debugLog(format string, args ...any) {
+	if debugLogging {
+		log.Printf(format, args...)
+	}
+}
 
 // ===========================================================================
 // Shared message helpers
