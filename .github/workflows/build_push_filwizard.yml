@@ -3,7 +3,7 @@ name: Build & Push FilWizard (Smart contract deployment tool).
 on:
   workflow_dispatch:
     inputs:
-      workload_tag:
+      filwizard_tag:
         type: string
         required: true
         default: 'latest'
