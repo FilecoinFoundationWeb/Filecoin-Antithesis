@@ -55,7 +55,11 @@ on:
         required: false
         default: false
         description: Enable to run an ephermeral test that does not affect findings history.
-
+      is_smoke_test:
+        type: boolean
+        required: false
+        default: false
+        description: Enable to run an smoke test.
 
 jobs:
   manual_run:
@@ -79,6 +83,8 @@ jobs:
           additional_parameters: |-
             custom.duration=${{ github.event.inputs.duration }}
             antithesis.is_ephemeral=${{ inputs.is_ephemeral }}
+            custom.is_smoke_test=${{ inputs.is_smoke_test }}
+
 
   scheduled_run_a:
     name: "Nightly @ 8 PM EST - Implementors Team"
