@@ -5,7 +5,6 @@ no="$1"
 lotus_data_dir="LOTUS_${no}_DATA_DIR"
 export LOTUS_DATA_DIR="${!lotus_data_dir}"
 
-export LOTUS_F3_BOOTSTRAP_EPOCH=21
 export LOTUS_CHAININDEXER_ENABLEINDEXER=true
 
 # required via docs:
@@ -29,7 +28,7 @@ fi
 while true; do
     echo "lotus${no}: Fetching drand chain info from drand0..."
     response=$(curl -s --fail "http://drand0/info" 2>&1)
-    
+
     if [ $? -eq 0 ] && echo "$response" | jq -e '.public_key?' >/dev/null 2>&1; then
         echo "$response" | jq -c > chain_info
         echo "$response"
@@ -59,7 +58,7 @@ if [ "$INIT_MODE" = "true" ]; then
     if [ "$no" -eq 0 ]; then
         # TODO: This step is FLAKY!
         # The error message we see is the following:
-        # 
+        #
         # genesis func failed: make genesis block: failed to verify presealed data: failed to create verifier: failed to call method: message failed with backtrace:
         # 00: f06 (method 2) -- Allowance 0 below minimum deal size for add verifier f081 (16)
         #
@@ -85,7 +84,7 @@ fi
 connect_with_retries() {
     local retries=10
     local addr_file="$1"
-    
+
     for (( j=1; j<=retries; j++ )); do
         echo "attempt $j..."
 
