@@ -1,0 +1,11 @@
+# Runtime data (generated on container start, never committed)
+data/
+shared/
+!data/.gitkeep
+
+# Compiled Go binaries that may land in workload/
+workload/stress-engine
+workload/genesis-prep
+
+# Local env overrides
+*.env.local
