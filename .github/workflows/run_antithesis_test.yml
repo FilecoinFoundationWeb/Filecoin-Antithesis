@@ -50,6 +50,11 @@ on:
         required: true
         default: 'latest'
         description: The config image tag used for the test run
+      is_ephemeral:
+        type: boolean
+        required: false
+        default: false
+        description: Enable to run an ephermeral test that does not affect findings history.
 
 
 jobs:
@@ -73,6 +78,7 @@ jobs:
           email_recipients: ${{ github.event.inputs.emails }}
           additional_parameters: |-
             custom.duration=${{ github.event.inputs.duration }}
+            antithesis.is_ephemeral=${{ inputs.is_ephemeral }}
 
   scheduled_run_a:
     name: "Nightly @ 8 PM EST - Implementors Team"
