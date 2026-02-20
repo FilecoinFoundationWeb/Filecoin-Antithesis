@@ -1,0 +1,9 @@
+{
+  "name": "filwizard-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Service provider registration and contract deployment scripts",
+  "dependencies": {
+    "ethers": "^6.0.0"
+  }
+}
