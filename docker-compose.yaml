@@ -94,7 +94,6 @@ services:
     container_name: forest0
     entrypoint: [ "./scripts/start-forest.sh", "0" ]
 
-  # Workload service (core profile — always runs)
   workload:
     <<: [ *filecoin_service ]
     image: workload:latest
@@ -104,7 +103,7 @@ services:
       - STRESS_RPC_PORT=1234
       - STRESS_FOREST_RPC_PORT=3456
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
-      - STRESS_WAIT_HEIGHT=15
+      - STRESS_WAIT_HEIGHT=10
       - STRESS_WEIGHT_TRANSFER=2
       - STRESS_WEIGHT_GAS_WAR=1
       - STRESS_WEIGHT_ADVERSARIAL=2
