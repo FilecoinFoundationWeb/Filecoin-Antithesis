@@ -38,10 +38,10 @@ while true; do
     sleep 5
 done
 
-# ── 4. Wait for filwizard to finish (skip if FILWIZARD_ENABLED != true) ──
+# ── 4. Wait for filwizard if running (auto-detected via DNS) ──
 ENV_FILE="/shared/environment.env"
-if [ "${FILWIZARD_ENABLED:-false}" = "true" ]; then
-    log_info "Waiting for environment.env from filwizard..."
+if getent hosts filwizard &>/dev/null; then
+    log_info "Filwizard detected, waiting for environment.env..."
     while [ ! -f "$ENV_FILE" ] || [ ! -s "$ENV_FILE" ]; do sleep 2; done
     log_info "environment.env ready"
 
@@ -50,7 +50,7 @@ if [ "${FILWIZARD_ENABLED:-false}" = "true" ]; then
     source "$ENV_FILE"
     set +a
 else
-    log_info "Skipping filwizard wait (FILWIZARD_ENABLED=false)"
+    log_info "Filwizard not running, skipping."
 fi
 
 # ── 5. Signal setup complete to Antithesis ──
