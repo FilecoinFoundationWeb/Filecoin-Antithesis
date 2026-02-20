@@ -4,7 +4,7 @@ FROM golang:latest AS builder
 # Clone FilWizard repo (for contract deployment only)
 RUN git clone https://github.com/parthshah1/FilWizard /build
 WORKDIR /build
-RUN git checkout parth/environment-export
+RUN git checkout main
 RUN git pull
 
 # Build filwizard binary
