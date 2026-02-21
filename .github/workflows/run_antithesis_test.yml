@@ -45,6 +45,11 @@ on:
         required: true
         default: 'latest'
         description: The workload image tag used for the test run
+      filwizard:
+        type: string
+        required: true
+        default: 'latest'
+        description: The filwizard image tag used for the test run
       config:
         type: string
         required: true
@@ -76,7 +81,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};curio:${{ inputs.curio }};
+          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};curio:${{ inputs.curio }};filwizard:${{ inputs.filwizard }};
           config_image: config:${{ github.event.inputs.config }}
           description: "Manual Test"
           email_recipients: ${{ github.event.inputs.emails }}
@@ -101,7 +106,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 12 hr nightly run - Implementors Team"
           additional_parameters: |-
@@ -125,7 +130,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 12 hr nightly run - FOC Team"
           additional_parameters: |-
@@ -149,7 +154,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 1.5 hr noon run - Implementors Team"
           additional_parameters: |-
@@ -173,7 +178,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 1.5 hr noon run - FOC Team"
           additional_parameters: |-

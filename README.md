@@ -6,14 +6,17 @@ This repository provides a comprehensive testing framework for the Filecoin netw
 
 ## Setup Overview
 
-The system runs 12 containers:
+The system runs **9 containers** by default (12 with `--profile foc`):
 - **Drand cluster**: `drand0`, `drand1`, `drand2` (randomness beacon)
 - **Lotus nodes**: `lotus0`, `lotus1` (Go implementation)
 - **Lotus miners**: `lotus-miner0`, `lotus-miner1`
 - **Forest node**: `forest0` (Rust implementation)
+- **Workload**: Go stress engine container
+
+With `--profile foc` (Filecoin Open Contracts stack):
+- **FilWizard**: Contract deployment and environment wiring
 - **Curio**: Storage provider with PDP support
 - **Yugabyte**: Database for Curio state
-- **Workload**: Test orchestration container
 
 ## Quick Start
 
@@ -26,15 +29,14 @@ The system runs 12 containers:
 # Build all images
 make build-all
 
-# Start localnet
+# Start protocol stack (drand + lotus + forest + workload)
 make up
+
+# Start full FOC stack (adds filwizard + curio + yugabyte)
+./scripts/run-local.sh foc
 
 # View logs
 make logs
-
-# Run tests
-docker exec workload /opt/antithesis/workload chain common-tipset
-docker exec workload /opt/antithesis/workload mempool spam
 
 # Stop and cleanup
 make cleanup
@@ -57,52 +59,29 @@ make cleanup        # Stop and clean data
 make show-versions  # Show image version tags
 ```
 
-## Workload CLI Commands
+## Stress Engine
 
-All commands run inside the workload container:
-```bash
-docker exec workload /opt/antithesis/workload <command>
-```
+The workload container runs a **stress engine** that continuously picks weighted actions ("vectors") and executes them against Lotus and Forest nodes. Each vector uses Antithesis SDK assertions to verify safety and liveness.
 
-### Available Commands
+### Stress Vectors
 
-| Command | Description |
-|---------|-------------|
-| `wallet create --node Lotus0 --count 5` | Create and fund wallets |
-| `network connect --node Lotus0` | Connect node to peers |
-| `network disconnect --node Lotus0` | Disconnect from peers |
-| `network reorg --node Lotus0` | Simulate reorg |
-| `mempool track --node Lotus0 --duration 5m` | Track mempool size |
-| `mempool spam` | Spam transactions across nodes |
-| `chain backfill` | Check chain index backfill (Lotus only) |
-| `chain common-tipset` | Get common finalized tipset |
-| `state check --node Lotus0` | Check state on single node |
-| `state compare --epochs 10` | Compare state across all nodes |
-| `state compare-at-height --height 100` | Compare state at specific height |
-| `consensus check` | Check tipset consensus |
-| `monitor comprehensive` | Full health check (peers, F3, height) |
-| `monitor height-progression --duration 1m` | Monitor height changes |
-| `eth check` | Check ETH API block consistency |
+| Vector | Env Var | Category | Description |
+|--------|---------|----------|-------------|
+| `DoTransferMarket` | `STRESS_WEIGHT_TRANSFER` | Mempool | Random FIL transfers between wallets |
+| `DoGasWar` | `STRESS_WEIGHT_GAS_WAR` | Mempool | Gas premium replacement racing |
+| `DoAdversarial` | `STRESS_WEIGHT_ADVERSARIAL` | Safety | Double-spend, invalid sigs, nonce races |
+| `DoHeavyCompute` | `STRESS_WEIGHT_HEAVY_COMPUTE` | Consensus | StateCompute re-execution verification |
+| `DoChainMonitor` | `STRESS_WEIGHT_CHAIN_MONITOR` | Consensus | 6 sub-checks: tipset consensus, height progression, peer count, head comparison, state roots, state audit |
+| `DoDeployContracts` | `STRESS_WEIGHT_DEPLOY` | FVM/EVM | Deploy EVM contracts via EAM |
+| `DoContractCall` | `STRESS_WEIGHT_CONTRACT_CALL` | FVM/EVM | Invoke contracts (recursion, delegatecall, tokens) |
+| `DoSelfDestructCycle` | `STRESS_WEIGHT_SELFDESTRUCT` | FVM/EVM | Deploy → destroy → cross-node verify |
+| `DoConflictingContractCalls` | `STRESS_WEIGHT_CONTRACT_RACE` | FVM/EVM | Same-nonce contract calls to different nodes |
 
-### Node Names (config.json)
-- `Lotus0` — First Lotus node
-- `Lotus1` — Second Lotus node
-- `Forest0` — Forest node
+Weights are configured in `docker-compose.yaml` environment. Set to `0` to disable.
 
-## Test Composer Scripts
+### Reorg Safety
 
-Located in `workload/main/`:
-
-| Script | Purpose |
-|--------|---------|
-| `first_check.sh` | Initial setup validation |
-| `anytime_chain_backfill.sh` | Chain index backfill check |
-| `anytime_state_checks.sh` | State consistency checks |
-| `eventually_health_check.sh` | Health monitoring suite |
-| `eventually_comprehensive_health.sh` | Full health check |
-| `parallel_driver_create_wallets.sh` | Wallet creation |
-| `parallel_driver_spammer.sh` | Transaction spamming |
-| `parallel_driver_synapse_e2e.sh` | Synapse SDK e2e test |
+All state-sensitive assertions use `ChainGetFinalizedTipSet` so they are safe during partition → reorg chaos injected by Antithesis.
 
 ## Antithesis Integration
 
@@ -124,53 +103,48 @@ Test properties use the Antithesis Go SDK:
 ## Directory Structure
 
 ```
-├── config/              # Docker compose and env files
 ├── drand/               # Drand beacon build
 ├── lotus/               # Lotus node build and scripts
-├── forest/              # Forest node build and scripts  
-├── curio/               # Curio storage provider build
-├── workload/            # Test workload
-│   ├── main/            # Test Composer scripts
-│   ├── resources/       # Go helper functions
-│   ├── entrypoint/      # Container startup scripts
-│   └── patches/         # SDK patches
-├── shared/              # Shared configs between containers
-├── data/                # Runtime data (mount point)
+├── forest/              # Forest node build and scripts
+├── curio/               # Curio storage provider build  [--profile foc]
+├── filwizard/           # Contract deployment container [--profile foc]
+├── yugabyte/            # YugabyteDB for Curio         [--profile foc]
+├── workload/            # Stress engine
+│   ├── cmd/stress-engine/  # Engine source
+│   │   ├── main.go            # Entry point, deck builder, action loop
+│   │   ├── helpers.go         # Shared message helpers
+│   │   ├── mempool_vectors.go # Transfer, gas war, adversarial
+│   │   ├── evm_vectors.go     # Contract deploy, invoke, selfdestruct
+│   │   ├── consensus_vectors.go # Heavy compute, chain monitor
+│   │   └── contracts.go       # EVM bytecodes, ABI encoding
+│   ├── entrypoint/         # Container startup scripts
+│   └── Dockerfile
+├── scripts/             # Helper scripts (run-local.sh)
+├── data/                # Runtime data (git-ignored, created on start)
+├── shared/              # Shared configs between containers (git-ignored)
+├── versions.env         # Version pins — change to test a new client version
 ├── Makefile             # Build commands
-├── docker-compose.yml   # Service definitions
+├── docker-compose.yaml  # Service definitions
 └── cleanup.sh           # Data cleanup script
 ```
 
 ## Configuration
 
 ### Environment Variables
-Located in `config/.env`:
+Located in `.env`:
 - Node data directories
 - Port configurations
 - Shared volume paths
 
-### Node Configuration
-Located in `workload/resources/config.json`:
-```json
-{
-  "nodes": [
-    {"name": "Lotus0", "rpcurl": "http://lotus0:1234/rpc/v1", "authtokenpath": "/root/devgen/lotus0/lotus0-jwt"},
-    {"name": "Lotus1", "rpcurl": "http://lotus1:1234/rpc/v1", "authtokenpath": "/root/devgen/lotus1/lotus1-jwt"},
-    {"name": "Forest0", "rpcurl": "http://forest0:3456/rpc/v1", "authtokenpath": "/root/devgen/forest0/forest0-jwt"}
-  ]
-}
+### Version Pinning
+Located in `versions.env` — change these to test a specific upstream commit or tag:
+```env
+LOTUS_COMMIT=latest
+FOREST_COMMIT=latest
+CURIO_COMMIT=latest
 ```
 
-## Contributing
 
-1. Add CLI commands in `workload/main.go`
-2. Add helper functions in `workload/resources/`
-3. Add Test Composer scripts in `workload/main/` following naming conventions:
-   - `anytime_*` — Can run anytime
-   - `parallel_*` — Runs in parallel
-   - `eventually_*` — Eventual consistency checks
-   - `serial_*` — Sequential operations
-   - `first_*` — Initial setup
 
 ## Documentation
 
