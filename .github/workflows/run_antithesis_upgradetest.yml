@@ -57,6 +57,17 @@ on:
         required: false
         default: 'latest'
         description: The image tag used for the upgrade test run'
+      is_ephemeral:
+        type: boolean
+        required: false
+        default: false
+        description: Enable to run an ephermeral test that does not affect findings history.
+      is_smoke_test:
+        type: boolean
+        required: false
+        default: false
+        description: Enable to run an smoke test.
+
 jobs:
   manual_run:
     if: github.event_name == 'workflow_dispatch'
@@ -81,3 +92,5 @@ jobs:
             custom.upgrade_test=${{ github.event.inputs.upgrade_test }}
             custom.upgrade_test.image=${{ github.event.inputs.upgrade_image }}
             custom.upgrade_test.new_tag=${{ github.event.inputs.upgrade_tag }}
+            antithesis.is_ephemeral=${{ inputs.is_ephemeral }}
+            custom.is_smoke_test=${{ inputs.is_smoke_test }}

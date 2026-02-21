@@ -1,4 +1,4 @@
-FROM docker.io/golang:1.23.2-bookworm
+FROM docker.io/golang:1.25.1
 
 RUN apt-get update && \
    apt-get install -y ca-certificates build-essential clang ocl-icd-opencl-dev ocl-icd-libopencl1 jq libhwloc-dev git
