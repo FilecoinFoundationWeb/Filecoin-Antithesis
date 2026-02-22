@@ -385,21 +385,26 @@ func DoSelfDestructCycle() {
 		verifyTsk := destroyResult.TipSet
 
 		var results []string
+		var nodeResults []string // only nodes that successfully responded
 		for _, name := range nodeKeys {
 			actor, err := nodes[name].StateGetActor(ctx, contractAddr, verifyTsk)
 			if err != nil {
-				results = append(results, "error:"+err.Error())
+				log.Printf("[selfdestruct] StateGetActor failed for %s: %v", name, err)
+				results = append(results, name+":error")
 			} else if actor == nil {
 				results = append(results, "nil")
+				nodeResults = append(nodeResults, "nil")
 			} else {
 				results = append(results, actor.Code.String())
+				nodeResults = append(nodeResults, actor.Code.String())
 			}
 		}
 
-		// All nodes should agree on the state of the destroyed contract
+		// Only assert divergence across nodes that successfully responded.
+		// An RPC error from a node is a connectivity issue, not a state disagreement.
 		allSame := true
-		for i := 1; i < len(results); i++ {
-			if results[i] != results[0] {
+		for i := 1; i < len(nodeResults); i++ {
+			if nodeResults[i] != nodeResults[0] {
 				allSame = false
 				break
 			}
