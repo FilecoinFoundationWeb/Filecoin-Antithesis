@@ -54,6 +54,10 @@ RUN git apply increase-cpu-avail-antithesis.patch
 COPY ./reduce-reservations-size.patch ./reduce-reservations-size.patch
 RUN git apply reduce-reservations-size.patch
 RUN git merge origin/antithesis-panic 
+RUN sed -i \
+  -e 's|\$(GOCC) build \$(GOFLAGS) \\|$(GOCC) build $(GOFLAGS) -gcflags "all=-N -l" \\|' \
+  -e 's|-o curio -ldflags " -s -w \\|-o curio -ldflags " -compressdwarf=false \\|' \
+  Makefile
 
 RUN git submodule update --init
 

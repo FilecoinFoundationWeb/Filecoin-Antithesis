@@ -29,12 +29,12 @@ on:
         type: string
         required: true
         default: 'latest'
-        description: The forest image tag used for the test run
+        description: Default forest image tag for all forest instances
       lotus:
         type: string
         required: true
         default: 'latest'
-        description: The lotus image tag used for the test run
+        description: Default lotus image tag for all lotus/miner instances
       curio:
         type: string
         required: true
@@ -50,6 +50,31 @@ on:
         required: true
         default: 'latest'
         description: The config image tag used for the test run
+      lotus_0_tag:
+        type: string
+        required: false
+        default: ''
+        description: Override image tag for lotus0 (leave empty to use lotus default)
+      lotus_1_tag:
+        type: string
+        required: false
+        default: ''
+        description: Override image tag for lotus1 (leave empty to use lotus default)
+      lotus_miner_0_tag:
+        type: string
+        required: false
+        default: ''
+        description: Override image tag for lotus-miner0 (leave empty to use lotus default)
+      lotus_miner_1_tag:
+        type: string
+        required: false
+        default: ''
+        description: Override image tag for lotus-miner1 (leave empty to use lotus default)
+      forest_0_tag:
+        type: string
+        required: false
+        default: ''
+        description: Override image tag for forest0 (leave empty to use forest default)
       is_ephemeral:
         type: boolean
         required: false
@@ -84,6 +109,13 @@ jobs:
             custom.duration=${{ github.event.inputs.duration }}
             antithesis.is_ephemeral=${{ inputs.is_ephemeral }}
             custom.is_smoke_test=${{ inputs.is_smoke_test }}
+            custom.lotus_tag=${{ inputs.lotus }}
+            custom.lotus_0_tag=${{ inputs.lotus_0_tag }}
+            custom.lotus_1_tag=${{ inputs.lotus_1_tag }}
+            custom.lotus_miner_0_tag=${{ inputs.lotus_miner_0_tag }}
+            custom.lotus_miner_1_tag=${{ inputs.lotus_miner_1_tag }}
+            custom.forest_tag=${{ inputs.forest }}
+            custom.forest_0_tag=${{ inputs.forest_0_tag }}
 
 
   scheduled_run_a:
