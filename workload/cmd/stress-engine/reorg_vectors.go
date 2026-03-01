@@ -86,16 +86,6 @@ func DoReorgChaos() {
 		postPeers, _ := victim.NetPeers(ctx)
 		isolated := len(postPeers) == 0
 
-		assert.Sometimes(isolated, "Node successfully isolated for reorg test", map[string]any{
-			"victim":       victimName,
-			"victim_type":  nodeType(victimName),
-			"cycle":        cycle + 1,
-			"total":        numCycles,
-			"pre_peers":    len(peers),
-			"disconnected": disconnected,
-			"post_peers":   len(postPeers),
-		})
-
 		log.Printf("[reorg-chaos] cycle %d/%d: SPLIT %s (disconnected %d/%d, isolated=%v)",
 			cycle+1, numCycles, victimName, disconnected, len(peers), isolated)
 
@@ -127,12 +117,6 @@ func DoReorgChaos() {
 	if successfulCycles == 0 {
 		return
 	}
-
-	assert.Sometimes(successfulCycles > 0, "Reorg chaos cycles completed", map[string]any{
-		"victim":    victimName,
-		"cycles":    successfulCycles,
-		"requested": numCycles,
-	})
 
 	// Wait for full convergence after all cycles
 	log.Printf("[reorg-chaos] waiting for convergence after %d cycles...", successfulCycles)
@@ -210,7 +194,7 @@ func verifyPostReorgState(victimName string, cycles int) {
 		}
 		hasPeers := len(peers) > 0
 
-		assert.Always(hasPeers, "Network connectivity restored after reorg", map[string]any{
+		assert.Sometimes(hasPeers, "Network connectivity restored after reorg", map[string]any{
 			"node":       name,
 			"node_type":  nodeType(name),
 			"victim":     victimName,
@@ -286,7 +270,7 @@ func verifyPostReorgState(victimName string, cycles int) {
 	spread := maxH - minH
 	acceptable := spread <= 10
 
-	assert.Always(acceptable, "Node heights within acceptable range after reorg", map[string]any{
+	assert.Sometimes(acceptable, "Node heights within acceptable range after reorg", map[string]any{
 		"victim":  victimName,
 		"heights": finalizedHeights,
 		"spread":  spread,

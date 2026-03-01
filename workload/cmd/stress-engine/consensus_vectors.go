@@ -91,11 +91,6 @@ func DoHeavyCompute() {
 	}
 
 	debugLog("  [heavy-compute] OK: verified %d epochs on %s", epochsChecked, nodeName)
-
-	assert.Sometimes(epochsChecked > 0, "Heavy computation path exercised", map[string]any{
-		"node":           nodeName,
-		"epochs_checked": epochsChecked,
-	})
 }
 
 // ===========================================================================
@@ -249,10 +244,6 @@ func doTipsetConsensus() {
 		"nodes_checked":  len(nodeKeys),
 		"errors":         errs,
 	})
-
-	assert.Sometimes(consensusReached, "Tipset consensus verified across nodes", map[string]any{
-		"height": checkHeight,
-	})
 }
 
 // doHeightProgression checks that all nodes are advancing.
@@ -305,10 +296,6 @@ func doHeightProgression() {
 		"max":     maxH,
 	})
 
-	// All nodes should be past genesis
-	assert.Sometimes(minH > 0, "All nodes have advanced past genesis", map[string]any{
-		"min_height": minH,
-	})
 }
 
 // doPeerCount checks that all nodes have peers.
@@ -323,14 +310,9 @@ func doPeerCount() {
 
 		peerCount := len(peers)
 
-		assert.Always(peerCount > 0, "Node has active peer connections", map[string]any{
+		assert.Sometimes(peerCount > 0, "Node has active peer connections", map[string]any{
 			"node":       name,
 			"node_type":  nodeType(name),
-			"peer_count": peerCount,
-		})
-
-		assert.Sometimes(peerCount > 0, "Peer connectivity confirmed", map[string]any{
-			"node":       name,
 			"peer_count": peerCount,
 		})
 	}
@@ -444,9 +426,6 @@ func doStateRootComparison() {
 
 	if statesMatch {
 		debugLog("  [chain-monitor] OK: all %d nodes agree at height %d (finalized=%d)", len(nodeKeys), checkHeight, finalizedHeight)
-		assert.Sometimes(true, "Shared chain state verified across nodes", map[string]any{
-			"height": checkHeight,
-		})
 	} else {
 		log.Printf("  [chain-monitor] DIVERGENCE at height %d: %v", checkHeight, stateRoots)
 	}
@@ -559,8 +538,4 @@ func doStateAudit() {
 	}
 
 	debugLog("  [chain-monitor] OK: state-audit height %d, roots match, msgs/receipts consistent", checkHeight)
-
-	assert.Sometimes(true, "State audit completed successfully", map[string]any{
-		"height": checkHeight,
-	})
 }

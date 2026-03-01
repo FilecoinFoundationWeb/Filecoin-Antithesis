@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"log"
 
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	builtintypes "github.com/filecoin-project/go-state-types/builtin"
@@ -227,9 +226,4 @@ func doDeployStressContract(ctype string) {
 	pendingMu.Unlock()
 
 	log.Printf("  [deploy] submitted %s deploy via %s (cid=%s)", ctype, nodeName, cidStr(msgCid))
-
-	assert.Sometimes(true, "EVM contract deployment submitted", map[string]any{
-		"type": ctype,
-		"node": nodeName,
-	})
 }

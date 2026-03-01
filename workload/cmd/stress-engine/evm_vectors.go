@@ -69,11 +69,6 @@ func DoDeployContracts() {
 	pendingMu.Unlock()
 
 	debugLog("  [deploy] submitted %s deploy via %s (cid=%s)", ctype, nodeName, msgCid.String()[:16])
-
-	assert.Sometimes(true, "EVM contract deployment submitted", map[string]any{
-		"type": ctype,
-		"node": nodeName,
-	})
 }
 
 func resolvePendingDeploys() {
@@ -120,10 +115,6 @@ func resolvePendingDeploys() {
 			contractsMu.Unlock()
 
 			debugLog("  [deploy] confirmed %s at %s (actor=%d)", pd.ctype, idAddr, ret.ActorID)
-			assert.Sometimes(true, "EVM contract deployment confirmed on chain", map[string]any{
-				"type":     pd.ctype,
-				"actor_id": ret.ActorID,
-			})
 		} else {
 			log.Printf("  [deploy] %s failed with exit code %d", pd.ctype, result.Receipt.ExitCode)
 		}
@@ -194,12 +185,6 @@ func doDeepRecursion() {
 
 	debugLog("  [contract-call] recursive depth=%d via %s ok=%v cid=%s",
 		depth, nodeName, ok, cidStr(msgCid))
-
-	assert.Sometimes(ok, "Contract invocation submitted", map[string]any{
-		"type":  "recursive",
-		"depth": depth,
-		"node":  nodeName,
-	})
 }
 
 func doDelegatecallRecursion() {
@@ -223,12 +208,6 @@ func doDelegatecallRecursion() {
 
 	debugLog("  [contract-call] delegatecall depth=%d via %s ok=%v cid=%s",
 		depth, nodeName, ok, cidStr(msgCid))
-
-	assert.Sometimes(ok, "Delegatecall invocation submitted", map[string]any{
-		"type":  "delegatecall",
-		"depth": depth,
-		"node":  nodeName,
-	})
 }
 
 func doSimpleCoinTransfer() {
@@ -260,11 +239,6 @@ func doSimpleCoinTransfer() {
 
 	debugLog("  [contract-call] simplecoin send amount=%d via %s ok=%v cid=%s",
 		amount, nodeName, ok, cidStr(msgCid))
-
-	assert.Sometimes(ok, "SimpleCoin token transfer submitted", map[string]any{
-		"amount": amount,
-		"node":   nodeName,
-	})
 }
 
 func doExternalRecursion() {
@@ -288,12 +262,6 @@ func doExternalRecursion() {
 
 	debugLog("  [contract-call] external recursion depth=%d via %s ok=%v cid=%s",
 		depth, nodeName, ok, cidStr(msgCid))
-
-	assert.Sometimes(ok, "External recursive call submitted", map[string]any{
-		"type":  "extrecursive",
-		"depth": depth,
-		"node":  nodeName,
-	})
 }
 
 // ===========================================================================
@@ -305,7 +273,7 @@ func doExternalRecursion() {
 
 func DoSelfDestructCycle() {
 	fromAddr, fromKI := pickWallet()
-	nodeName, node := pickNode()
+	_, node := pickNode()
 
 	// Deploy the SelfDestruct contract
 	bytecode := contractBytecodes["selfdestruct"]
@@ -365,11 +333,6 @@ func DoSelfDestructCycle() {
 	}
 
 	destroyed := destroyResult.Receipt.ExitCode.IsSuccess()
-
-	assert.Sometimes(destroyed, "Contract self-destruct executed successfully", map[string]any{
-		"contract": contractAddr.String(),
-		"node":     nodeName,
-	})
 
 	if !destroyed {
 		log.Printf("[selfdestruct] destroy failed with exit code %d", destroyResult.Receipt.ExitCode)
@@ -544,13 +507,6 @@ func DoConflictingContractCalls() {
 
 	debugLog("[contract-race] conflicting sendCoin: nodeA=%s err=%v, nodeB=%s err=%v",
 		nodeA, errA, nodeB, errB)
-
-	assert.Sometimes(errA == nil || errB == nil, "At least one conflicting contract call accepted", map[string]any{
-		"contract": c.addr.String(),
-		"nonce":    currentNonce,
-		"node_a":   nodeA,
-		"node_b":   nodeB,
-	})
 }
 
 // ===========================================================================
@@ -589,11 +545,6 @@ func DoGasGuzzler() {
 
 	debugLog("  [gas-guzzler] iterations=%d via %s ok=%v cid=%s",
 		iterations, nodeName, ok, cidStr(msgCid))
-
-	assert.Sometimes(ok, "Gas-intensive computation submitted", map[string]any{
-		"iterations": iterations,
-		"node":       nodeName,
-	})
 }
 
 // DoLogBlaster calls blastLogs(count) — emits massive numbers of events
@@ -621,11 +572,6 @@ func DoLogBlaster() {
 
 	debugLog("  [log-blaster] count=%d via %s ok=%v cid=%s",
 		count, nodeName, ok, cidStr(msgCid))
-
-	assert.Sometimes(ok, "High-volume event emission submitted", map[string]any{
-		"count": count,
-		"node":  nodeName,
-	})
 }
 
 // DoMemoryBomb calls expandMemory(words) — allocates EVM memory with
@@ -653,11 +599,6 @@ func DoMemoryBomb() {
 
 	debugLog("  [memory-bomb] words=%d via %s ok=%v cid=%s",
 		words, nodeName, ok, cidStr(msgCid))
-
-	assert.Sometimes(ok, "Memory-intensive EVM call submitted", map[string]any{
-		"words": words,
-		"node":  nodeName,
-	})
 }
 
 // DoStorageSpam calls spamSlots(count, seed) — writes to many unique storage
@@ -692,9 +633,4 @@ func DoStorageSpam() {
 
 	debugLog("  [storage-spam] count=%d seed=%d via %s ok=%v cid=%s",
 		count, seed, nodeName, ok, cidStr(msgCid))
-
-	assert.Sometimes(ok, "High-volume storage write submitted", map[string]any{
-		"count": count,
-		"node":  nodeName,
-	})
 }

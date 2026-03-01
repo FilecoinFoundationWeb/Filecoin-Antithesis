@@ -23,7 +23,7 @@ fi
 log_info "System time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 
 # ── 3. Wait for blockchain to reach minimum epoch ──
-WAIT_HEIGHT="${ENTRYPOINT_WAIT_HEIGHT:-5}"
+WAIT_HEIGHT="${STRESS_WAIT_HEIGHT:-10}"
 RPC_URL="http://lotus0:${STRESS_RPC_PORT:-1234}/rpc/v1"
 log_info "Waiting for block height to reach ${WAIT_HEIGHT}..."
 while true; do
@@ -38,11 +38,13 @@ while true; do
     sleep 5
 done
 
-# ── 4. Wait for filwizard if running (auto-detected via DNS) ──
+# ── 4. Wait for filwizard if running (FOC profile, auto-detected via DNS) ──
 ENV_FILE="/shared/environment.env"
 FILWIZARD_READY="/shared/filwizard_ready"
 if getent hosts filwizard &>/dev/null; then
-    log_info "Filwizard detected, waiting for environment.env..."
+    log_info "FOC profile detected (filwizard reachable)"
+
+    log_info "Waiting for environment.env..."
     while [ ! -f "$ENV_FILE" ] || [ ! -s "$ENV_FILE" ]; do sleep 2; done
     log_info "environment.env ready"
 
@@ -55,14 +57,12 @@ if getent hosts filwizard &>/dev/null; then
     source "$ENV_FILE"
     set +a
 else
-    log_info "Filwizard not running, skipping."
+    log_info "Non-FOC profile."
 fi
 
 # ── 5. Signal setup complete to Antithesis ──
-log_info "Signaling setup complete..."
-if [ -f "/opt/antithesis/entrypoint/setup_complete.py" ]; then
-    python3 -u /opt/antithesis/entrypoint/setup_complete.py
-fi
+log_info "All prerequisites met, signaling setup complete to Antithesis..."
+/opt/antithesis/setup-complete
 
 # ── 6. Launch stress engine ──
 log_info "Launching stress engine..."

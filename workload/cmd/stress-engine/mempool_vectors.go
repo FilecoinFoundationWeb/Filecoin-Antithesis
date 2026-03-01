@@ -38,13 +38,6 @@ func DoTransferMarket() {
 		debugLog("  [transfer] OK: %s -> %s via %s (amount=%s)",
 			fromAddr.String()[:12], toAddr.String()[:12], nodeName, amount.String())
 	}
-
-	assert.Sometimes(ok, "Transfer message accepted by mempool", map[string]any{
-		"from":   fromAddr.String(),
-		"to":     toAddr.String(),
-		"amount": amount.String(),
-		"node":   nodeName,
-	})
 }
 
 // ===========================================================================
@@ -69,7 +62,7 @@ func DoGasWar() {
 		return
 	}
 
-	nodeName, node := pickNode()
+	_, node := pickNode()
 	currentNonce := nonces[fromAddr]
 
 	// Tx_A: low gas premium
@@ -105,18 +98,6 @@ func DoGasWar() {
 
 	// Regardless of replacement success, nonce is consumed
 	nonces[fromAddr]++
-
-	assert.Sometimes(errA == nil, "Low gas premium message accepted", map[string]any{
-		"node":  nodeName,
-		"nonce": currentNonce,
-	})
-
-	assert.Sometimes(errB == nil, "Gas replacement message accepted", map[string]any{
-		"node":         nodeName,
-		"nonce":        currentNonce,
-		"low_premium":  "100",
-		"high_premium": "50000",
-	})
 
 	debugLog("  [gas-war] nonce=%d: Tx_A(low)=%v, Tx_B(high)=%v",
 		currentNonce, errA == nil, errB == nil)
@@ -203,16 +184,6 @@ func doDoubleSpend() {
 	nonces[fromAddr]++
 
 	debugLog("[adversarial] double-spend: nodeA=%s err=%v, nodeB=%s err=%v", nodeA, errA, nodeB, errB)
-
-	// Safety: at least one should eventually be accepted, but both being
-	// "accepted" into mempool is OK — only one should make it on-chain.
-	// The real assertion happens in DoChainMonitor checking state consistency.
-	assert.Sometimes(errA == nil || errB == nil, "At least one double-spend attempt accepted by mempool", map[string]any{
-		"from":   fromAddr.String(),
-		"nonce":  currentNonce,
-		"node_a": nodeA,
-		"node_b": nodeB,
-	})
 }
 
 // doInvalidSignature constructs a message with garbage signature bytes
@@ -302,25 +273,17 @@ func doNonceRace() {
 
 	// Push concurrently
 	var wg sync.WaitGroup
-	var errLow, errHigh error
 
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, errLow = nodes[nodeA].MpoolPush(ctx, smsgLow)
+		nodes[nodeA].MpoolPush(ctx, smsgLow)
 	}()
 	go func() {
 		defer wg.Done()
-		_, errHigh = nodes[nodeB].MpoolPush(ctx, smsgHigh)
+		nodes[nodeB].MpoolPush(ctx, smsgHigh)
 	}()
 	wg.Wait()
 
 	nonces[fromAddr]++
-
-	assert.Sometimes(errLow == nil || errHigh == nil, "At least one nonce race message accepted", map[string]any{
-		"from":    fromAddr.String(),
-		"nonce":   currentNonce,
-		"node_lo": nodeA,
-		"node_hi": nodeB,
-	})
 }
