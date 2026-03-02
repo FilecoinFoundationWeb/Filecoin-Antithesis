@@ -77,8 +77,8 @@ jobs:
       with:
         build-args: |
           BUILD_MODE=remote
-          GIT_BRANCH=${{ inputs.curio_tag || steps.latest-curio-commit.outputs.commit-hash }}
-          LOTUS_TAG=${{ inputs.lotus_tag }}
+          GIT_BRANCH=${{ github.event.inputs.curio_tag || steps.latest-curio-commit.outputs.commit-hash }}
+          LOTUS_TAG=${{ github.event.inputs.lotus_tag || 'latest' }}
         context: ./curio
         file: ./curio/Dockerfile
         push: true
