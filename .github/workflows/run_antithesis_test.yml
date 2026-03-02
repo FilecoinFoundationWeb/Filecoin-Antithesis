@@ -94,6 +94,26 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Build images list
+        id: images
+        run: |
+          IMAGES="drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};curio:${{ inputs.curio }}"
+          if [ -n "${{ inputs.lotus_0_tag }}" ] && [ "${{ inputs.lotus_0_tag }}" != "${{ inputs.lotus }}" ]; then
+            IMAGES="${IMAGES};lotus:${{ inputs.lotus_0_tag }}"
+          fi
+          if [ -n "${{ inputs.lotus_1_tag }}" ] && [ "${{ inputs.lotus_1_tag }}" != "${{ inputs.lotus }}" ]; then
+            IMAGES="${IMAGES};lotus:${{ inputs.lotus_1_tag }}"
+          fi
+          if [ -n "${{ inputs.lotus_miner_0_tag }}" ] && [ "${{ inputs.lotus_miner_0_tag }}" != "${{ inputs.lotus }}" ]; then
+            IMAGES="${IMAGES};lotus:${{ inputs.lotus_miner_0_tag }}"
+          fi
+          if [ -n "${{ inputs.lotus_miner_1_tag }}" ] && [ "${{ inputs.lotus_miner_1_tag }}" != "${{ inputs.lotus }}" ]; then
+            IMAGES="${IMAGES};lotus:${{ inputs.lotus_miner_1_tag }}"
+          fi
+          if [ -n "${{ inputs.forest_0_tag }}" ] && [ "${{ inputs.forest_0_tag }}" != "${{ inputs.forest }}" ]; then
+            IMAGES="${IMAGES};forest:${{ inputs.forest_0_tag }}"
+          fi
+          echo "list=${IMAGES}" >> "$GITHUB_OUTPUT"
       - uses: antithesishq/antithesis-trigger-action@main
         with:
           notebook_name: ${{ inputs.endpoint }}
@@ -101,7 +121,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};curio:${{ inputs.curio }};
+          images: ${{ steps.images.outputs.list }}
           config_image: config:${{ github.event.inputs.config }}
           description: "Manual Test"
           email_recipients: ${{ github.event.inputs.emails }}
