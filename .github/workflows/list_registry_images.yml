@@ -1,0 +1,44 @@
+name: List Registry Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        type: choice
+        required: true
+        description: 'Component image to list tags for'
+        options:
+          - lotus
+          - forest
+          - curio
+          - drand
+          - workload
+          - filwizard
+          - config
+
+jobs:
+  list-images:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+    - name: Authenticate with GAR
+      run: |
+        echo '${{ secrets.ANTITHESIS_GAR_KEY }}' > /tmp/gar-key.json
+        gcloud auth activate-service-account --key-file=/tmp/gar-key.json
+
+    - name: List images
+      run: |
+        gcloud artifacts docker images list \
+          us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/${{ inputs.image }} \
+          --project=molten-verve-216720 \
+          --sort-by=~UPDATE_TIME \
+          --limit=10 \
+          --include-tags \
+          --format="table(package, tags, version, createTime, updateTime)"
+
+    - name: Cleanup key file
+      if: always()
+      run: rm -f /tmp/gar-key.json
