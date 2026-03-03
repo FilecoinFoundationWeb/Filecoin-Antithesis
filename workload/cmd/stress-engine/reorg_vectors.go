@@ -27,12 +27,14 @@ import (
 // ===========================================================================
 
 const (
-	reorgMaxCyclesPerCall = 10               // max rapid partition cycles per invocation
-	reorgConvergeWait     = 90 * time.Second // wait for sync after all cycles
-	reorgEpochTimeout     = 30 * time.Second // max wait for epoch advance
-	reorgPostHealPause    = 2 * time.Second  // brief pause after reconnect
-	reorgReconnectPause   = 3 * time.Second  // wait after emergency reconnect
-	reorgFallbackBlock    = 6 * time.Second  // fallback per-block sleep
+	reorgMaxCyclesPerCall  = 10                 // max rapid partition cycles per invocation
+	reorgConvergeTimeout   = 3 * time.Minute    // max wait for convergence after all cycles
+	reorgConvergePollRate  = 3 * time.Second    // poll interval during convergence wait
+	reorgConvergeMaxSpread = abi.ChainEpoch(10) // max allowed spread between nodes
+	reorgEpochTimeout      = 30 * time.Second   // max wait for epoch advance
+	reorgPostHealPause     = 2 * time.Second    // brief pause after reconnect
+	reorgReconnectPause    = 3 * time.Second    // wait after emergency reconnect
+	reorgFallbackBlock     = 6 * time.Second    // fallback per-block sleep
 )
 
 func DoReorgChaos() {
@@ -118,11 +120,79 @@ func DoReorgChaos() {
 		return
 	}
 
-	// Wait for full convergence after all cycles
+	// Wait for convergence by polling finalized heights
 	log.Printf("[reorg-chaos] waiting for convergence after %d cycles...", successfulCycles)
-	time.Sleep(reorgConvergeWait)
+	converged := waitForConvergence(victimName)
 
-	verifyPostReorgState(victimName, successfulCycles)
+	assert.Always(converged, "Nodes converged within timeout after reorg", map[string]any{
+		"victim":  victimName,
+		"cycles":  successfulCycles,
+		"timeout": reorgConvergeTimeout.String(),
+	})
+
+	if converged {
+		verifyPostReorgState(victimName, successfulCycles)
+	}
+}
+
+// waitForConvergence polls all nodes' finalized tipset heights until the
+// spread is within reorgConvergeMaxSpread or the timeout expires.
+// Tracks whether the slowest node is making progress — if heights are
+// advancing (e.g. Forest syncing), it keeps waiting rather than timing out.
+func waitForConvergence(victimName string) bool {
+	deadline := time.Now().Add(reorgConvergeTimeout)
+	prevMinH := abi.ChainEpoch(0)
+	stallCount := 0
+	const maxStallPolls = 10 // 10 * 3s = 30s of no progress before giving up
+
+	for time.Now().Before(deadline) {
+		var minH, maxH abi.ChainEpoch
+		first := true
+		allReachable := true
+		for _, name := range nodeKeys {
+			ts, err := nodes[name].ChainGetFinalizedTipSet(ctx)
+			if err != nil {
+				allReachable = false
+				break
+			}
+			if first {
+				minH, maxH = ts.Height(), ts.Height()
+				first = false
+			}
+			if ts.Height() < minH {
+				minH = ts.Height()
+			}
+			if ts.Height() > maxH {
+				maxH = ts.Height()
+			}
+		}
+
+		if allReachable && (maxH-minH) <= reorgConvergeMaxSpread {
+			log.Printf("[reorg-chaos] converged: spread=%d epochs (victim=%s)", maxH-minH, victimName)
+			return true
+		}
+
+		// Track progress: if minH advanced, nodes are syncing — reset stall counter
+		if minH > prevMinH {
+			stallCount = 0
+			prevMinH = minH
+		} else {
+			stallCount++
+		}
+
+		// If no progress for maxStallPolls consecutive polls, give up early
+		if stallCount >= maxStallPolls {
+			log.Printf("[reorg-chaos] convergence stalled: no progress for %d polls (victim=%s, spread=%d)",
+				stallCount, victimName, maxH-minH)
+			return false
+		}
+
+		log.Printf("[reorg-chaos] waiting for convergence: spread=%d, minH=%d (victim=%s)",
+			maxH-minH, minH, victimName)
+		time.Sleep(reorgConvergePollRate)
+	}
+	log.Printf("[reorg-chaos] convergence timeout after %s", reorgConvergeTimeout)
+	return false
 }
 
 // collectNodeAddrInfos gets the listening addresses of all known nodes
