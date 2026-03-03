@@ -31,13 +31,18 @@ jobs:
 
     - name: List images
       run: |
-        gcloud artifacts docker images list \
+        OUTPUT=$(gcloud artifacts docker images list \
           us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/${{ inputs.image }} \
           --project=molten-verve-216720 \
           --sort-by=~UPDATE_TIME \
           --limit=10 \
           --include-tags \
-          --format="table(package, tags, version, createTime, updateTime)"
+          --format="table(package, tags, version, createTime, updateTime)")
+        echo "$OUTPUT"
+        echo "### ${{ inputs.image }} — 10 most recent images" >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        echo "$OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
 
     - name: Cleanup key file
       if: always()
