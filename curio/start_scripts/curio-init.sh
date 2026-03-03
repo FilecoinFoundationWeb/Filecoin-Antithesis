@@ -26,8 +26,18 @@ if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
   lotus wait-api
 
   if [ ! -f $CURIO_REPO_PATH/.init.setup ]; then
+    # Create a fresh wallet for curio's miner to avoid f2 address collision
+    # with genesis miner (both use Init.Exec with origin+nonce for address computation)
     export DEFAULT_WALLET=`lotus wallet default`
-    lotus-shed miner create --deposit-margin-factor 1.01 $DEFAULT_WALLET $DEFAULT_WALLET $DEFAULT_WALLET 2KiB
+    CURIO_WALLET=$(lotus wallet new bls)
+    echo "Created new curio wallet: $CURIO_WALLET"
+
+    echo "Funding curio wallet from default wallet..."
+    lotus send --from $DEFAULT_WALLET $CURIO_WALLET 10000
+    echo "Waiting for funding message to be confirmed..."
+    sleep 30
+
+    lotus-shed miner create --deposit-margin-factor 1.01 $CURIO_WALLET $CURIO_WALLET $CURIO_WALLET 2KiB
     touch $CURIO_REPO_PATH/.init.setup
   fi
 
