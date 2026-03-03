@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"workload/internal/chain"
+	"workload/internal/foc"
 
 	"github.com/antithesishq/antithesis-sdk-go/lifecycle"
 	"github.com/antithesishq/antithesis-sdk-go/random"
@@ -59,7 +60,7 @@ var (
 	pendingMu      sync.Mutex
 
 	// FOC config — nil when the FOC compose profile is not active
-	focConfig *FOCConfig
+	focCfg *foc.Config
 )
 
 type deployedContract struct {
@@ -268,21 +269,13 @@ func buildDeck() {
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
 	}
 
-	// FOC vectors — auto-enabled when /shared/environment.env exists
-	if focConfig != nil {
-		log.Println("[init] FOC contracts detected, enabling FOC vectors")
+	// FWSS lifecycle vectors — only when FOC profile is active
+	if focCfg != nil {
 		actions = append(actions,
-			weightedAction{"DoFocMonitor", "STRESS_WEIGHT_FOC_MONITOR", DoFocMonitor, 3},
-			weightedAction{"DoFocTransferUSDFC", "STRESS_WEIGHT_FOC_TRANSFER", DoFocTransferUSDFC, 1},
-			weightedAction{"DoFocDeposit", "STRESS_WEIGHT_FOC_DEPOSIT", DoFocDeposit, 1},
-			weightedAction{"DoFocApproveOperator", "STRESS_WEIGHT_FOC_APPROVE_OP", DoFocApproveOperator, 1},
-			weightedAction{"DoFocDiscoverAndSettleRail", "STRESS_WEIGHT_FOC_SETTLE", DoFocDiscoverAndSettleRail, 1},
-			weightedAction{"DoFocWithdraw", "STRESS_WEIGHT_FOC_WITHDRAW", DoFocWithdraw, 1},
-			weightedAction{"DoFocCreateRail", "STRESS_WEIGHT_FOC_CREATE_RAIL", DoFocCreateRail, 1},
-			weightedAction{"DoFocModifyRailPayment", "STRESS_WEIGHT_FOC_MODIFY_RAIL", DoFocModifyRailPayment, 1},
+			weightedAction{"DoFWSSDeposit", "STRESS_WEIGHT_FWSS_DEPOSIT", DoFWSSDeposit, 2},
+			weightedAction{"DoFWSSApproveOperator", "STRESS_WEIGHT_FWSS_APPROVE_OP", DoFWSSApproveOperator, 1},
+			weightedAction{"DoFWSSCreateDataSet", "STRESS_WEIGHT_FWSS_CREATE_DS", DoFWSSCreateDataSet, 2},
 		)
-	} else {
-		log.Println("[init] No FOC environment found, FOC vectors disabled")
 	}
 
 	deck = nil
@@ -318,7 +311,7 @@ func main() {
 	waitForChain()
 	initNonces()
 	initContractBytecodes()
-	focConfig = parseFOCEnvironment()
+	focCfg = foc.ParseEnvironment()
 	buildDeck()
 
 	lifecycle.SetupComplete(map[string]any{

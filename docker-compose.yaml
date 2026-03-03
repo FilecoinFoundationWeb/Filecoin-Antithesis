@@ -95,7 +95,7 @@ services:
 
   workload:
     <<: [ *filecoin_service ]
-    image: workload:latest
+    image: workload:foc
     container_name: workload
     environment:
       - STRESS_NODES=lotus0,lotus1,forest0

@@ -64,6 +64,14 @@ fi
 log_info "All prerequisites met, signaling setup complete to Antithesis..."
 /opt/antithesis/setup-complete
 
-# ── 6. Launch stress engine ──
+# ── 6. Launch FOC sidecar if in FOC profile ──
+if getent hosts filwizard &>/dev/null; then
+    log_info "Starting FOC sidecar..."
+    /opt/antithesis/foc-sidecar &
+    SIDECAR_PID=$!
+    log_info "FOC sidecar started (PID=$SIDECAR_PID)"
+fi
+
+# ── 7. Launch stress engine ──
 log_info "Launching stress engine..."
 exec /opt/antithesis/stress-engine
