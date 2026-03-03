@@ -26,85 +26,83 @@ const (
 )
 
 func DoHeavyCompute() {
-	nodeName, node := pickNode()
-
-	head, err := node.ChainHead(ctx)
-	if err != nil {
-		log.Printf("[heavy-compute] ChainHead failed for %s: %v", nodeName, err)
+	// Use first node to determine a safe finalized check range
+	finTs, err := nodes[nodeKeys[0]].ChainGetFinalizedTipSet(ctx)
+	if err != nil || finTs.Height() < computeMinHeight {
 		return
 	}
 
-	if head.Height() < computeMinHeight {
-		return
-	}
+	startHeight := finTs.Height() - abi.ChainEpoch(computeStartOffset)
+	endHeight := finTs.Height() - abi.ChainEpoch(computeEndOffset)
 
-	startHeight := head.Height() - abi.ChainEpoch(computeStartOffset)
-	endHeight := head.Height() - abi.ChainEpoch(computeEndOffset)
+	// Run on every node
+	for _, nodeName := range nodeKeys {
+		node := nodes[nodeName]
 
-	checkTs, err := node.ChainGetTipSetByHeight(ctx, startHeight, head.Key())
-	if err != nil {
-		log.Printf("[heavy-compute] ChainGetTipSetByHeight(%d) failed: %v", startHeight, err)
-		return
-	}
-
-	epochsChecked := 0
-	for epochsChecked < computeTargetEpochs && checkTs.Height() >= endHeight {
-		parentKey := checkTs.Parents()
-		parentTs, err := node.ChainGetTipSet(ctx, parentKey)
+		checkTs, err := node.ChainGetTipSetByHeight(ctx, startHeight, finTs.Key())
 		if err != nil {
-			log.Printf("[heavy-compute] ChainGetTipSet failed at height %d: %v", checkTs.Height(), err)
-			return
+			log.Printf("[heavy-compute] ChainGetTipSetByHeight(%d) failed for %s: %v", startHeight, nodeName, err)
+			continue
 		}
 
-		if parentTs.Height() < endHeight {
-			break
+		epochsChecked := 0
+		for epochsChecked < computeTargetEpochs && checkTs.Height() >= endHeight {
+			parentKey := checkTs.Parents()
+			parentTs, err := node.ChainGetTipSet(ctx, parentKey)
+			if err != nil {
+				log.Printf("[heavy-compute] ChainGetTipSet failed on %s at height %d: %v", nodeName, checkTs.Height(), err)
+				break
+			}
+
+			if parentTs.Height() < endHeight {
+				break
+			}
+
+			// Recompute state — this is the expensive operation that stresses the node
+			st, err := node.StateCompute(ctx, parentTs.Height(), nil, parentKey)
+			if err != nil {
+				log.Printf("[heavy-compute] StateCompute failed on %s at height %d: %v", nodeName, parentTs.Height(), err)
+				break
+			}
+
+			stateMatches := st.Root == checkTs.ParentState()
+
+			assert.Always(stateMatches, "Recomputed state root matches stored state", map[string]any{
+				"node":           nodeName,
+				"node_type":      nodeType(nodeName),
+				"exec_height":    parentTs.Height(),
+				"check_height":   checkTs.Height(),
+				"computed_root":  st.Root.String(),
+				"expected_root":  checkTs.ParentState().String(),
+				"epochs_checked": epochsChecked,
+			})
+
+			if !stateMatches {
+				log.Printf("[heavy-compute] STATE MISMATCH on %s at height %d: computed=%s expected=%s",
+					nodeName, parentTs.Height(), st.Root.String(), checkTs.ParentState().String())
+				break
+			}
+
+			checkTs = parentTs
+			epochsChecked++
 		}
 
-		// Recompute state — this is the expensive operation that stresses the node
-		st, err := node.StateCompute(ctx, parentTs.Height(), nil, parentKey)
-		if err != nil {
-			log.Printf("[heavy-compute] StateCompute failed at height %d: %v", parentTs.Height(), err)
-			// Expected: node might reject if overloaded, that's not a safety violation
-			return
-		}
-
-		stateMatches := st.Root == checkTs.ParentState()
-
-		assert.Always(stateMatches, "Recomputed state root matches stored state", map[string]any{
-			"node":           nodeName,
-			"node_type":      nodeType(nodeName),
-			"exec_height":    parentTs.Height(),
-			"check_height":   checkTs.Height(),
-			"computed_root":  st.Root.String(),
-			"expected_root":  checkTs.ParentState().String(),
-			"epochs_checked": epochsChecked,
-		})
-
-		if !stateMatches {
-			log.Printf("[heavy-compute] STATE MISMATCH on %s at height %d: computed=%s expected=%s",
-				nodeName, parentTs.Height(), st.Root.String(), checkTs.ParentState().String())
-			return
-		}
-
-		checkTs = parentTs
-		epochsChecked++
+		debugLog("  [heavy-compute] OK: verified %d epochs on %s", epochsChecked, nodeName)
 	}
-
-	debugLog("  [heavy-compute] OK: verified %d epochs on %s", epochsChecked, nodeName)
 }
 
 // ===========================================================================
-// DoChainMonitor (Consensus & Node Health)
+// Consensus & Node Health Checks
 //
-// Six sub-checks picked randomly per invocation:
-//   1. Tipset consensus at a finalized height
-//   2. Height progression (all nodes advancing)
-//   3. Peer count (all nodes have peers)
-//   4. Chain head comparison (finalized tipsets)
-//   5. State root comparison at a finalized height
-//   6. State audit (state roots + msg/receipt verification)
+// Each check is a standalone deck entry with its own weight:
+//   - DoTipsetConsensus: all nodes agree on finalized tipset
+//   - DoHeightProgression: all nodes advancing
+//   - DoPeerCount: all nodes have peers
+//   - DoHeadComparison: finalized tipset comparison
+//   - DoStateRootComparison: state root comparison at finalized height
+//   - DoStateAudit: state roots + msg/receipt verification (primary safety net)
 //
-// State-sensitive checks (1, 4, 5, 6) use ChainGetFinalizedTipSet so they
+// State-sensitive checks use ChainGetFinalizedTipSet so they
 // are safe during partition → reorg chaos.
 // ===========================================================================
 
@@ -128,26 +126,6 @@ func allNodesPastEpoch(minEpoch abi.ChainEpoch) bool {
 	return true
 }
 
-func DoChainMonitor() {
-	subCheck := rngIntn(6)
-	checkNames := []string{"tipset-consensus", "height-progression", "peer-count", "head-comparison", "state-root-comparison", "state-audit"}
-	debugLog("  [chain-monitor] sub-check: %s", checkNames[subCheck])
-
-	switch subCheck {
-	case 0:
-		doTipsetConsensus()
-	case 1:
-		doHeightProgression()
-	case 2:
-		doPeerCount()
-	case 3:
-		doHeadComparison()
-	case 4:
-		doStateRootComparison()
-	case 5:
-		doStateAudit()
-	}
-}
 
 // getFinalizedHeight returns the minimum finalized tipset height across nodes.
 // Returns 0 if any node fails. This is the safe boundary for state assertions.
@@ -171,7 +149,7 @@ func getFinalizedHeight() (abi.ChainEpoch, types.TipSetKey) {
 }
 
 // doTipsetConsensus checks that all nodes agree on the tipset at a finalized height.
-func doTipsetConsensus() {
+func DoTipsetConsensus() {
 	if len(nodeKeys) < 2 {
 		return
 	}
@@ -248,7 +226,7 @@ func doTipsetConsensus() {
 
 // doHeightProgression checks that all nodes are advancing.
 // Ported from node-health.go CheckHeightProgression.
-func doHeightProgression() {
+func DoHeightProgression() {
 	heights := make(map[string]abi.ChainEpoch)
 	for _, name := range nodeKeys {
 		finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
@@ -300,7 +278,7 @@ func doHeightProgression() {
 
 // doPeerCount checks that all nodes have peers.
 // Ported from node-health.go CheckPeerCount.
-func doPeerCount() {
+func DoPeerCount() {
 	for _, name := range nodeKeys {
 		peers, err := nodes[name].NetPeers(ctx)
 		if err != nil {
@@ -320,7 +298,7 @@ func doPeerCount() {
 
 // doHeadComparison queries ChainHead from all nodes and compares.
 // Simpler than full tipset consensus — just checks heads are close.
-func doHeadComparison() {
+func DoHeadComparison() {
 	if len(nodeKeys) < 2 {
 		return
 	}
@@ -382,7 +360,7 @@ func doHeadComparison() {
 
 // doStateRootComparison compares parent state roots across all nodes at a finalized height.
 // Catches state divergence. Uses finalized tipset so partitions don't cause false positives.
-func doStateRootComparison() {
+func DoStateRootComparison() {
 	if len(nodeKeys) < 2 {
 		return
 	}
@@ -434,7 +412,7 @@ func doStateRootComparison() {
 // doStateAudit compares state roots, parent messages, and parent receipts
 // across nodes at a finalized height. Catches non-determinism in FVM execution
 // that would cause consensus splits (the Dec 2020 chain halt bug class).
-func doStateAudit() {
+func DoStateAudit() {
 	if len(nodeKeys) < 2 {
 		return
 	}
