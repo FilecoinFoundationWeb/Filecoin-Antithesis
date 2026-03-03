@@ -248,7 +248,12 @@ func buildDeck() {
 		{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 0},
 		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 0},
 		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 0},
-		{"DoChainMonitor", "STRESS_WEIGHT_CHAIN_MONITOR", DoChainMonitor, 0},
+		{"DoTipsetConsensus", "STRESS_WEIGHT_TIPSET_CONSENSUS", DoTipsetConsensus, 3},
+		{"DoHeightProgression", "STRESS_WEIGHT_HEIGHT_PROGRESSION", DoHeightProgression, 2},
+		{"DoPeerCount", "STRESS_WEIGHT_PEER_COUNT", DoPeerCount, 2},
+		{"DoHeadComparison", "STRESS_WEIGHT_HEAD_COMPARISON", DoHeadComparison, 3},
+		{"DoStateRootComparison", "STRESS_WEIGHT_STATE_ROOT", DoStateRootComparison, 4},
+		{"DoStateAudit", "STRESS_WEIGHT_STATE_AUDIT", DoStateAudit, 5},
 		// FVM/EVM contract stress vectors
 		{"DoDeployContracts", "STRESS_WEIGHT_DEPLOY", DoDeployContracts, 2},
 		{"DoContractCall", "STRESS_WEIGHT_CONTRACT_CALL", DoContractCall, 3},
