@@ -263,6 +263,14 @@ func buildDeck() {
 		{"DoStorageSpam", "STRESS_WEIGHT_STORAGE_SPAM", DoStorageSpam, 0},
 		// Network chaos / reorg vectors
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
+		// Cross-node divergence vectors
+		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
+		{"DoMessageOrderingAttack", "STRESS_WEIGHT_MSG_ORDERING", DoMessageOrderingAttack, 1},
+		{"DoNonceBombard", "STRESS_WEIGHT_NONCE_BOMBARD", DoNonceBombard, 1},
+		{"DoGasExhaustionEdge", "STRESS_WEIGHT_GAS_EXHAUST", DoGasExhaustionEdge, 1},
+		// State tree consistency vectors
+		{"DoActorMigrationStress", "STRESS_WEIGHT_ACTOR_MIGRATION", DoActorMigrationStress, 1},
+		{"DoActorLifecycleStress", "STRESS_WEIGHT_ACTOR_LIFECYCLE", DoActorLifecycleStress, 1},
 	}
 
 	deck = nil
