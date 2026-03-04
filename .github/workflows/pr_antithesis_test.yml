@@ -2,7 +2,7 @@ name: PR Antithesis Test
 
 on:
   pull_request:
-    types: [opened, labeled, synchronize]
+    types: [labeled, synchronize]
 
 concurrency:
   group: pr-antithesis-${{ github.event.pull_request.number }}
