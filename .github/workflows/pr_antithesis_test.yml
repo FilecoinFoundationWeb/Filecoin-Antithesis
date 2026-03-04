@@ -78,8 +78,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -96,8 +94,9 @@ jobs:
           tags: |
             type=sha
             pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
       - name: Build and push lotus
-        id: build
         uses: docker/build-push-action@v5
         with:
           context: ./lotus
@@ -113,8 +112,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Disk cleanup
         run: |
@@ -136,8 +133,9 @@ jobs:
           tags: |
             type=sha
             pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
       - name: Build and push forest
-        id: build
         uses: docker/build-push-action@v5
         with:
           context: ./forest
@@ -153,8 +151,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -171,8 +167,9 @@ jobs:
           tags: |
             type=sha
             pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
       - name: Build and push drand
-        id: build
         uses: docker/build-push-action@v5
         with:
           context: ./drand
@@ -188,8 +185,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -206,8 +201,9 @@ jobs:
           tags: |
             type=sha
             pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
       - name: Build and push workload
-        id: build
         uses: docker/build-push-action@v5
         with:
           context: ./workload
@@ -223,8 +219,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -241,8 +235,9 @@ jobs:
           tags: |
             type=sha
             pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
       - name: Build and push filwizard
-        id: build
         uses: docker/build-push-action@v5
         with:
           context: ./filwizard
@@ -262,8 +257,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -280,8 +273,9 @@ jobs:
           tags: |
             type=sha
             pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
       - name: Build and push curio
-        id: build
         uses: docker/build-push-action@v5
         with:
           build-args: |
@@ -299,8 +293,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -317,8 +309,9 @@ jobs:
           tags: |
             type=sha
             pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
       - name: Build and push config
-        id: build
         uses: docker/build-push-action@v5
         with:
           file: ./Dockerfile
@@ -326,7 +319,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # ─── Trigger Antithesis test with rebuilt + latest images ───────────
+  # ─── Trigger Antithesis test with smoke-tagged + latest images ──────
 
   trigger-antithesis-test:
     needs:
@@ -353,59 +346,59 @@ jobs:
       - name: Assemble images string
         id: images
         env:
+          NOTEBOOK: ${{ matrix.notebook_name }}
           LOTUS_CHANGED: ${{ needs.detect-changes.outputs.lotus }}
           FOREST_CHANGED: ${{ needs.detect-changes.outputs.forest }}
           DRAND_CHANGED: ${{ needs.detect-changes.outputs.drand }}
           WORKLOAD_CHANGED: ${{ needs.detect-changes.outputs.workload }}
           FILWIZARD_CHANGED: ${{ needs.detect-changes.outputs.filwizard }}
           CURIO_OR_LOTUS_CHANGED: ${{ needs.detect-changes.outputs.curio_or_lotus_changed }}
-          LOTUS_DIGEST: ${{ needs.build-lotus.outputs.digest }}
-          FOREST_DIGEST: ${{ needs.build-forest.outputs.digest }}
-          DRAND_DIGEST: ${{ needs.build-drand.outputs.digest }}
-          WORKLOAD_DIGEST: ${{ needs.build-workload.outputs.digest }}
-          FILWIZARD_DIGEST: ${{ needs.build-filwizard.outputs.digest }}
-          CURIO_DIGEST: ${{ needs.build-curio.outputs.digest }}
-          CONFIG_DIGEST: ${{ needs.build-config.outputs.digest }}
         run: |
-          R="us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository"
+          # Determine smoke tag based on endpoint
+          if [[ "$NOTEBOOK" == "filecoin" ]]; then
+            SMOKE_TAG="smoke"
+          else
+            SMOKE_TAG="smoke-foc"
+          fi
 
+          # Changed images use the smoke tag; unchanged use latest
           if [[ "$LOTUS_CHANGED" == "true" ]]; then
-            LOTUS_REF="${R}/lotus@${LOTUS_DIGEST}"
+            LOTUS_REF="lotus:${SMOKE_TAG}"
           else
             LOTUS_REF="lotus:latest"
           fi
 
           if [[ "$FOREST_CHANGED" == "true" ]]; then
-            FOREST_REF="${R}/forest@${FOREST_DIGEST}"
+            FOREST_REF="forest:${SMOKE_TAG}"
           else
             FOREST_REF="forest:latest"
           fi
 
           if [[ "$DRAND_CHANGED" == "true" ]]; then
-            DRAND_REF="${R}/drand@${DRAND_DIGEST}"
+            DRAND_REF="drand:${SMOKE_TAG}"
           else
             DRAND_REF="drand:latest"
           fi
 
           if [[ "$WORKLOAD_CHANGED" == "true" ]]; then
-            WORKLOAD_REF="${R}/workload@${WORKLOAD_DIGEST}"
+            WORKLOAD_REF="workload:${SMOKE_TAG}"
           else
             WORKLOAD_REF="workload:latest"
           fi
 
           if [[ "$FILWIZARD_CHANGED" == "true" ]]; then
-            FILWIZARD_REF="${R}/filwizard@${FILWIZARD_DIGEST}"
+            FILWIZARD_REF="filwizard:${SMOKE_TAG}"
           else
             FILWIZARD_REF="filwizard:latest"
           fi
 
           if [[ "$CURIO_OR_LOTUS_CHANGED" == "true" ]]; then
-            CURIO_REF="${R}/curio@${CURIO_DIGEST}"
+            CURIO_REF="curio:${SMOKE_TAG}"
           else
             CURIO_REF="curio:latest"
           fi
 
-          CONFIG_REF="${R}/config@${CONFIG_DIGEST}"
+          CONFIG_REF="config:${SMOKE_TAG}"
 
           IMAGES="${DRAND_REF};${FOREST_REF};${LOTUS_REF};${WORKLOAD_REF};${CURIO_REF};${FILWIZARD_REF}"
           CONFIG_IMAGE="${CONFIG_REF}"
@@ -427,3 +420,4 @@ jobs:
           additional_parameters: |-
             custom.duration=1.0
             antithesis.is_ephemeral=true
+            custom.is_smoke_test=true
