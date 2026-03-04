@@ -8,6 +8,15 @@ on:
         required: true
         default: 'latest'
         description: A workload tag
+  workflow_call:
+    inputs:
+      workload_tag:
+        type: string
+        required: true
+        description: Tag to apply to the workload image
+    secrets:
+      ANTITHESIS_GAR_KEY:
+        required: true
 
 jobs:
   antithesis:
@@ -37,7 +46,7 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/workload
         tags: |
           type=sha
-          ${{ github.event.inputs.workload_tag }}
+          ${{ inputs.workload_tag }}
     - name: Build and push workload
       uses: docker/build-push-action@v5
       with:

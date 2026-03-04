@@ -8,6 +8,15 @@ on:
         required: true
         default: 'latest'
         description: A filwizard tag
+  workflow_call:
+    inputs:
+      filwizard_tag:
+        type: string
+        required: true
+        description: Tag to apply to the filwizard image
+    secrets:
+      ANTITHESIS_GAR_KEY:
+        required: true
 
 jobs:
   antithesis:
@@ -37,7 +46,7 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/filwizard
         tags: |
           type=sha
-          ${{ github.event.inputs.filwizard_tag }}
+          ${{ inputs.filwizard_tag }}
     - name: Build and push filwizard
       uses: docker/build-push-action@v5
       with:

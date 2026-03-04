@@ -1,0 +1,298 @@
+name: Build & Test
+
+# ═══════════════════════════════════════════════════════════════════
+# Self-service orchestrator.
+#
+# Triggers:
+#   1. Pull request that changes versions.env, test.env, or .env
+#   2. Manual dispatch from ANY branch (with optional overrides)
+#
+# Config is read from 3 files on the branch:
+#   versions.env  → which image commits/tags to build
+#   test.env      → test params (notebook, duration, ephemeral)
+#   .env          → network heights (baked into config image)
+#
+# Manual dispatch inputs override values from those files.
+# ═══════════════════════════════════════════════════════════════════
+on:
+  pull_request:
+    paths: ['versions.env', 'test.env', '.env']
+
+  workflow_dispatch:
+    inputs:
+      # ── Version overrides (blank = use versions.env from branch) ──
+      lotus0_commit:
+        type: string
+        required: false
+        default: ''
+        description: 'Lotus0 commit/tag override'
+      lotus1_commit:
+        type: string
+        required: false
+        default: ''
+        description: 'Lotus1 commit/tag override'
+      forest_commit:
+        type: string
+        required: false
+        default: ''
+        description: 'Forest commit/tag override'
+      curio_commit:
+        type: string
+        required: false
+        default: ''
+        description: 'Curio commit/tag override'
+      drand_commit:
+        type: string
+        required: false
+        default: ''
+        description: 'Drand tag override'
+      workload_tag:
+        type: string
+        required: false
+        default: ''
+        description: 'Workload tag override'
+      filwizard_tag:
+        type: string
+        required: false
+        default: ''
+        description: 'FilWizard tag override'
+      # ── Test param overrides (blank = use test.env from branch) ──
+      notebook:
+        type: choice
+        required: false
+        default: ''
+        description: 'Antithesis notebook override'
+        options: ['', 'filecoin', 'filecoin-foc']
+      duration:
+        type: string
+        required: false
+        default: ''
+        description: 'Duration override (hours)'
+      emails:
+        type: string
+        required: false
+        default: ''
+        description: 'Email recipients override'
+      # ── Build control ──
+      skip_build:
+        type: boolean
+        required: false
+        default: false
+        description: 'Skip builds — use existing images (e.g. when only .env heights changed)'
+
+jobs:
+  # ────────────────────────────────────────────────────
+  # Parse config files + apply overrides
+  # ────────────────────────────────────────────────────
+  parse-config:
+    runs-on: ubuntu-latest
+    outputs:
+      # Versions
+      lotus0_commit: ${{ steps.resolve.outputs.lotus0_commit }}
+      lotus1_commit: ${{ steps.resolve.outputs.lotus1_commit }}
+      forest_commit: ${{ steps.resolve.outputs.forest_commit }}
+      curio_commit:  ${{ steps.resolve.outputs.curio_commit }}
+      drand_commit:  ${{ steps.resolve.outputs.drand_commit }}
+      workload_tag:  ${{ steps.resolve.outputs.workload_tag }}
+      filwizard_tag: ${{ steps.resolve.outputs.filwizard_tag }}
+      config_tag:    ${{ steps.resolve.outputs.config_tag }}
+      lotus1_differs: ${{ steps.resolve.outputs.lotus1_differs }}
+      # Test params
+      notebook:  ${{ steps.resolve.outputs.notebook }}
+      duration:  ${{ steps.resolve.outputs.duration }}
+      emails:    ${{ steps.resolve.outputs.emails }}
+      ephemeral: ${{ steps.resolve.outputs.ephemeral }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve config
+        id: resolve
+        run: |
+          # ── Read file defaults ──
+          source versions.env
+          [ -f test.env ] && source test.env
+
+          # ── Apply manual dispatch overrides ──
+          [ -n "${{ inputs.lotus0_commit }}" ]  && LOTUS0_COMMIT="${{ inputs.lotus0_commit }}"
+          [ -n "${{ inputs.lotus1_commit }}" ]  && LOTUS1_COMMIT="${{ inputs.lotus1_commit }}"
+          [ -n "${{ inputs.forest_commit }}" ]  && FOREST_COMMIT="${{ inputs.forest_commit }}"
+          [ -n "${{ inputs.curio_commit }}" ]   && CURIO_COMMIT="${{ inputs.curio_commit }}"
+          [ -n "${{ inputs.drand_commit }}" ]   && DRAND_COMMIT="${{ inputs.drand_commit }}"
+          [ -n "${{ inputs.workload_tag }}" ]   && WORKLOAD_TAG="${{ inputs.workload_tag }}"
+          [ -n "${{ inputs.filwizard_tag }}" ]  && FILWIZARD_TAG="${{ inputs.filwizard_tag }}"
+          [ -n "${{ inputs.notebook }}" ]       && NOTEBOOK="${{ inputs.notebook }}"
+          [ -n "${{ inputs.duration }}" ]       && DURATION="${{ inputs.duration }}"
+          [ -n "${{ inputs.emails }}" ]         && EMAILS="${{ inputs.emails }}"
+
+          CONFIG_TAG="${GITHUB_SHA:0:7}"
+
+          echo "=== Resolved config ==="
+          echo "  Versions: lotus0=$LOTUS0_COMMIT lotus1=$LOTUS1_COMMIT forest=$FOREST_COMMIT"
+          echo "            curio=$CURIO_COMMIT drand=$DRAND_COMMIT"
+          echo "            workload=$WORKLOAD_TAG filwizard=$FILWIZARD_TAG config=$CONFIG_TAG"
+          echo "  Test:     notebook=${NOTEBOOK:-filecoin} duration=${DURATION:-1.5} ephemeral=${EPHEMERAL:-true}"
+
+          # Versions
+          echo "lotus0_commit=$LOTUS0_COMMIT"   >> $GITHUB_OUTPUT
+          echo "lotus1_commit=$LOTUS1_COMMIT"   >> $GITHUB_OUTPUT
+          echo "forest_commit=$FOREST_COMMIT"   >> $GITHUB_OUTPUT
+          echo "curio_commit=$CURIO_COMMIT"     >> $GITHUB_OUTPUT
+          echo "drand_commit=$DRAND_COMMIT"     >> $GITHUB_OUTPUT
+          echo "workload_tag=$WORKLOAD_TAG"     >> $GITHUB_OUTPUT
+          echo "filwizard_tag=$FILWIZARD_TAG"   >> $GITHUB_OUTPUT
+          echo "config_tag=$CONFIG_TAG"         >> $GITHUB_OUTPUT
+
+          # Derived
+          [ "$LOTUS0_COMMIT" != "$LOTUS1_COMMIT" ] && echo "lotus1_differs=true" >> $GITHUB_OUTPUT || echo "lotus1_differs=false" >> $GITHUB_OUTPUT
+
+          # Test params
+          echo "notebook=${NOTEBOOK:-filecoin}"   >> $GITHUB_OUTPUT
+          echo "duration=${DURATION:-1.5}"        >> $GITHUB_OUTPUT
+          echo "emails=${EMAILS:-}"               >> $GITHUB_OUTPUT
+          echo "ephemeral=${EPHEMERAL:-true}"     >> $GITHUB_OUTPUT
+
+  # ────────────────────────────────────────────────────
+  # Build images (parallel, skippable)
+  # ────────────────────────────────────────────────────
+  build-lotus0:
+    needs: parse-config
+    if: ${{ inputs.skip_build != true }}
+    uses: ./.github/workflows/build_push_lotus.yml
+    with:
+      lotus_tag: ${{ needs.parse-config.outputs.lotus0_commit }}
+    secrets:
+      ANTITHESIS_GAR_KEY: ${{ secrets.ANTITHESIS_GAR_KEY }}
+
+  build-lotus1:
+    needs: parse-config
+    if: ${{ inputs.skip_build != true && needs.parse-config.outputs.lotus1_differs == 'true' }}
+    uses: ./.github/workflows/build_push_lotus.yml
+    with:
+      lotus_tag: ${{ needs.parse-config.outputs.lotus1_commit }}
+    secrets:
+      ANTITHESIS_GAR_KEY: ${{ secrets.ANTITHESIS_GAR_KEY }}
+
+  build-forest:
+    needs: parse-config
+    if: ${{ inputs.skip_build != true }}
+    uses: ./.github/workflows/build_push_forest.yml
+    with:
+      forest_commit: ${{ needs.parse-config.outputs.forest_commit }}
+    secrets:
+      ANTITHESIS_GAR_KEY: ${{ secrets.ANTITHESIS_GAR_KEY }}
+
+  build-drand:
+    needs: parse-config
+    if: ${{ inputs.skip_build != true }}
+    uses: ./.github/workflows/build_push_drand.yml
+    with:
+      drand_tag: ${{ needs.parse-config.outputs.drand_commit }}
+    secrets:
+      ANTITHESIS_GAR_KEY: ${{ secrets.ANTITHESIS_GAR_KEY }}
+
+  build-workload:
+    needs: parse-config
+    if: ${{ inputs.skip_build != true }}
+    uses: ./.github/workflows/build_push_workload.yml
+    with:
+      workload_tag: ${{ needs.parse-config.outputs.workload_tag }}
+    secrets:
+      ANTITHESIS_GAR_KEY: ${{ secrets.ANTITHESIS_GAR_KEY }}
+
+  build-filwizard:
+    needs: parse-config
+    if: ${{ inputs.skip_build != true }}
+    uses: ./.github/workflows/build_push_filwizard.yml
+    with:
+      filwizard_tag: ${{ needs.parse-config.outputs.filwizard_tag }}
+    secrets:
+      ANTITHESIS_GAR_KEY: ${{ secrets.ANTITHESIS_GAR_KEY }}
+
+  build-curio:
+    needs: [parse-config, build-lotus0]
+    if: ${{ inputs.skip_build != true && !failure() && !cancelled() }}
+    uses: ./.github/workflows/build_push_curio.yml
+    with:
+      curio_tag: ${{ needs.parse-config.outputs.curio_commit }}
+      lotus_tag: ${{ needs.parse-config.outputs.lotus0_commit }}
+    secrets:
+      ANTITHESIS_GAR_KEY: ${{ secrets.ANTITHESIS_GAR_KEY }}
+
+  # ────────────────────────────────────────────────────
+  # Build config image (bakes resolved compose + .env)
+  # Uses always() so skipped optional builds don't block
+  # ────────────────────────────────────────────────────
+  build-config:
+    needs: [parse-config, build-lotus0, build-lotus1, build-forest, build-curio, build-drand, build-workload, build-filwizard]
+    if: ${{ always() && !failure() }}
+    uses: ./.github/workflows/build_push_config.yml
+    with:
+      config_tag:    ${{ needs.parse-config.outputs.config_tag }}
+      lotus0_commit: ${{ needs.parse-config.outputs.lotus0_commit }}
+      lotus1_commit: ${{ needs.parse-config.outputs.lotus1_commit }}
+      forest_commit: ${{ needs.parse-config.outputs.forest_commit }}
+      curio_commit:  ${{ needs.parse-config.outputs.curio_commit }}
+      drand_commit:  ${{ needs.parse-config.outputs.drand_commit }}
+      workload_tag:  ${{ needs.parse-config.outputs.workload_tag }}
+      filwizard_tag: ${{ needs.parse-config.outputs.filwizard_tag }}
+    secrets:
+      ANTITHESIS_GAR_KEY: ${{ secrets.ANTITHESIS_GAR_KEY }}
+
+  # ────────────────────────────────────────────────────
+  # Trigger Antithesis test
+  # ────────────────────────────────────────────────────
+  run-test:
+    needs: [parse-config, build-config]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Build images list
+        id: images
+        run: |
+          L0="${{ needs.parse-config.outputs.lotus0_commit }}"
+          L1="${{ needs.parse-config.outputs.lotus1_commit }}"
+          F="${{ needs.parse-config.outputs.forest_commit }}"
+          C="${{ needs.parse-config.outputs.curio_commit }}"
+          D="${{ needs.parse-config.outputs.drand_commit }}"
+          W="${{ needs.parse-config.outputs.workload_tag }}"
+          FW="${{ needs.parse-config.outputs.filwizard_tag }}"
+
+          IMAGES="drand:${D};forest:${F};lotus:${L0}"
+          [ "$L1" != "$L0" ] && IMAGES="${IMAGES};lotus:${L1}"
+          IMAGES="${IMAGES};workload:${W};curio:${C};filwizard:${FW}"
+          echo "images=$IMAGES" >> $GITHUB_OUTPUT
+
+      - name: Build description
+        id: desc
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "text=PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+          else
+            echo "text=Test from ${{ github.ref_name }} by ${{ github.actor }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build additional params
+        id: params
+        run: |
+          PARAMS="custom.duration=${{ needs.parse-config.outputs.duration }}"
+          PARAMS="${PARAMS}
+          antithesis.is_ephemeral=${{ needs.parse-config.outputs.ephemeral }}"
+
+          # Write multiline output
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "params<<$EOF" >> $GITHUB_OUTPUT
+          echo "$PARAMS" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
+
+      - uses: antithesishq/antithesis-trigger-action@main
+        with:
+          notebook_name: ${{ needs.parse-config.outputs.notebook }}
+          tenant: cobalt-bunny
+          username: filecoin
+          password: ${{ secrets.ANTITHESIS_PASSWORD }}
+          github_token: ${{ secrets.GH_PAT }}
+          images: ${{ steps.images.outputs.images }}
+          config_image: config:${{ needs.parse-config.outputs.config_tag }}
+          description: ${{ steps.desc.outputs.text }}
+          email_recipients: ${{ needs.parse-config.outputs.emails }}
+          additional_parameters: ${{ steps.params.outputs.params }}

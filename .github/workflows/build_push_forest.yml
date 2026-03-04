@@ -3,7 +3,7 @@ name: Build & Push Forest
 on:
   schedule:
     # 6 PM EST, Mon & Thurs
-    - cron: '0 22 * * 1' 
+    - cron: '0 22 * * 1'
   workflow_dispatch:
     inputs:
       forest_commit:
@@ -11,6 +11,15 @@ on:
         required: true
         default: '9ae9c64'
         description: A commit hash that can be found from (https://github.com/ChainSafe/forest)
+  workflow_call:
+    inputs:
+      forest_commit:
+        type: string
+        required: true
+        description: A commit hash from (https://github.com/ChainSafe/forest)
+    secrets:
+      ANTITHESIS_GAR_KEY:
+        required: true
 
 jobs:
   antithesis:
@@ -64,13 +73,13 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/forest
         tags: |
             type=sha
-            ${{ github.event.inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
+            ${{ inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
             latest
     - name: Build and push forest
       uses: docker/build-push-action@v5
       with:
         build-args: |
-            GIT_COMMIT=${{ github.event.inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
+            GIT_COMMIT=${{ inputs.forest_commit || steps.latest-forest-commit.outputs.commit-hash }}
             LOCAL_BUILD=0
         context: ./forest
         file: ./forest/Dockerfile

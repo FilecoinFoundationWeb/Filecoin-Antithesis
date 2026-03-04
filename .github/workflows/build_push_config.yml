@@ -8,6 +8,78 @@ on:
         required: true
         default: 'latest'
         description: A config tag
+      lotus0_commit:
+        type: string
+        required: false
+        default: ''
+        description: 'Lotus0 image tag (empty = read from versions.env)'
+      lotus1_commit:
+        type: string
+        required: false
+        default: ''
+        description: 'Lotus1 image tag (empty = read from versions.env)'
+      forest_commit:
+        type: string
+        required: false
+        default: ''
+        description: 'Forest image tag (empty = read from versions.env)'
+      curio_commit:
+        type: string
+        required: false
+        default: ''
+        description: 'Curio image tag (empty = read from versions.env)'
+      drand_commit:
+        type: string
+        required: false
+        default: ''
+        description: 'Drand image tag (empty = read from versions.env)'
+      workload_tag:
+        type: string
+        required: false
+        default: ''
+        description: 'Workload image tag (empty = read from versions.env)'
+      filwizard_tag:
+        type: string
+        required: false
+        default: ''
+        description: 'FilWizard image tag (empty = read from versions.env)'
+  workflow_call:
+    inputs:
+      config_tag:
+        type: string
+        required: true
+        description: Tag to apply to the config image
+      lotus0_commit:
+        type: string
+        required: false
+        default: ''
+      lotus1_commit:
+        type: string
+        required: false
+        default: ''
+      forest_commit:
+        type: string
+        required: false
+        default: ''
+      curio_commit:
+        type: string
+        required: false
+        default: ''
+      drand_commit:
+        type: string
+        required: false
+        default: ''
+      workload_tag:
+        type: string
+        required: false
+        default: ''
+      filwizard_tag:
+        type: string
+        required: false
+        default: ''
+    secrets:
+      ANTITHESIS_GAR_KEY:
+        required: true
 
 jobs:
   antithesis:
@@ -26,17 +98,44 @@ jobs:
     - name: Login to Antithesis Google Artifact Registry
       uses: docker/login-action@v3
       with:
-        # These secrets would need to be populated in your repo and named
-        # this way if you want to copy-and-paste this configuration.
         registry: us-central1-docker.pkg.dev
         username: _json_key
         password: ${{ secrets.ANTITHESIS_GAR_KEY }}
 
-    # There is a lot of copy-and-paste in these sections.
-    # This could be streamlined by using a matrix configuration, which would
-    # parameterize the extract and build stages. However, it would run both the
-    # setup and teardown sections N times, once for each of the N containers we
-    # are going to build and deploy.
+    - name: Resolve docker-compose.yaml image tags
+      run: |
+        # Start with versions.env defaults
+        source versions.env
+
+        # Override with any values passed by the caller.
+        # This ensures the config image bakes the EXACT tags the orchestrator
+        # built, not just whatever happens to be in versions.env on disk.
+        [ -n "${{ inputs.lotus0_commit }}" ]  && LOTUS0_COMMIT="${{ inputs.lotus0_commit }}"
+        [ -n "${{ inputs.lotus1_commit }}" ]  && LOTUS1_COMMIT="${{ inputs.lotus1_commit }}"
+        [ -n "${{ inputs.forest_commit }}" ]  && FOREST_COMMIT="${{ inputs.forest_commit }}"
+        [ -n "${{ inputs.curio_commit }}" ]   && CURIO_COMMIT="${{ inputs.curio_commit }}"
+        [ -n "${{ inputs.drand_commit }}" ]   && DRAND_COMMIT="${{ inputs.drand_commit }}"
+        [ -n "${{ inputs.workload_tag }}" ]   && WORKLOAD_TAG="${{ inputs.workload_tag }}"
+        [ -n "${{ inputs.filwizard_tag }}" ]  && FILWIZARD_TAG="${{ inputs.filwizard_tag }}"
+
+        export LOTUS0_COMMIT LOTUS1_COMMIT FOREST_COMMIT CURIO_COMMIT DRAND_COMMIT WORKLOAD_TAG FILWIZARD_TAG
+
+        echo "Baking image tags into docker-compose.yaml:"
+        echo "  LOTUS0_COMMIT=$LOTUS0_COMMIT"
+        echo "  LOTUS1_COMMIT=$LOTUS1_COMMIT"
+        echo "  FOREST_COMMIT=$FOREST_COMMIT"
+        echo "  CURIO_COMMIT=$CURIO_COMMIT"
+        echo "  DRAND_COMMIT=$DRAND_COMMIT"
+        echo "  WORKLOAD_TAG=$WORKLOAD_TAG"
+        echo "  FILWIZARD_TAG=$FILWIZARD_TAG"
+
+        # Strip ${VAR:-default} down to ${VAR} so envsubst can process them
+        # (envsubst does not handle the :-default shell syntax)
+        sed 's/:-[^}]*//g' docker-compose.yaml \
+          | envsubst '$LOTUS0_COMMIT $LOTUS1_COMMIT $FOREST_COMMIT $CURIO_COMMIT $DRAND_COMMIT $WORKLOAD_TAG $FILWIZARD_TAG' \
+          > docker-compose.resolved.yaml
+        mv docker-compose.resolved.yaml docker-compose.yaml
+
     - name: Extract metadata (tags) for Docker config
       id: meta-config
       uses: docker/metadata-action@v5
@@ -44,7 +143,7 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/config
         tags: |
           type=sha
-          ${{ inputs.config_tag }}
+          ${{ inputs.config_tag || 'latest' }}
     - name: Build and push config
       uses: docker/build-push-action@v5
       with:

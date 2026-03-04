@@ -1,103 +1,161 @@
 name: Run Antithesis Test
 
-on: 
+# ═══════════════════════════════════════════════════════════════════
+# Trigger a test run using EXISTING images (no builds).
+#
+# For building + testing, use "Build & Test" workflow instead.
+#
+# Reads versions.env + test.env for defaults. Manual inputs override.
+# Scheduled runs use whatever is pinned in versions.env on main.
+# ═══════════════════════════════════════════════════════════════════
+on:
   schedule:
-    - cron: '0 1 * * *'  # 8 PM EST
-    - cron: '0 17 * * *' # noon EST
+    - cron: '0 1 * * *'   # 8 PM EST — nightly long run
+    - cron: '0 17 * * *'  # noon EST — short run
   workflow_dispatch:
     inputs:
-      endpoint:
-        type: string
-        required: true
-        default: 'filecoin'
-        description: Endpoint to run test (filecoin or filecoin-foc)
+      notebook:
+        type: choice
+        required: false
+        default: ''
+        description: 'Notebook (blank = test.env)'
+        options: ['', 'filecoin', 'filecoin-foc']
       duration:
         type: string
-        required: true
-        default: '1'
-        description: Duration to the test run
+        required: false
+        default: ''
+        description: 'Duration in hours (blank = test.env)'
       emails:
         type: string
-        required: true
-        description: Email receipents
+        required: false
+        default: ''
+        description: 'Email recipients'
       drand:
         type: string
-        required: true
-        default: 'latest'
-        description: The drand image tag used for the test run
+        required: false
+        default: ''
+        description: 'Drand tag (blank = versions.env)'
       forest:
         type: string
-        required: true
-        default: 'latest'
-        description: The forest image tag used for the test run
+        required: false
+        default: ''
+        description: 'Forest tag (blank = versions.env)'
       lotus:
         type: string
-        required: true
-        default: 'latest'
-        description: The lotus image tag used for the test run
+        required: false
+        default: ''
+        description: 'Lotus tag (blank = versions.env)'
       curio:
         type: string
-        required: true
-        default: 'latest'
-        description: The curio image tag used for the test run
+        required: false
+        default: ''
+        description: 'Curio tag (blank = versions.env)'
       workload:
         type: string
-        required: true
-        default: 'latest'
-        description: The workload image tag used for the test run
+        required: false
+        default: ''
+        description: 'Workload tag (blank = versions.env)'
       filwizard:
         type: string
-        required: true
-        default: 'latest'
-        description: The filwizard image tag used for the test run
+        required: false
+        default: ''
+        description: 'FilWizard tag (blank = versions.env)'
       config:
         type: string
-        required: true
-        default: 'latest'
-        description: The config image tag used for the test run
+        required: false
+        default: ''
+        description: 'Config tag (blank = versions.env)'
       is_ephemeral:
         type: boolean
         required: false
         default: false
-        description: Enable to run an ephermeral test that does not affect findings history.
+        description: 'Ephemeral test (no findings history impact)'
       is_smoke_test:
         type: boolean
         required: false
         default: false
-        description: Enable to run an smoke test.
+        description: 'Smoke test'
 
 jobs:
+  # ── Resolve defaults from config files ──
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      images:   ${{ steps.r.outputs.images }}
+      config:   ${{ steps.r.outputs.config }}
+      notebook: ${{ steps.r.outputs.notebook }}
+      duration: ${{ steps.r.outputs.duration }}
+      emails:   ${{ steps.r.outputs.emails }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve
+        id: r
+        run: |
+          source versions.env
+          [ -f test.env ] && source test.env
+
+          # Override from inputs
+          [ -n "${{ inputs.drand }}" ]     && DRAND_COMMIT="${{ inputs.drand }}"
+          [ -n "${{ inputs.forest }}" ]    && FOREST_COMMIT="${{ inputs.forest }}"
+          [ -n "${{ inputs.lotus }}" ]     && LOTUS0_COMMIT="${{ inputs.lotus }}"
+          [ -n "${{ inputs.curio }}" ]     && CURIO_COMMIT="${{ inputs.curio }}"
+          [ -n "${{ inputs.workload }}" ]  && WORKLOAD_TAG="${{ inputs.workload }}"
+          [ -n "${{ inputs.filwizard }}" ] && FILWIZARD_TAG="${{ inputs.filwizard }}"
+          [ -n "${{ inputs.config }}" ]    && CONFIG_TAG="${{ inputs.config }}"
+          [ -n "${{ inputs.notebook }}" ]  && NOTEBOOK="${{ inputs.notebook }}"
+          [ -n "${{ inputs.duration }}" ]  && DURATION="${{ inputs.duration }}"
+          [ -n "${{ inputs.emails }}" ]    && EMAILS="${{ inputs.emails }}"
+
+          IMAGES="drand:${DRAND_COMMIT};forest:${FOREST_COMMIT};lotus:${LOTUS0_COMMIT};workload:${WORKLOAD_TAG};curio:${CURIO_COMMIT};filwizard:${FILWIZARD_TAG}"
+          echo "images=$IMAGES"                >> $GITHUB_OUTPUT
+          echo "config=${CONFIG_TAG:-latest}"  >> $GITHUB_OUTPUT
+          echo "notebook=${NOTEBOOK:-filecoin}" >> $GITHUB_OUTPUT
+          echo "duration=${DURATION:-1.5}"     >> $GITHUB_OUTPUT
+          echo "emails=${EMAILS:-}"            >> $GITHUB_OUTPUT
+
+  # ── Manual run ──
   manual_run:
     if: github.event_name == 'workflow_dispatch'
+    needs: resolve
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
+      - name: Build params
+        id: params
+        run: |
+          PARAMS="custom.duration=${{ needs.resolve.outputs.duration }}"
+          PARAMS="${PARAMS}
+          antithesis.is_ephemeral=${{ inputs.is_ephemeral }}"
+          PARAMS="${PARAMS}
+          custom.is_smoke_test=${{ inputs.is_smoke_test }}"
+
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "params<<$EOF" >> $GITHUB_OUTPUT
+          echo "$PARAMS" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
+
       - uses: antithesishq/antithesis-trigger-action@main
         with:
-          notebook_name: ${{ inputs.endpoint }}
+          notebook_name: ${{ needs.resolve.outputs.notebook }}
           tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};curio:${{ inputs.curio }};filwizard:${{ inputs.filwizard }};
-          config_image: config:${{ github.event.inputs.config }}
-          description: "Manual Test"
-          email_recipients: ${{ github.event.inputs.emails }}
-          additional_parameters: |-
-            custom.duration=${{ github.event.inputs.duration }}
-            antithesis.is_ephemeral=${{ inputs.is_ephemeral }}
-            custom.is_smoke_test=${{ inputs.is_smoke_test }}
+          images: ${{ needs.resolve.outputs.images }}
+          config_image: config:${{ needs.resolve.outputs.config }}
+          description: "Manual Test by ${{ github.actor }}"
+          email_recipients: ${{ needs.resolve.outputs.emails }}
+          additional_parameters: ${{ steps.params.outputs.params }}
 
-
-  scheduled_run_a:
-    name: "Nightly @ 8 PM EST - Implementors Team"
+  # ── Nightly 12hr — Implementors ──
+  nightly_implementors:
+    name: "Nightly @ 8 PM EST - Implementors"
     if: github.event_name == 'schedule' && github.event.schedule == '0 1 * * *'
+    needs: resolve
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    permissions: { contents: read, packages: write }
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
@@ -106,22 +164,22 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
-          config_image: config:latest
-          description: "Scheduled Filecoin Continuous Test: 12 hr nightly run - Implementors Team"
+          images: ${{ needs.resolve.outputs.images }}
+          config_image: config:${{ needs.resolve.outputs.config }}
+          description: "Nightly 12hr - Implementors"
           additional_parameters: |-
             custom.duration=12
             antithesis.source=main
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
-      
-  scheduled_run_b:
-    name: "Nightly @ 8 PM EST - FOC Team"
+
+  # ── Nightly 12hr — FOC ──
+  nightly_foc:
+    name: "Nightly @ 8 PM EST - FOC"
     if: github.event_name == 'schedule' && github.event.schedule == '0 1 * * *'
+    needs: resolve
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    permissions: { contents: read, packages: write }
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
@@ -130,22 +188,22 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
-          config_image: config:latest
-          description: "Scheduled Filecoin Continuous Test: 12 hr nightly run - FOC Team"
+          images: ${{ needs.resolve.outputs.images }}
+          config_image: config:${{ needs.resolve.outputs.config }}
+          description: "Nightly 12hr - FOC"
           additional_parameters: |-
             custom.duration=12
             antithesis.source=main
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
-      
-  scheduled_run_c:
-    name: "Noon EST Short Run - Implementors Team"
+
+  # ── Noon 1.5hr — Implementors ──
+  short_implementors:
+    name: "Noon EST Short - Implementors"
     if: github.event_name == 'schedule' && github.event.schedule == '0 17 * * *'
+    needs: resolve
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    permissions: { contents: read, packages: write }
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
@@ -154,22 +212,22 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
-          config_image: config:latest
-          description: "Scheduled Filecoin Continuous Test: 1.5 hr noon run - Implementors Team"
+          images: ${{ needs.resolve.outputs.images }}
+          config_image: config:${{ needs.resolve.outputs.config }}
+          description: "Short 1.5hr noon - Implementors"
           additional_parameters: |-
             custom.duration=1.5
             antithesis.source=short
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
 
-  scheduled_run_d:
-    name: "Noon EST Short Run - FOC Team" 
+  # ── Noon 1.5hr — FOC ──
+  short_foc:
+    name: "Noon EST Short - FOC"
     if: github.event_name == 'schedule' && github.event.schedule == '0 17 * * *'
+    needs: resolve
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    permissions: { contents: read, packages: write }
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
@@ -178,9 +236,9 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
-          config_image: config:latest
-          description: "Scheduled Filecoin Continuous Test: 1.5 hr noon run - FOC Team"
+          images: ${{ needs.resolve.outputs.images }}
+          config_image: config:${{ needs.resolve.outputs.config }}
+          description: "Short 1.5hr noon - FOC"
           additional_parameters: |-
             custom.duration=1.5
             antithesis.source=short

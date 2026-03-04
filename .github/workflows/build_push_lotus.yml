@@ -1,9 +1,9 @@
 name: Build & Push Lotus
 
-on: 
+on:
   schedule:
     # 6 PM EST, Mon & Thurs
-    - cron: '0 22 * * 1' 
+    - cron: '0 22 * * 1'
   workflow_dispatch:
     inputs:
       lotus_tag:
@@ -11,6 +11,15 @@ on:
         required: true
         default: '42d68a5'
         description: A commit hash that can be found from (https://github.com/filecoin-project/lotus)
+  workflow_call:
+    inputs:
+      lotus_tag:
+        type: string
+        required: true
+        description: A commit hash or tag from (https://github.com/filecoin-project/lotus)
+    secrets:
+      ANTITHESIS_GAR_KEY:
+        required: true
 
 jobs:
   antithesis:
@@ -53,13 +62,13 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/lotus
         tags: |
           type=sha
-          ${{ github.event.inputs.lotus_tag || steps.latest-lotus-commit.outputs.commit-hash }}
+          ${{ inputs.lotus_tag || steps.latest-lotus-commit.outputs.commit-hash }}
           latest
     - name: Build and push lotus
       uses: docker/build-push-action@v5
       with:
         build-args: |
-          GIT_BRANCH=${{ github.event.inputs.lotus_tag || steps.latest-lotus-commit.outputs.commit-hash }}
+          GIT_BRANCH=${{ inputs.lotus_tag || steps.latest-lotus-commit.outputs.commit-hash }}
         context: ./lotus
         file: ./lotus/Dockerfile
         push: true

@@ -1,6 +1,6 @@
 name: Build & Push Drand
 
-on: 
+on:
   workflow_dispatch:
     inputs:
       drand_tag:
@@ -8,6 +8,15 @@ on:
         required: true
         default: 'v2.0.4'
         description: A drand tag that can be found from (https://github.com/drand/drand)
+  workflow_call:
+    inputs:
+      drand_tag:
+        type: string
+        required: true
+        description: A tag or commit from (https://github.com/drand/drand)
+    secrets:
+      ANTITHESIS_GAR_KEY:
+        required: true
 
 jobs:
   antithesis:
@@ -44,14 +53,14 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/drand
         tags: |
           type=sha
-          ${{ github.event.inputs.drand_tag }}
+          ${{ inputs.drand_tag }}
           latest
     # Now build and push each of the containers.
     - name: Build and push drand
       uses: docker/build-push-action@v5
       with:
         build-args: |
-          GIT_BRANCH=${{ github.event.inputs.drand_tag }}
+          GIT_BRANCH=${{ inputs.drand_tag }}
           LOCAL_BUILD=0
         context: ./drand
         file: ./drand/Dockerfile

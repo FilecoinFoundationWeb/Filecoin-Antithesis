@@ -45,7 +45,7 @@ services:
   drand0:
     <<: [ *filecoin_service ]
     container_name: drand0
-    image: drand:latest
+    image: drand:${DRAND_COMMIT:-latest}
     entrypoint: ./start-drand0.sh
     healthcheck:
       <<: *healthcheck_settings
@@ -54,7 +54,7 @@ services:
   drand1:
     <<: [ *filecoin_service, *needs_drand0_started ]
     container_name: drand1
-    image: drand:latest
+    image: drand:${DRAND_COMMIT:-latest}
     entrypoint: ./start-drand1.sh
     healthcheck:
       <<: *healthcheck_settings
@@ -63,7 +63,7 @@ services:
   drand2:
     <<: [ *filecoin_service, *needs_drand0_started ]
     container_name: drand2
-    image: drand:latest
+    image: drand:${DRAND_COMMIT:-latest}
     entrypoint: ./start-drand2.sh
     healthcheck:
       <<: *healthcheck_settings
@@ -72,7 +72,7 @@ services:
   lotus0:
     <<: [ *filecoin_service, *needs_all_drand_healthy ]
     container_name: lotus0
-    image: lotus:latest
+    image: lotus:${LOTUS0_COMMIT:-latest}
     entrypoint: [ "./scripts/start-lotus.sh", "0" ]
     healthcheck:
       <<: *healthcheck_settings
@@ -80,7 +80,7 @@ services:
 
   lotus1:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
-    image: lotus:latest
+    image: lotus:${LOTUS1_COMMIT:-latest}
     container_name: lotus1
     entrypoint: [ "./scripts/start-lotus.sh", "1" ]
     healthcheck:
@@ -89,13 +89,13 @@ services:
 
   forest0:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
-    image: forest:latest
+    image: forest:${FOREST_COMMIT:-latest}
     container_name: forest0
     entrypoint: [ "./scripts/start-forest.sh", "0" ]
 
   workload:
     <<: [ *filecoin_service ]
-    image: workload:latest
+    image: workload:${WORKLOAD_TAG:-latest}
     container_name: workload
     environment:
       - STRESS_NODES=lotus0,lotus1,forest0
@@ -128,13 +128,13 @@ services:
 
   lotus-miner0:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
-    image: lotus:latest
+    image: lotus:${LOTUS0_COMMIT:-latest}
     container_name: lotus-miner0
     entrypoint: [ "./scripts/start-lotus-miner.sh", "0" ]
 
   lotus-miner1:
     <<: [ *filecoin_service, *needs_lotus1_healthy ]
-    image: lotus:latest
+    image: lotus:${LOTUS1_COMMIT:-latest}
     container_name: lotus-miner1
     entrypoint: [ "./scripts/start-lotus-miner.sh", "1" ]
 
@@ -146,7 +146,7 @@ services:
   # FilWizard: contract deployment + environment wiring
   filwizard:
     <<: [ *filecoin_service ]
-    image: filwizard:latest
+    image: filwizard:${FILWIZARD_TAG:-latest}
     container_name: filwizard
     entrypoint: [ "/filwizard-entrypoint.sh" ]
     volumes:
@@ -190,7 +190,7 @@ services:
   # Curio service
   curio:
     <<: [ *filecoin_service ]
-    image: curio:${CURIO_TAG:-latest}
+    image: curio:${CURIO_COMMIT:-latest}
     container_name: curio
     ports:
       - "4433:443"

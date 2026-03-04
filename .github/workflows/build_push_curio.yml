@@ -1,9 +1,9 @@
 name: Build & Push Curio
 
-on: 
+on:
   schedule:
     # 6 PM EST, Mon & Thurs
-    - cron: '0 22 * * 1' 
+    - cron: '0 22 * * 1'
   workflow_dispatch:
     inputs:
       curio_tag:
@@ -16,6 +16,19 @@ on:
         required: true
         default: 'latest'
         description: Tag of lotus docker image
+  workflow_call:
+    inputs:
+      curio_tag:
+        type: string
+        required: true
+        description: A commit hash from (https://github.com/filecoin-project/curio)
+      lotus_tag:
+        type: string
+        required: true
+        description: Tag of lotus docker image to build curio against
+    secrets:
+      ANTITHESIS_GAR_KEY:
+        required: true
 jobs:
   antithesis:
     runs-on: ubuntu-latest
@@ -57,7 +70,7 @@ jobs:
         images: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository/curio
         tags: |
           type=sha
-          ${{ github.event.inputs.curio_tag || steps.latest-curio-commit.outputs.commit-hash }}
+          ${{ inputs.curio_tag || steps.latest-curio-commit.outputs.commit-hash }}
           latest
     - name: Build and push curio
       uses: docker/build-push-action@v5
