@@ -221,6 +221,7 @@ func DoTipsetConsensus() {
 		"tipset_keys":    tipsetKeys,
 		"unique_tipsets": len(tipsetKeys),
 		"nodes_checked":  responded,
+		"nodes":          nodeKeys,
 		"errors":         errs,
 	})
 
@@ -278,6 +279,7 @@ func DoHeightProgression() {
 		"spread":  spread,
 		"min":     minH,
 		"max":     maxH,
+		"nodes":   nodeKeys,
 	})
 
 }
@@ -356,10 +358,16 @@ func DoHeadComparison() {
 			}
 		}
 
+		nodeTipsets := make(map[string]string, len(group))
+		for _, h := range group {
+			nodeTipsets[h.name] = h.key
+		}
+
 		assert.Always(allMatch, "Nodes at the same height agree on the same tipset", map[string]any{
-			"height":     height,
-			"nodes":      len(group),
-			"keys_match": allMatch,
+			"height":       height,
+			"nodes":        len(group),
+			"keys_match":   allMatch,
+			"node_tipsets": nodeTipsets,
 		})
 	}
 }
@@ -406,6 +414,7 @@ func DoStateRootComparison() {
 		"state_roots":   stateRoots,
 		"unique_states": len(stateRoots),
 		"nodes_checked": len(nodeKeys),
+		"nodes":         nodeKeys,
 	})
 
 	if statesMatch {
@@ -461,6 +470,7 @@ func DoStateAudit() {
 		"finalized_at":  finalizedHeight,
 		"unique_states": len(stateRoots),
 		"state_roots":   stateRoots,
+		"nodes":         nodeKeys,
 	})
 
 	if !rootsMatch {
@@ -493,26 +503,36 @@ func DoStateAudit() {
 
 		msgsMatch := len(msgsA) == len(msgsB)
 		assert.Always(msgsMatch, "Parent messages match across nodes", map[string]any{
-			"height":  checkHeight,
-			"block":   blkCid.String()[:16],
-			"count_a": len(msgsA),
-			"count_b": len(msgsB),
+			"height":      checkHeight,
+			"block":       blkCid.String()[:16],
+			"node_a":      nodeA,
+			"node_a_type": nodeType(nodeA),
+			"node_b":      nodeB,
+			"node_b_type": nodeType(nodeB),
+			"count_a":     len(msgsA),
+			"count_b":     len(msgsB),
 		})
 
 		receiptsMatch := len(receiptsA) == len(receiptsB)
 		assert.Always(receiptsMatch, "Parent receipts match across nodes", map[string]any{
-			"height":  checkHeight,
-			"block":   blkCid.String()[:16],
-			"count_a": len(receiptsA),
-			"count_b": len(receiptsB),
+			"height":      checkHeight,
+			"block":       blkCid.String()[:16],
+			"node_a":      nodeA,
+			"node_a_type": nodeType(nodeA),
+			"node_b":      nodeB,
+			"node_b_type": nodeType(nodeB),
+			"count_a":     len(receiptsA),
+			"count_b":     len(receiptsB),
 		})
 
 		msgReceiptMatch := len(msgsA) == len(receiptsA)
 		assert.Always(msgReceiptMatch, "Message and receipt counts match", map[string]any{
-			"height":   checkHeight,
-			"block":    blkCid.String()[:16],
-			"msgs":     len(msgsA),
-			"receipts": len(receiptsA),
+			"height":      checkHeight,
+			"block":       blkCid.String()[:16],
+			"node_a":      nodeA,
+			"node_a_type": nodeType(nodeA),
+			"msgs":        len(msgsA),
+			"receipts":    len(receiptsA),
 		})
 
 		if !msgsMatch || !receiptsMatch || !msgReceiptMatch {
