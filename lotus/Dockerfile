@@ -21,7 +21,7 @@ RUN git apply make.patch
 # required to initalize the submodules. we need their go.mod files to exist before we perform the go get below.
 RUN git submodule update --init --recursive
 
-# install instrumentor
+# install Antithesis Go instrumentor
 RUN go get github.com/antithesishq/antithesis-sdk-go@latest
 RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-instrumentor@latest
 RUN go mod tidy
