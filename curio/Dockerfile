@@ -43,6 +43,7 @@ RUN set -eux; \
     rustc --version;
 
 
+# Clone latest curio github repo
 RUN git clone https://github.com/filecoin-project/curio.git /opt/curio
 WORKDIR /opt/curio
 
