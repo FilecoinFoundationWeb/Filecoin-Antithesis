@@ -425,5 +425,5 @@ jobs:
           config_image: ${{ steps.images.outputs.config_image }}
           description: "PR #${{ github.event.pull_request.number }} (${{ matrix.notebook_name }}) - ${{ github.event.pull_request.title }}"
           additional_parameters: |-
-            custom.duration=0.5
+            custom.duration=1.0
             antithesis.is_ephemeral=true
