@@ -32,10 +32,11 @@ if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
     CURIO_WALLET=$(lotus wallet new bls)
     echo "Created new curio wallet: $CURIO_WALLET"
 
-    echo "Funding curio wallet from default wallet..."
-    lotus send --from $DEFAULT_WALLET $CURIO_WALLET 10000
-    echo "Waiting for funding message to be confirmed..."
-    sleep 30
+    FUND_CID=$(lotus send --from $DEFAULT_WALLET $CURIO_WALLET 10000 | tail -1)                                                                                                                                        
+    echo "Funding message CID: $FUND_CID"                                                                                                                                                                   
+    echo "Waiting for funding message to be confirmed on-chain..."                                                                                                                                          
+    lotus state wait-msg "$FUND_CID"                                                                                                                                                                          
+    echo "Funding confirmed."    
 
     lotus-shed miner create --deposit-margin-factor 1.01 $CURIO_WALLET $CURIO_WALLET $CURIO_WALLET 2KiB
     touch $CURIO_REPO_PATH/.init.setup
