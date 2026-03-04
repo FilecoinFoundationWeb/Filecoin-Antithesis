@@ -78,7 +78,7 @@ ENV FFI_BUILD_FROM_SOURCE=${FFI_BUILD_FROM_SOURCE}
 RUN make clean deps
 
 ARG RUSTFLAGS=""
-ARG GOFLAGS=""
+ARG GOFLAGS="-race"
 
 RUN make 2k
 RUN make pdptool
