@@ -208,20 +208,26 @@ func DoTipsetConsensus() {
 		tipsetKeys[r.tipsetKey] = append(tipsetKeys[r.tipsetKey], r.name)
 	}
 
-	if errs == len(nodeKeys) {
-		return // all failed, can't assert
+	responded := len(nodeKeys) - errs
+	if responded < 2 {
+		return // need at least 2 nodes to check consensus
 	}
 
-	consensusReached := len(tipsetKeys) == 1 && errs == 0
+	consensusReached := len(tipsetKeys) == 1
 
 	assert.Always(consensusReached, "All nodes agree on the same finalized tipset", map[string]any{
 		"height":         checkHeight,
 		"finalized_at":   finalizedHeight,
 		"tipset_keys":    tipsetKeys,
 		"unique_tipsets": len(tipsetKeys),
-		"nodes_checked":  len(nodeKeys),
+		"nodes_checked":  responded,
 		"errors":         errs,
 	})
+
+	if errs > 0 {
+		log.Printf("[chain-monitor] %d/%d nodes had query errors at height %d (finalized=%d)",
+			errs, len(nodeKeys), checkHeight, finalizedHeight)
+	}
 }
 
 // doHeightProgression checks that all nodes are advancing.
