@@ -2,7 +2,11 @@ name: PR Antithesis Test
 
 on:
   pull_request:
-    types: [labeled, synchronize]
+    types: [opened, labeled, synchronize]
+
+concurrency:
+  group: pr-antithesis-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository
@@ -58,10 +62,10 @@ jobs:
         run: |
           ENDPOINTS="[]"
           if echo "$LABELS" | grep -q '"antithesis-test-filecoin"'; then
-            ENDPOINTS=$(echo "$ENDPOINTS" | jq '. + ["filecoin"]')
+            ENDPOINTS=$(echo "$ENDPOINTS" | jq -c '. + ["filecoin"]')
           fi
           if echo "$LABELS" | grep -q '"antithesis-test-foc"'; then
-            ENDPOINTS=$(echo "$ENDPOINTS" | jq '. + ["filecoin-foc"]')
+            ENDPOINTS=$(echo "$ENDPOINTS" | jq -c '. + ["filecoin-foc"]')
           fi
           echo "matrix=${ENDPOINTS}" >> "$GITHUB_OUTPUT"
 
