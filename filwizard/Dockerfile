@@ -1,3 +1,4 @@
+# test: trigger PR build
 # Stage 1: Clone and build the filwizard binary
 FROM golang:latest AS builder
 

@@ -1,3 +1,4 @@
+# test: trigger PR build
 ARG GO_VERSION=1.25.1
 
 FROM golang:$GO_VERSION

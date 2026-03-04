@@ -1,3 +1,4 @@
+# test: trigger PR build
 # STAGE 1: Use the pre-built lotus image as a source for its binaries
 # This avoids rebuilding lotus and uses the same version as the rest of your environment.
 # BUILD_MODE: "local" uses local lotus image, "remote" uses Antithesis registry

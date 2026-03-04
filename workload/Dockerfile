@@ -1,3 +1,4 @@
+# test: trigger PR build
 FROM ubuntu:latest
 
 # Core dependencies only — no Foundry, no Rust, no pnpm, no Hardhat

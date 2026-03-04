@@ -1,3 +1,4 @@
+# test: trigger PR build
 FROM docker.io/golang:1.25.1
 
 RUN apt-get update && \
