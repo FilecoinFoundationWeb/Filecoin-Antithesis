@@ -347,18 +347,18 @@ func DoSelfDestructCycle() {
 	if len(nodeKeys) >= 2 {
 		verifyTsk := destroyResult.TipSet
 
-		var results []string
+		nodeStates := make(map[string]string)   // node -> state (for assertion)
 		var nodeResults []string // only nodes that successfully responded
 		for _, name := range nodeKeys {
 			actor, err := nodes[name].StateGetActor(ctx, contractAddr, verifyTsk)
 			if err != nil {
 				log.Printf("[selfdestruct] StateGetActor failed for %s: %v", name, err)
-				results = append(results, name+":error")
+				nodeStates[name] = "error"
 			} else if actor == nil {
-				results = append(results, "nil")
+				nodeStates[name] = "nil"
 				nodeResults = append(nodeResults, "nil")
 			} else {
-				results = append(results, actor.Code.String())
+				nodeStates[name] = actor.Code.String()
 				nodeResults = append(nodeResults, actor.Code.String())
 			}
 		}
@@ -374,12 +374,13 @@ func DoSelfDestructCycle() {
 		}
 
 		assert.Always(allSame, "Actor state is consistent after self-destruct", map[string]any{
-			"contract": contractAddr.String(),
-			"results":  results,
+			"contract":    contractAddr.String(),
+			"node_states": nodeStates,
+			"nodes":       nodeKeys,
 		})
 
 		if !allSame {
-			log.Printf("[selfdestruct] STATE DIVERGENCE after destroy: %v", results)
+			log.Printf("[selfdestruct] STATE DIVERGENCE after destroy: %v", nodeStates)
 		}
 	}
 }
