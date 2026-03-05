@@ -400,7 +400,11 @@ jobs:
 
           CONFIG_REF="config:${SMOKE_TAG}"
 
-          IMAGES="${DRAND_REF};${FOREST_REF};${LOTUS_REF};${WORKLOAD_REF};${CURIO_REF};${FILWIZARD_REF}"
+          # filwizard is only used by the filecoin-foc endpoint
+          IMAGES="${DRAND_REF};${FOREST_REF};${LOTUS_REF};${WORKLOAD_REF};${CURIO_REF}"
+          if [[ "$NOTEBOOK" == "filecoin-foc" ]]; then
+            IMAGES="${IMAGES};${FILWIZARD_REF}"
+          fi
           CONFIG_IMAGE="${CONFIG_REF}"
 
           echo "images=${IMAGES}" >> "$GITHUB_OUTPUT"
