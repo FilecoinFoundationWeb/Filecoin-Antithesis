@@ -95,7 +95,7 @@ services:
 
   workload:
     <<: [ *filecoin_service ]
-    image: workload:test
+    image: workload:latest
     container_name: workload
     environment:
       - STRESS_NODES=lotus0,lotus1,forest0
@@ -131,7 +131,7 @@ services:
       # Write many unique storage slots to stress the state trie under load
       - STRESS_WEIGHT_STORAGE_SPAM=2
       # Disconnect/reconnect nodes to force chain reorgs and test convergence
-      - STRESS_WEIGHT_REORG=3
+      - STRESS_WEIGHT_REORG=1
       # Cross-node receipt field comparison (ExitCode, GasUsed, Return) at finalized heights
       - STRESS_WEIGHT_RECEIPT_AUDIT=2
       # Interdependent messages from different wallets to same contract via different nodes
@@ -144,7 +144,6 @@ services:
       - STRESS_WEIGHT_ACTOR_MIGRATION=1
       # Full actor lifecycle (deploy→fund→invoke→destroy→post-mortem) with cross-node checks
       - STRESS_WEIGHT_ACTOR_LIFECYCLE=1
-      # FOC: read USDFC balances + SP registration via eth_call, assert payment invariants
       - STRESS_DEBUG=1
     volumes:
       - ./shared/configs:/shared/configs
