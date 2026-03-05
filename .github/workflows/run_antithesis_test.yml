@@ -3,7 +3,6 @@ name: Run Antithesis Test
 on: 
   schedule:
     - cron: '0 1 * * *'  # 8 PM EST
-    - cron: '0 17 * * *' # noon EST
   workflow_dispatch:
     inputs:
       endpoint:
@@ -139,50 +138,3 @@ jobs:
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
       
-  scheduled_run_c:
-    name: "Noon EST Short Run - Implementors Team"
-    if: github.event_name == 'schedule' && github.event.schedule == '0 17 * * *'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: antithesishq/antithesis-trigger-action@main
-        with:
-          notebook_name: filecoin
-          tenant: cobalt-bunny
-          username: filecoin
-          password: ${{ secrets.ANTITHESIS_PASSWORD }}
-          github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
-          config_image: config:latest
-          description: "Scheduled Filecoin Continuous Test: 1.5 hr noon run - Implementors Team"
-          additional_parameters: |-
-            custom.duration=1.5
-            antithesis.source=short
-            antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
-            antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
-
-  scheduled_run_d:
-    name: "Noon EST Short Run - FOC Team" 
-    if: github.event_name == 'schedule' && github.event.schedule == '0 17 * * *'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: antithesishq/antithesis-trigger-action@main
-        with:
-          notebook_name: filecoin-foc
-          tenant: cobalt-bunny
-          username: filecoin
-          password: ${{ secrets.ANTITHESIS_PASSWORD }}
-          github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
-          config_image: config:latest
-          description: "Scheduled Filecoin Continuous Test: 1.5 hr noon run - FOC Team"
-          additional_parameters: |-
-            custom.duration=1.5
-            antithesis.source=short
-            antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
-            antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
