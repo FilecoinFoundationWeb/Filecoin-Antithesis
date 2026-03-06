@@ -1,9 +1,6 @@
 name: Build & Push FilWizard (Smart contract deployment tool).
 
 on:
-  schedule:
-    # 6 PM EST daily
-    - cron: '0 22 * * *'
   workflow_dispatch:
     inputs:
       filwizard_tag:
