@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"os"
+	"time"
+
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -112,4 +117,128 @@ func getContractsByType(ctype string) []deployedContract {
 		}
 	}
 	return result
+}
+
+// ===========================================================================
+// Cross-node & lifecycle helpers
+// ===========================================================================
+
+const defaultWaitTimeout = 2 * time.Minute
+
+// waitForMsg wraps StateWaitMsg with a timeout. Returns nil on failure.
+func waitForMsg(node api.FullNode, msgCid cid.Cid, tag string) *api.MsgLookup {
+	tctx, tcancel := context.WithTimeout(ctx, defaultWaitTimeout)
+	defer tcancel()
+
+	result, err := node.StateWaitMsg(tctx, msgCid, 1, 200, true)
+	if err != nil {
+		log.Printf("[%s] StateWaitMsg failed for %s: %v", tag, cidStr(msgCid), err)
+		return nil
+	}
+	return result
+}
+
+// pushMsgWithCid signs and pushes a message, returning its CID.
+// Manages nonces: increments only on success.
+func pushMsgWithCid(node api.FullNode, msg *types.Message, ki *types.KeyInfo, tag string) (cid.Cid, bool) {
+	msg.Nonce = nonces[msg.From]
+
+	smsg := signMsg(msg, ki)
+	if smsg == nil {
+		return cid.Undef, false
+	}
+
+	msgCid, err := node.MpoolPush(ctx, smsg)
+	if err != nil {
+		log.Printf("[%s] MpoolPush failed: %v", tag, err)
+		return cid.Undef, false
+	}
+
+	nonces[msg.From]++
+	return msgCid, true
+}
+
+// pushMsgManualNonce signs and pushes with an explicit nonce.
+// Does NOT touch the global nonces map — caller manages nonces.
+func pushMsgManualNonce(node api.FullNode, msg *types.Message, ki *types.KeyInfo, nonce uint64, tag string) (cid.Cid, bool) {
+	msg.Nonce = nonce
+
+	smsg := signMsg(msg, ki)
+	if smsg == nil {
+		return cid.Undef, false
+	}
+
+	msgCid, err := node.MpoolPush(ctx, smsg)
+	if err != nil {
+		debugLog("[%s] MpoolPush (nonce=%d) failed: %v", tag, nonce, err)
+		return cid.Undef, false
+	}
+	return msgCid, true
+}
+
+// pickTwoDistinctNodes returns two different nodes. Returns empty strings if <2 nodes.
+func pickTwoDistinctNodes() (string, string, api.FullNode, api.FullNode) {
+	if len(nodeKeys) < 2 {
+		return "", "", nil, nil
+	}
+	idxA := rngIntn(len(nodeKeys))
+	idxB := (idxA + 1 + rngIntn(len(nodeKeys)-1)) % len(nodeKeys)
+	nameA, nameB := nodeKeys[idxA], nodeKeys[idxB]
+	return nameA, nameB, nodes[nameA], nodes[nameB]
+}
+
+// verifyActorConsistency checks StateGetActor at the minimum finalized tipset
+// across all nodes. Skips nodes that error (may be lagging/disconnected).
+// Asserts only when 2+ nodes respond successfully.
+func verifyActorConsistency(addr address.Address, phase string) {
+	finHeight, finTsk := getFinalizedHeight()
+	if finHeight < finalizedMinHeight {
+		return
+	}
+
+	type result struct {
+		node  string
+		state string
+	}
+	var results []result
+
+	for _, name := range nodeKeys {
+		actor, err := nodes[name].StateGetActor(ctx, addr, finTsk)
+		if err != nil {
+			debugLog("[actor-verify] %s: StateGetActor failed on %s: %v", phase, name, err)
+			continue // skip lagging/disconnected nodes
+		}
+		if actor == nil {
+			results = append(results, result{node: name, state: "nil"})
+		} else {
+			results = append(results, result{node: name, state: fmt.Sprintf("code=%s,nonce=%d,balance=%s", actor.Code, actor.Nonce, actor.Balance)})
+		}
+	}
+
+	if len(results) < 2 {
+		return // not enough responsive nodes to compare
+	}
+
+	allMatch := true
+	for i := 1; i < len(results); i++ {
+		if results[i].state != results[0].state {
+			allMatch = false
+			break
+		}
+	}
+
+	details := make(map[string]any)
+	details["actor"] = addr.String()
+	details["phase"] = phase
+	details["finalized_height"] = finHeight
+	details["respondents"] = len(results)
+	for _, r := range results {
+		details["state_"+r.node] = r.state
+	}
+
+	assert.Sometimes(allMatch, "Actor state consistent across nodes", details)
+
+	if !allMatch {
+		log.Printf("[actor-verify] DIVERGENCE %s actor=%s: %v", phase, addr, details)
+	}
 }
