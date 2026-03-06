@@ -2,8 +2,8 @@ name: Build & Push Curio
 
 on: 
   schedule:
-    # 6 PM EST, Mon & Thurs
-    - cron: '0 22 * * 1' 
+    # 6 PM EST daily
+    - cron: '0 22 * * *'
   workflow_dispatch:
     inputs:
       curio_tag:

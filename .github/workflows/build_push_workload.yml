@@ -1,6 +1,9 @@
 name: Build & Push Workload
 
 on:
+  schedule:
+    # 6 PM EST daily
+    - cron: '0 22 * * *'
   workflow_dispatch:
     inputs:
       workload_tag:
