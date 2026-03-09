@@ -10,8 +10,9 @@ FROM docker.io/golang:latest
 # explicilty enable CGO
 ENV CGO_ENABLED=1
 
-# First, copy the lotus binaries from the builder stage into our final image
+# Copy the lotus binaries and their instrumentation symbols from the builder stage
 COPY --from=lotus-builder /usr/local/bin /usr/local/bin
+COPY --from=lotus-builder /symbols /lotus-symbols
 
 # Now, proceed with the Curio build
 RUN apt-get update && apt-get install -y --no-install-recommends dnsutils git ca-certificates build-essential clang ocl-icd-opencl-dev aria2 ocl-icd-libopencl1 jq libhwloc-dev xxd
@@ -73,6 +74,7 @@ RUN mkdir /curio_instrumented
 RUN antithesis-go-instrumentor -exclude ./go_exclude.txt /opt/curio /curio_instrumented 
 RUN mkdir -p /symbols
 RUN cp -r /curio_instrumented/symbols/* /symbols
+RUN cp -r /lotus-symbols/* /symbols
 
 WORKDIR /curio_instrumented/customer
 RUN rm -r /opt/curio
