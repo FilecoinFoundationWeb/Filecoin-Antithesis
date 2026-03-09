@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"workload/internal/chain"
+	"workload/internal/foc"
 
 	"github.com/antithesishq/antithesis-sdk-go/lifecycle"
 	"github.com/antithesishq/antithesis-sdk-go/random"
@@ -57,6 +58,9 @@ var (
 	// Pending deploy CIDs for deferred verification
 	pendingDeploys []pendingDeploy
 	pendingMu      sync.Mutex
+
+	// FOC config — nil when the FOC compose profile is not active
+	focCfg *foc.Config
 )
 
 type deployedContract struct {
@@ -240,12 +244,22 @@ func buildDeck() {
 		defWeight int
 	}
 
-	actions := []weightedAction{
+	// Consensus / health-check vectors — always active in both profiles
+	consensus := []weightedAction{
+		{"DoTipsetConsensus", "STRESS_WEIGHT_TIPSET_CONSENSUS", DoTipsetConsensus, 3},
+		{"DoHeightProgression", "STRESS_WEIGHT_HEIGHT_PROGRESSION", DoHeightProgression, 2},
+		{"DoPeerCount", "STRESS_WEIGHT_PEER_COUNT", DoPeerCount, 2},
+		{"DoHeadComparison", "STRESS_WEIGHT_HEAD_COMPARISON", DoHeadComparison, 3},
+		{"DoStateRootComparison", "STRESS_WEIGHT_STATE_ROOT", DoStateRootComparison, 4},
+		{"DoStateAudit", "STRESS_WEIGHT_STATE_AUDIT", DoStateAudit, 5},
+	}
+
+	// Non-FOC stress vectors — skipped when FOC profile is active (covered by filecoin run)
+	stress := []weightedAction{
 		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 0},
 		{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 0},
 		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 0},
 		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 0},
-		{"DoChainMonitor", "STRESS_WEIGHT_CHAIN_MONITOR", DoChainMonitor, 0},
 		// FVM/EVM contract stress vectors
 		{"DoDeployContracts", "STRESS_WEIGHT_DEPLOY", DoDeployContracts, 2},
 		{"DoContractCall", "STRESS_WEIGHT_CONTRACT_CALL", DoContractCall, 3},
@@ -258,6 +272,41 @@ func buildDeck() {
 		{"DoStorageSpam", "STRESS_WEIGHT_STORAGE_SPAM", DoStorageSpam, 0},
 		// Network chaos / reorg vectors
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
+		// Cross-node divergence vectors
+		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
+		{"DoMessageOrderingAttack", "STRESS_WEIGHT_MSG_ORDERING", DoMessageOrderingAttack, 1},
+		{"DoNonceBombard", "STRESS_WEIGHT_NONCE_BOMBARD", DoNonceBombard, 1},
+		{"DoGasExhaustionEdge", "STRESS_WEIGHT_GAS_EXHAUST", DoGasExhaustionEdge, 1},
+		// State tree consistency vectors
+		{"DoActorMigrationStress", "STRESS_WEIGHT_ACTOR_MIGRATION", DoActorMigrationStress, 1},
+		{"DoActorLifecycleStress", "STRESS_WEIGHT_ACTOR_LIFECYCLE", DoActorLifecycleStress, 1},
+	}
+
+	// Build actions list: consensus always, stress only when FOC is not active
+	actions := append([]weightedAction{}, consensus...)
+	if focCfg == nil {
+		actions = append(actions, stress...)
+	} else {
+		log.Println("[init] FOC active — skipping non-FOC stress vectors (covered by filecoin run)")
+	}
+
+	// FOC lifecycle vectors — only when FOC profile is active
+	if focCfg != nil {
+		actions = append(actions,
+			// Sequential lifecycle state machine (drives setup to completion)
+			weightedAction{"DoFOCLifecycle", "STRESS_WEIGHT_FOC_LIFECYCLE", DoFOCLifecycle, 3},
+			// Steady-state vectors (only fire once lifecycle reaches Ready)
+			weightedAction{"DoFOCUploadPiece", "STRESS_WEIGHT_FOC_UPLOAD", DoFOCUploadPiece, 2},
+			weightedAction{"DoFOCAddPieces", "STRESS_WEIGHT_FOC_ADD_PIECES", DoFOCAddPieces, 1},
+			weightedAction{"DoFOCMonitorProofSet", "STRESS_WEIGHT_FOC_MONITOR", DoFOCMonitorProofSet, 3},
+			weightedAction{"DoFOCRetrieveAndVerify", "STRESS_WEIGHT_FOC_RETRIEVE", DoFOCRetrieveAndVerify, 1},
+			weightedAction{"DoFOCTransfer", "STRESS_WEIGHT_FOC_TRANSFER", DoFOCTransfer, 1},
+			weightedAction{"DoFOCSettle", "STRESS_WEIGHT_FOC_SETTLE", DoFOCSettle, 1},
+			weightedAction{"DoFOCWithdraw", "STRESS_WEIGHT_FOC_WITHDRAW", DoFOCWithdraw, 1},
+			// Destructive — weight 0 by default (opt-in)
+			weightedAction{"DoFOCDeletePiece", "STRESS_WEIGHT_FOC_DELETE_PIECE", DoFOCDeletePiece, 0},
+			weightedAction{"DoFOCDeleteDataSet", "STRESS_WEIGHT_FOC_DELETE_DS", DoFOCDeleteDataSet, 0},
+		)
 	}
 
 	deck = nil
@@ -293,6 +342,7 @@ func main() {
 	waitForChain()
 	initNonces()
 	initContractBytecodes()
+	focCfg = foc.ParseEnvironment()
 	buildDeck()
 
 	lifecycle.SetupComplete(map[string]any{
@@ -322,6 +372,9 @@ func main() {
 			log.Printf("[engine] === iteration %d summary ===", iteration)
 			for name, count := range actionCounts {
 				log.Printf("[engine]   %s: %d", name, count)
+			}
+			if focCfg != nil {
+				logFOCProgress()
 			}
 		}
 	}

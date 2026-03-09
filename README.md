@@ -100,6 +100,45 @@ Test properties use the Antithesis Go SDK:
 2. Use GitHub Actions to trigger tests
 3. Review reports in Antithesis dashboard
 
+### GitHub Actions Workflows
+
+#### Build & Push Workflows
+
+Each component has a dedicated build workflow that builds the Docker image and pushes it to the Antithesis GAR registry.
+
+| Workflow | Trigger | Components |
+|----------|---------|------------|
+| `build_push_lotus.yml` | Scheduled (Mon 6 PM EST) + Manual | Lotus |
+| `build_push_forest.yml` | Scheduled (Mon 6 PM EST) + Manual | Forest |
+| `build_push_curio.yml` | Scheduled (Mon 6 PM EST) + Manual | Curio |
+| `build_push_drand.yml` | Manual | Drand |
+| `build_push_workload.yml` | Manual | Workload |
+| `build_push_filwizard.yml` | Manual | FilWizard |
+| `build_push_config.yml` | Manual | Config |
+
+Scheduled builds fetch the latest commit from the upstream repo and tag the image as `latest`. Manual builds accept a commit hash or tag as input.
+
+#### PR Antithesis Test (`pr_antithesis_test.yml`)
+
+Automatically builds and tests changes on a PR when specific labels are applied:
+
+- **`antithesis-test-filecoin`** — Triggers a test on the `filecoin` endpoint
+- **`antithesis-test-foc`** — Triggers a test on the `filecoin-foc` endpoint
+
+The workflow detects which components changed, builds only those images, and triggers a short (30 min) ephemeral Antithesis test. Unchanged components use the existing `latest` images from the registry.
+
+#### Run Antithesis Test (`run_antithesis_test.yml`)
+
+Triggers an Antithesis test run. Runs on two schedules (nightly 12-hour runs and noon 1.5-hour runs) for both the Implementors and FOC teams. Can also be triggered manually with custom image tags, duration, and endpoint selection.
+
+#### Run Antithesis Upgrade Test (`run_antithesis_upgradetest.yml`)
+
+Manual-only workflow for testing image upgrades mid-run. Specify a base set of images, then an upgrade image and tag to swap in during the test.
+
+#### List Registry Images (`list_registry_images.yml`)
+
+Manual-only workflow to list recent image tags in the Antithesis GAR registry. Select a component from the dropdown and the workflow outputs the most recent images with tags, digests, and timestamps. Results appear directly on the workflow run summary page.
+
 ## Directory Structure
 
 ```

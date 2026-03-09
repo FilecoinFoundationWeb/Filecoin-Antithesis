@@ -42,11 +42,11 @@ else
     echo "# Note: Service contracts will be loaded after deployment"
 fi
 
-# USDFC and Multicall3 from workspace
+# USDFC and Multicall3 from workspace (case-insensitive name match)
 if [ -f "$WORKSPACE_DEPLOYMENTS_JSON" ]; then
     jq -r '
         .[] |
-        select(.name == "USDFC" or .name == "Multicall3") |
+        select((.name | ascii_downcase) == "usdfc" or (.name | ascii_downcase) == "multicall3") |
         "\(.name | ascii_upcase)_ADDRESS=\(.address)"
     ' "$WORKSPACE_DEPLOYMENTS_JSON"
 fi

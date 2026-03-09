@@ -4,7 +4,7 @@
  	$(MAKE) interopnet-lotus interopnet-lotus-miner interopnet-lotus-worker interopnet-lotus-seed interopnet-lotus-shed
  .PHONY: interopnet
  
-+lotus: GOFLAGS+=-race
++lotus: override GOFLAGS+=-race
  lotus: $(BUILD_DEPS)  ## Build the main Lotus binary
  	rm -f lotus
  	$(GOCC) build $(GOFLAGS) -o lotus ./cmd/lotus
@@ -12,7 +12,7 @@
  .PHONY: lotus
  BINS+=lotus
  
-+lotus-miner: GOFLAGS+=-race
++lotus-miner: override GOFLAGS+=-race
  lotus-miner: $(BUILD_DEPS)  ## Build the Lotus miner binary
  	rm -f lotus-miner
  	$(GOCC) build $(GOFLAGS) -o lotus-miner ./cmd/lotus-miner
