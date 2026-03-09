@@ -103,47 +103,67 @@ services:
       - STRESS_FOREST_RPC_PORT=3456
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
       - STRESS_WAIT_HEIGHT=10
-      # --- Action deck weights (0 = disabled, N = relative frequency in random draw) ---
-      # FIL transfers between wallets via the market actor
-      - STRESS_WEIGHT_TRANSFER=2
-      # Rapid-fire transactions from many wallets to spike mempool pressure
-      - STRESS_WEIGHT_GAS_WAR=1
-      # Concurrent conflicting messages from the same sender (double-spend attempts)
-      - STRESS_WEIGHT_ADVERSARIAL=2
-      # StateCompute re-execution and state root verification across nodes
-      - STRESS_WEIGHT_HEAVY_COMPUTE=3
-      # Cross-node tipset consensus, finality, and peer-connectivity checks
-      - STRESS_WEIGHT_CHAIN_MONITOR=6
-      # EVM contract deployment via EAM.CreateExternal
-      - STRESS_WEIGHT_DEPLOY=1
-      # Invoke already-deployed EVM contracts (recursive, delegatecall, simplecoin, etc.)
-      - STRESS_WEIGHT_CONTRACT_CALL=1
-      # Deploy a contract then immediately self-destruct it, stressing actor cleanup
-      - STRESS_WEIGHT_SELFDESTRUCT=1
-      # Two wallets call the same contract concurrently to race on shared state
-      - STRESS_WEIGHT_CONTRACT_RACE=1
-      # Tight keccak256 loop inside EVM to exhaust gas and stress the fee market
-      - STRESS_WEIGHT_GAS_GUZZLER=2
-      # Emit a large number of EVM events to stress receipt and log processing
-      - STRESS_WEIGHT_LOG_BLASTER=2
-      # Allocate maximum EVM memory to trigger quadratic memory expansion costs
-      - STRESS_WEIGHT_MEMORY_BOMB=1
-      # Write many unique storage slots to stress the state trie under load
-      - STRESS_WEIGHT_STORAGE_SPAM=2
-      # Disconnect/reconnect nodes to force chain reorgs and test convergence
-      - STRESS_WEIGHT_REORG=1
-      # Cross-node receipt field comparison (ExitCode, GasUsed, Return) at finalized heights
-      - STRESS_WEIGHT_RECEIPT_AUDIT=2
-      # Interdependent messages from different wallets to same contract via different nodes
-      - STRESS_WEIGHT_MSG_ORDERING=1
-      # Nonce-gapped messages to one node, gap-fill via another, verify execution order
-      - STRESS_WEIGHT_NONCE_BOMBARD=1
-      # High-gas contract call competing with small transfers on different nodes
-      - STRESS_WEIGHT_GAS_EXHAUST=1
-      # Burst deploy/destroy actors, verify state tree consistency across nodes
-      - STRESS_WEIGHT_ACTOR_MIGRATION=1
-      # Full actor lifecycle (deploy→fund→invoke→destroy→post-mortem) with cross-node checks
-      - STRESS_WEIGHT_ACTOR_LIFECYCLE=1
+      # --- Consensus / health-check vectors (always active in both profiles) ---
+      - STRESS_WEIGHT_TIPSET_CONSENSUS=3   # cross-node tipset agreement
+      - STRESS_WEIGHT_HEIGHT_PROGRESSION=2 # chain height advances
+      - STRESS_WEIGHT_PEER_COUNT=2         # node peer connectivity
+      - STRESS_WEIGHT_HEAD_COMPARISON=3    # cross-node chain head match
+      - STRESS_WEIGHT_STATE_ROOT=4         # cross-node state root match
+      - STRESS_WEIGHT_STATE_AUDIT=5        # full state tree audit
+      #
+      # --- Non-FOC stress vectors (filecoin run only) ---
+      # Auto-skipped when FOC profile is active (covered by filecoin run).
+      #
+      # EVM contract stress
+      - STRESS_WEIGHT_DEPLOY=5            # deploy EVM contracts
+      - STRESS_WEIGHT_CONTRACT_CALL=6     # call deployed contracts
+      - STRESS_WEIGHT_SELFDESTRUCT=3      # create + selfdestruct cycles
+      - STRESS_WEIGHT_CONTRACT_RACE=4     # concurrent calls to same contract
+      # FIL transfers
+      - STRESS_WEIGHT_TRANSFER=3          # basic FIL value transfers
+      # Nonce/ordering chaos
+      - STRESS_WEIGHT_MSG_ORDERING=3      # conflicting txs from same sender
+      - STRESS_WEIGHT_NONCE_BOMBARD=3     # rapid nonce sequences
+      # Gas pressure
+      - STRESS_WEIGHT_GAS_EXHAUST=3       # gas limit edge cases
+      # Cross-node consistency
+      - STRESS_WEIGHT_RECEIPT_AUDIT=3     # cross-node receipt comparison
+      - STRESS_WEIGHT_ACTOR_MIGRATION=2   # state tree access patterns
+      - STRESS_WEIGHT_ACTOR_LIFECYCLE=2   # actor creation/interaction
+      # Disabled
+      - STRESS_WEIGHT_GAS_WAR=0
+      - STRESS_WEIGHT_ADVERSARIAL=0
+      - STRESS_WEIGHT_HEAVY_COMPUTE=0
+      - STRESS_WEIGHT_CHAIN_MONITOR=0
+      - STRESS_WEIGHT_GAS_GUZZLER=0
+      - STRESS_WEIGHT_LOG_BLASTER=0
+      - STRESS_WEIGHT_MEMORY_BOMB=0
+      - STRESS_WEIGHT_STORAGE_SPAM=0
+      - STRESS_WEIGHT_REORG=0
+      # --- FOC (Filecoin On-Chain Cloud) vectors ---
+      # All FOC vectors require the `foc` compose profile to be active.
+      # The lifecycle state machine must reach "Ready" before steady-state
+      # vectors will fire. Higher weight = picked more often from the deck.
+      #
+      # SETUP: drives the sequential state machine one step per pick
+      #   Init → Approved → Deposited → OperatorApproved → DataSetCreated → Ready
+      - STRESS_WEIGHT_FOC_LIFECYCLE=6
+      #
+      # STEADY-STATE: only execute once lifecycle reaches Ready
+      - STRESS_WEIGHT_FOC_UPLOAD=4 # upload random data to Curio PDP API
+      - STRESS_WEIGHT_FOC_ADD_PIECES=3 # add uploaded pieces to on-chain proofset
+      - STRESS_WEIGHT_FOC_MONITOR=4 # query proofset health + USDFC balances
+      - STRESS_WEIGHT_FOC_RETRIEVE=2 # download piece and verify CID integrity
+      - STRESS_WEIGHT_FOC_TRANSFER=2 # ERC-20 USDFC transfer (client → deployer)
+      - STRESS_WEIGHT_FOC_SETTLE=2 # settle active payment rail
+      - STRESS_WEIGHT_FOC_WITHDRAW=2 # withdraw USDFC from FilecoinPay
+      #
+      # DESTRUCTIVE: weight 0 = disabled by default, set >0 to opt-in
+      - STRESS_WEIGHT_FOC_DELETE_PIECE=1 # schedule piece deletion from proofset
+      - STRESS_WEIGHT_FOC_DELETE_DS=0 # delete entire dataset + reset lifecycle
+      #
+      - CURIO_PDP_URL=http://curio:80
+
       - STRESS_DEBUG=1
     volumes:
       - ./shared/configs:/shared/configs
