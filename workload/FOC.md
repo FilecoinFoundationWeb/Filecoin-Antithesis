@@ -307,18 +307,21 @@ All configuration is via environment variables in `docker-compose.yaml`:
 
 Each `STRESS_WEIGHT_*` variable controls how many times that action appears in the weighted deck. Higher weight = selected more frequently. Weight `0` disables the action.
 
-**FOC vectors** (active when `foc` compose profile is enabled):
+When the FOC profile is active, non-FOC stress vectors (EVM contracts, nonce chaos, etc.) are auto-skipped. The deck contains only consensus health checks and FOC vectors.
+
+**FOC vectors** (requires `foc` compose profile):
 
 | Variable | Default | Category | Description |
 |----------|---------|----------|-------------|
-| `STRESS_WEIGHT_FOC_LIFECYCLE` | `3` | Setup | Drives state machine: Init → ... → Ready |
-| `STRESS_WEIGHT_FOC_UPLOAD` | `2` | Steady-state | Upload random data to Curio PDP API |
-| `STRESS_WEIGHT_FOC_ADD_PIECES` | `1` | Steady-state | Add uploaded pieces to on-chain proofset |
-| `STRESS_WEIGHT_FOC_MONITOR` | `3` | Steady-state | Query proofset health + USDFC balances |
-| `STRESS_WEIGHT_FOC_TRANSFER` | `1` | Steady-state | ERC-20 USDFC transfer (client → deployer) |
-| `STRESS_WEIGHT_FOC_SETTLE` | `1` | Steady-state | Settle active payment rail |
-| `STRESS_WEIGHT_FOC_WITHDRAW` | `1` | Steady-state | Withdraw USDFC from FilecoinPay |
-| `STRESS_WEIGHT_FOC_DELETE_PIECE` | `0` | Destructive | Schedule piece deletion from proofset |
+| `STRESS_WEIGHT_FOC_LIFECYCLE` | `6` | Setup | Drives state machine: Init → ... → Ready |
+| `STRESS_WEIGHT_FOC_UPLOAD` | `4` | Steady-state | Upload random data to Curio PDP API |
+| `STRESS_WEIGHT_FOC_ADD_PIECES` | `3` | Steady-state | Add uploaded pieces to on-chain proofset |
+| `STRESS_WEIGHT_FOC_MONITOR` | `4` | Steady-state | Query proofset health + USDFC balances |
+| `STRESS_WEIGHT_FOC_RETRIEVE` | `2` | Steady-state | Download piece and verify CID integrity |
+| `STRESS_WEIGHT_FOC_TRANSFER` | `2` | Steady-state | ERC-20 USDFC transfer (client → deployer) |
+| `STRESS_WEIGHT_FOC_SETTLE` | `2` | Steady-state | Settle active payment rail |
+| `STRESS_WEIGHT_FOC_WITHDRAW` | `2` | Steady-state | Withdraw USDFC from FilecoinPay |
+| `STRESS_WEIGHT_FOC_DELETE_PIECE` | `1` | Destructive | Schedule piece deletion from proofset |
 | `STRESS_WEIGHT_FOC_DELETE_DS` | `0` | Destructive | Delete entire dataset + reset lifecycle |
 
 ---
@@ -376,6 +379,8 @@ go vet ./...
 5. **Sidecar independence** — Safety assertions run in a separate polling loop, not in the stress-engine's hot path. This ensures invariants are checked even under high load or engine failures.
 
 6. **30M gas limit** — FVM cross-contract EVM calls have significantly higher gas costs than native EVM. The deposit step alone uses ~22M gas due to `transferFrom` crossing contract boundaries.
+
+7. **Vector isolation** — When FOC is active, non-FOC stress vectors are auto-skipped so FOC vectors aren't diluted. Consensus health checks always run.
 
 ---
 

@@ -244,17 +244,22 @@ func buildDeck() {
 		defWeight int
 	}
 
-	actions := []weightedAction{
-		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 0},
-		{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 0},
-		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 0},
-		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 0},
+	// Consensus / health-check vectors — always active in both profiles
+	consensus := []weightedAction{
 		{"DoTipsetConsensus", "STRESS_WEIGHT_TIPSET_CONSENSUS", DoTipsetConsensus, 3},
 		{"DoHeightProgression", "STRESS_WEIGHT_HEIGHT_PROGRESSION", DoHeightProgression, 2},
 		{"DoPeerCount", "STRESS_WEIGHT_PEER_COUNT", DoPeerCount, 2},
 		{"DoHeadComparison", "STRESS_WEIGHT_HEAD_COMPARISON", DoHeadComparison, 3},
 		{"DoStateRootComparison", "STRESS_WEIGHT_STATE_ROOT", DoStateRootComparison, 4},
 		{"DoStateAudit", "STRESS_WEIGHT_STATE_AUDIT", DoStateAudit, 5},
+	}
+
+	// Non-FOC stress vectors — skipped when FOC profile is active (covered by filecoin run)
+	stress := []weightedAction{
+		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 0},
+		{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 0},
+		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 0},
+		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 0},
 		// FVM/EVM contract stress vectors
 		{"DoDeployContracts", "STRESS_WEIGHT_DEPLOY", DoDeployContracts, 2},
 		{"DoContractCall", "STRESS_WEIGHT_CONTRACT_CALL", DoContractCall, 3},
@@ -275,6 +280,14 @@ func buildDeck() {
 		// State tree consistency vectors
 		{"DoActorMigrationStress", "STRESS_WEIGHT_ACTOR_MIGRATION", DoActorMigrationStress, 1},
 		{"DoActorLifecycleStress", "STRESS_WEIGHT_ACTOR_LIFECYCLE", DoActorLifecycleStress, 1},
+	}
+
+	// Build actions list: consensus always, stress only when FOC is not active
+	actions := append([]weightedAction{}, consensus...)
+	if focCfg == nil {
+		actions = append(actions, stress...)
+	} else {
+		log.Println("[init] FOC active — skipping non-FOC stress vectors (covered by filecoin run)")
 	}
 
 	// FOC lifecycle vectors — only when FOC profile is active
