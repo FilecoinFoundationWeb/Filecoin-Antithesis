@@ -57,6 +57,7 @@ if [ ! -f "${FOREST_DATA_DIR}/jwt" ]; then
         --config "${FOREST_DATA_DIR}/forest_config.toml" \
         --save-token "${FOREST_DATA_DIR}/jwt" \
         --no-healthcheck \
+        --skip-load-actors \
         --exit-after-init
 else
     echo "forest${no}: Node already initialized, skipping init..."
@@ -69,8 +70,7 @@ forest --genesis "${SHARED_CONFIGS}/devgen.car" \
        --config "${FOREST_DATA_DIR}/forest_config.toml" \
        --rpc-address "${host_ip}:${FOREST_RPC_PORT}" \
        --p2p-listen-address "/ip4/${host_ip}/tcp/${FOREST_P2P_PORT}" \
-       --healthcheck-address "${host_ip}:${FOREST_HEALTHZ_RPC_PORT}" \
-       --skip-load-actors &
+       --healthcheck-address "${host_ip}:${FOREST_HEALTHZ_RPC_PORT}" &
 
 # Admin token is required for connection commands and wallet management.
 export TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")

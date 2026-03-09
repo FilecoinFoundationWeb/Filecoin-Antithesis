@@ -1,9 +1,6 @@
 name: Build & Push Curio
 
-on: 
-  schedule:
-    # 6 PM EST, Mon & Thurs
-    - cron: '0 22 * * 1' 
+on:
   workflow_dispatch:
     inputs:
       curio_tag:
@@ -65,7 +62,7 @@ jobs:
         build-args: |
           BUILD_MODE=remote
           GIT_BRANCH=${{ github.event.inputs.curio_tag || steps.latest-curio-commit.outputs.commit-hash }}
-          LOTUS_TAG=${{ github.event.inputs.lotus_tag }}
+          LOTUS_TAG=${{ github.event.inputs.lotus_tag || 'latest' }}
         context: ./curio
         file: ./curio/Dockerfile
         push: true

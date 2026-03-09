@@ -42,7 +42,7 @@ RUN set -eux; \
     cargo --version; \
     rustc --version;
 
-    
+
 RUN git clone https://github.com/filecoin-project/curio.git /opt/curio
 WORKDIR /opt/curio
 
@@ -64,7 +64,6 @@ RUN git submodule update --init
 COPY ./go_exclude.txt ./go_exclude.txt
 
 RUN go get github.com/antithesishq/antithesis-sdk-go@latest
-RUN go get github.com/filecoin-project/go-jsonrpc@v0.8.0
 RUN go install github.com/antithesishq/antithesis-sdk-go/tools/antithesis-go-instrumentor@latest
 RUN go mod tidy
 
@@ -83,7 +82,7 @@ ENV FFI_BUILD_FROM_SOURCE=${FFI_BUILD_FROM_SOURCE}
 RUN make clean deps
 
 ARG RUSTFLAGS=""
-ARG GOFLAGS=""
+ARG GOFLAGS="-race"
 
 RUN make 2k
 RUN make pdptool
@@ -92,4 +91,6 @@ RUN install -C curio /usr/local/bin/curio
 RUN install -C pdptool /usr/local/bin/pdptool
 RUN install -C sptool /usr/local/bin/sptool
 RUN curio fetch-params 2048
-ENTRYPOINT ["sleep", "infinity"] 
+COPY ./start_scripts/curio-init.sh /curio/curio-init.sh
+RUN chmod +x /curio/curio-init.sh
+ENTRYPOINT ["/curio/curio-init.sh"]

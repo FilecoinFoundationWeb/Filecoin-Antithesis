@@ -1,7 +1,7 @@
 #!/bin/bash
 
-sudo rm -rf ./data/
-sudo rm -rf ./shared/
+rm -rf ./data/
+rm -rf ./shared/
 
 mkdir ./data
 

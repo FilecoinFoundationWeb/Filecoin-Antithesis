@@ -1,0 +1,427 @@
+name: PR Antithesis Test
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  group: pr-antithesis-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository
+
+jobs:
+  # ─── Gate: only run when the PR carries an antithesis-test label ────
+  detect-changes:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin')
+      || contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      lotus: ${{ steps.filter.outputs.lotus }}
+      forest: ${{ steps.filter.outputs.forest }}
+      curio: ${{ steps.filter.outputs.curio }}
+      drand: ${{ steps.filter.outputs.drand }}
+      workload: ${{ steps.filter.outputs.workload }}
+      filwizard: ${{ steps.filter.outputs.filwizard }}
+      curio_or_lotus_changed: ${{ steps.curio-check.outputs.changed }}
+      endpoints: ${{ steps.endpoints.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            lotus:
+              - 'lotus/**'
+            forest:
+              - 'forest/**'
+            curio:
+              - 'curio/**'
+            drand:
+              - 'drand/**'
+            workload:
+              - 'workload/**'
+            filwizard:
+              - 'filwizard/**'
+      - name: Check if curio or lotus changed
+        id: curio-check
+        run: |
+          if [[ "${{ steps.filter.outputs.lotus }}" == "true" || "${{ steps.filter.outputs.curio }}" == "true" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Determine Antithesis endpoints from labels
+        id: endpoints
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          ENDPOINTS="[]"
+          if echo "$LABELS" | grep -q '"antithesis-test-filecoin"'; then
+            ENDPOINTS=$(echo "$ENDPOINTS" | jq -c '. + ["filecoin"]')
+          fi
+          if echo "$LABELS" | grep -q '"antithesis-test-foc"'; then
+            ENDPOINTS=$(echo "$ENDPOINTS" | jq -c '. + ["filecoin-foc"]')
+          fi
+          echo "matrix=${ENDPOINTS}" >> "$GITHUB_OUTPUT"
+
+  # ─── Build jobs (parallel, except curio waits on lotus) ─────────────
+
+  build-lotus:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.lotus == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: _json_key
+          password: ${{ secrets.ANTITHESIS_GAR_KEY }}
+      - name: Extract metadata for lotus
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/lotus
+          tags: |
+            type=sha
+            pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
+      - name: Build and push lotus
+        uses: docker/build-push-action@v5
+        with:
+          context: ./lotus
+          file: ./lotus/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  build-forest:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.forest == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Disk cleanup
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo docker builder prune -a --force
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: _json_key
+          password: ${{ secrets.ANTITHESIS_GAR_KEY }}
+      - name: Extract metadata for forest
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/forest
+          tags: |
+            type=sha
+            pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
+      - name: Build and push forest
+        uses: docker/build-push-action@v5
+        with:
+          context: ./forest
+          file: ./forest/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  build-drand:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.drand == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: _json_key
+          password: ${{ secrets.ANTITHESIS_GAR_KEY }}
+      - name: Extract metadata for drand
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/drand
+          tags: |
+            type=sha
+            pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
+      - name: Build and push drand
+        uses: docker/build-push-action@v5
+        with:
+          context: ./drand
+          file: ./drand/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  build-workload:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.workload == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: _json_key
+          password: ${{ secrets.ANTITHESIS_GAR_KEY }}
+      - name: Extract metadata for workload
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/workload
+          tags: |
+            type=sha
+            pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
+      - name: Build and push workload
+        uses: docker/build-push-action@v5
+        with:
+          context: ./workload
+          file: ./workload/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  build-filwizard:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.filwizard == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: _json_key
+          password: ${{ secrets.ANTITHESIS_GAR_KEY }}
+      - name: Extract metadata for filwizard
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/filwizard
+          tags: |
+            type=sha
+            pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
+      - name: Build and push filwizard
+        uses: docker/build-push-action@v5
+        with:
+          context: ./filwizard
+          file: ./filwizard/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  build-curio:
+    needs: [detect-changes, build-lotus]
+    if: >-
+      always() && !cancelled()
+      && needs.detect-changes.result == 'success'
+      && (needs.build-lotus.result == 'success' || needs.build-lotus.result == 'skipped')
+      && needs.detect-changes.outputs.curio_or_lotus_changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: _json_key
+          password: ${{ secrets.ANTITHESIS_GAR_KEY }}
+      - name: Extract metadata for curio
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/curio
+          tags: |
+            type=sha
+            pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
+      - name: Build and push curio
+        uses: docker/build-push-action@v5
+        with:
+          build-args: |
+            BUILD_MODE=remote
+            LOTUS_TAG=${{ needs.detect-changes.outputs.lotus == 'true' && format('pr-{0}', github.event.pull_request.number) || 'latest' }}
+          context: ./curio
+          file: ./curio/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  build-config:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: _json_key
+          password: ${{ secrets.ANTITHESIS_GAR_KEY }}
+      - name: Extract metadata for config
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/config
+          tags: |
+            type=sha
+            pr-${{ github.event.pull_request.number }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
+            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
+      - name: Build and push config
+        uses: docker/build-push-action@v5
+        with:
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # ─── Trigger Antithesis test with smoke-tagged + latest images ──────
+
+  trigger-antithesis-test:
+    needs:
+      - detect-changes
+      - build-lotus
+      - build-forest
+      - build-drand
+      - build-workload
+      - build-filwizard
+      - build-curio
+      - build-config
+    if: >-
+      always() && !cancelled()
+      && needs.build-config.result == 'success'
+      && !contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        notebook_name: ${{ fromJSON(needs.detect-changes.outputs.endpoints) }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Assemble images string
+        id: images
+        env:
+          NOTEBOOK: ${{ matrix.notebook_name }}
+          LOTUS_CHANGED: ${{ needs.detect-changes.outputs.lotus }}
+          FOREST_CHANGED: ${{ needs.detect-changes.outputs.forest }}
+          DRAND_CHANGED: ${{ needs.detect-changes.outputs.drand }}
+          WORKLOAD_CHANGED: ${{ needs.detect-changes.outputs.workload }}
+          FILWIZARD_CHANGED: ${{ needs.detect-changes.outputs.filwizard }}
+          CURIO_OR_LOTUS_CHANGED: ${{ needs.detect-changes.outputs.curio_or_lotus_changed }}
+        run: |
+          # Determine smoke tag based on endpoint
+          if [[ "$NOTEBOOK" == "filecoin" ]]; then
+            SMOKE_TAG="smoke"
+          else
+            SMOKE_TAG="smoke-foc"
+          fi
+
+          # Changed images use the smoke tag; unchanged use latest
+          if [[ "$LOTUS_CHANGED" == "true" ]]; then
+            LOTUS_REF="lotus:${SMOKE_TAG}"
+          else
+            LOTUS_REF="lotus:latest"
+          fi
+
+          if [[ "$FOREST_CHANGED" == "true" ]]; then
+            FOREST_REF="forest:${SMOKE_TAG}"
+          else
+            FOREST_REF="forest:latest"
+          fi
+
+          if [[ "$DRAND_CHANGED" == "true" ]]; then
+            DRAND_REF="drand:${SMOKE_TAG}"
+          else
+            DRAND_REF="drand:latest"
+          fi
+
+          if [[ "$WORKLOAD_CHANGED" == "true" ]]; then
+            WORKLOAD_REF="workload:${SMOKE_TAG}"
+          else
+            WORKLOAD_REF="workload:latest"
+          fi
+
+          if [[ "$FILWIZARD_CHANGED" == "true" ]]; then
+            FILWIZARD_REF="filwizard:${SMOKE_TAG}"
+          else
+            FILWIZARD_REF="filwizard:latest"
+          fi
+
+          if [[ "$CURIO_OR_LOTUS_CHANGED" == "true" ]]; then
+            CURIO_REF="curio:${SMOKE_TAG}"
+          else
+            CURIO_REF="curio:latest"
+          fi
+
+          CONFIG_REF="config:${SMOKE_TAG}"
+
+          # filwizard is only used by the filecoin-foc endpoint
+          IMAGES="${DRAND_REF};${FOREST_REF};${LOTUS_REF};${WORKLOAD_REF};${CURIO_REF}"
+          if [[ "$NOTEBOOK" == "filecoin-foc" ]]; then
+            IMAGES="${IMAGES};${FILWIZARD_REF}"
+          fi
+          CONFIG_IMAGE="${CONFIG_REF}"
+
+          echo "images=${IMAGES}" >> "$GITHUB_OUTPUT"
+          echo "config_image=${CONFIG_IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Antithesis test (${{ matrix.notebook_name }})
+        uses: antithesishq/antithesis-trigger-action@main
+        with:
+          notebook_name: ${{ matrix.notebook_name }}
+          tenant: cobalt-bunny
+          username: filecoin
+          password: ${{ secrets.ANTITHESIS_PASSWORD }}
+          github_token: ${{ secrets.GH_PAT }}
+          images: ${{ steps.images.outputs.images }}
+          config_image: ${{ steps.images.outputs.config_image }}
+          description: "PR #${{ github.event.pull_request.number }} (${{ matrix.notebook_name }}) - ${{ github.event.pull_request.title }}"
+          additional_parameters: |-
+            custom.duration=1.0
+            antithesis.is_ephemeral=true
+            custom.is_smoke_test=true
