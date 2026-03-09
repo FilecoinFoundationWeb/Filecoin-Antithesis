@@ -7,6 +7,8 @@ ARG ANTITHESIS_REGISTRY=us-central1-docker.pkg.dev/molten-verve-216720/filecoin-
 FROM ${BUILD_MODE:+${ANTITHESIS_REGISTRY}/}lotus:${LOTUS_TAG} as lotus-builder
 
 FROM docker.io/golang:latest
+# explicilty enable CGO
+ENV CGO_ENABLED=1
 
 # First, copy the lotus binaries from the builder stage into our final image
 COPY --from=lotus-builder /usr/local/bin /usr/local/bin
