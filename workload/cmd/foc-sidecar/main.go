@@ -87,6 +87,10 @@ func main() {
 		checkProofSetLiveness(ctx, node, cfg, state)
 		checkDeletedDataSetNotLive(ctx, node, cfg, state)
 		checkActivePieceCount(ctx, node, cfg, state)
+		checkProvingAdvancement(ctx, node, cfg, state)
+		checkPieceAccountingConsistency(ctx, node, cfg, state)
+		checkRateConsistency(ctx, node, cfg, state)
+		checkPayerLockup(ctx, node, cfg, state)
 
 		lastPolledBlock = finalizedHeight
 		pollCount++

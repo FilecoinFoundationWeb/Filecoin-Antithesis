@@ -256,6 +256,21 @@ func ReadAccountLockup(ctx context.Context, node api.FullNode, filPayAddr, token
 	return new(big.Int).SetBytes(result[32:64])
 }
 
+// ReadRailPaymentRate calls getRail(railId) on FilecoinPay and returns the paymentRate field.
+// getRail returns a 12-field tuple; paymentRate is at word index 5 (bytes 160-192).
+func ReadRailPaymentRate(ctx context.Context, node api.FullNode, filPayAddr []byte, railID uint64) *big.Int {
+	calldata := BuildCalldata(SigGetRail, EncodeBigInt(new(big.Int).SetUint64(railID)))
+	result, err := EthCallRaw(ctx, node, filPayAddr, calldata)
+	if err != nil {
+		log.Printf("[foc] ReadRailPaymentRate(%d) failed: %v", railID, err)
+		return nil
+	}
+	if len(result) < 192 { // need at least 6 words
+		return nil
+	}
+	return new(big.Int).SetBytes(result[160:192])
+}
+
 // EncodeBigInt ABI-encodes a *big.Int as a 32-byte big-endian uint256.
 func EncodeBigInt(n *big.Int) []byte {
 	buf := make([]byte, 32)

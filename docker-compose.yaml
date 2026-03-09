@@ -103,27 +103,33 @@ services:
       - STRESS_FOREST_RPC_PORT=3456
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
       - STRESS_WAIT_HEIGHT=10
-      # --- Action deck weights (0 = disabled for FOC-only testing) ---
-      - STRESS_WEIGHT_TRANSFER=0
+      # --- Action deck weights ---
+      # EVM contract stress (competes for gas/state with FOC contracts)
+      - STRESS_WEIGHT_DEPLOY=3            # deploy EVM contracts
+      - STRESS_WEIGHT_CONTRACT_CALL=4     # call deployed contracts
+      - STRESS_WEIGHT_SELFDESTRUCT=2      # create + selfdestruct cycles
+      - STRESS_WEIGHT_CONTRACT_RACE=3     # concurrent calls to same contract
+      # FIL transfers (mempool pressure alongside FOC txs)
+      - STRESS_WEIGHT_TRANSFER=2          # basic FIL value transfers
+      # Nonce/ordering chaos (tests FOC nonce cache recovery)
+      - STRESS_WEIGHT_MSG_ORDERING=2      # conflicting txs from same sender
+      - STRESS_WEIGHT_NONCE_BOMBARD=2     # rapid nonce sequences
+      # Gas pressure (FOC txs use 5-22M gas, this competes)
+      - STRESS_WEIGHT_GAS_EXHAUST=2       # gas limit edge cases
+      # Cross-node consistency
+      - STRESS_WEIGHT_RECEIPT_AUDIT=2     # cross-node receipt comparison
+      - STRESS_WEIGHT_ACTOR_MIGRATION=1   # state tree access patterns
+      - STRESS_WEIGHT_ACTOR_LIFECYCLE=1   # actor creation/interaction
+      # Disabled (too aggressive or not useful for FOC co-testing)
       - STRESS_WEIGHT_GAS_WAR=0
       - STRESS_WEIGHT_ADVERSARIAL=0
       - STRESS_WEIGHT_HEAVY_COMPUTE=0
       - STRESS_WEIGHT_CHAIN_MONITOR=0
-      - STRESS_WEIGHT_DEPLOY=0
-      - STRESS_WEIGHT_CONTRACT_CALL=0
-      - STRESS_WEIGHT_SELFDESTRUCT=0
-      - STRESS_WEIGHT_CONTRACT_RACE=0
       - STRESS_WEIGHT_GAS_GUZZLER=0
       - STRESS_WEIGHT_LOG_BLASTER=0
       - STRESS_WEIGHT_MEMORY_BOMB=0
       - STRESS_WEIGHT_STORAGE_SPAM=0
       - STRESS_WEIGHT_REORG=0
-      - STRESS_WEIGHT_RECEIPT_AUDIT=0
-      - STRESS_WEIGHT_MSG_ORDERING=0
-      - STRESS_WEIGHT_NONCE_BOMBARD=0
-      - STRESS_WEIGHT_GAS_EXHAUST=0
-      - STRESS_WEIGHT_ACTOR_MIGRATION=0
-      - STRESS_WEIGHT_ACTOR_LIFECYCLE=0
       # --- FOC (Filecoin On-Chain Cloud) vectors ---
       # All FOC vectors require the `foc` compose profile to be active.
       # The lifecycle state machine must reach "Ready" before steady-state
@@ -131,18 +137,19 @@ services:
       #
       # SETUP: drives the sequential state machine one step per pick
       #   Init → Approved → Deposited → OperatorApproved → DataSetCreated → Ready
-      - STRESS_WEIGHT_FOC_LIFECYCLE=3
+      - STRESS_WEIGHT_FOC_LIFECYCLE=6
       #
       # STEADY-STATE: only execute once lifecycle reaches Ready
-      - STRESS_WEIGHT_FOC_UPLOAD=2 # upload random data to Curio PDP API
-      - STRESS_WEIGHT_FOC_ADD_PIECES=1 # add uploaded pieces to on-chain proofset
-      - STRESS_WEIGHT_FOC_MONITOR=3 # query proofset health + USDFC balances
-      - STRESS_WEIGHT_FOC_TRANSFER=1 # ERC-20 USDFC transfer (client → deployer)
-      - STRESS_WEIGHT_FOC_SETTLE=1 # settle active payment rail
-      - STRESS_WEIGHT_FOC_WITHDRAW=1 # withdraw USDFC from FilecoinPay
+      - STRESS_WEIGHT_FOC_UPLOAD=4 # upload random data to Curio PDP API
+      - STRESS_WEIGHT_FOC_ADD_PIECES=3 # add uploaded pieces to on-chain proofset
+      - STRESS_WEIGHT_FOC_MONITOR=4 # query proofset health + USDFC balances
+      - STRESS_WEIGHT_FOC_RETRIEVE=2 # download piece and verify CID integrity
+      - STRESS_WEIGHT_FOC_TRANSFER=2 # ERC-20 USDFC transfer (client → deployer)
+      - STRESS_WEIGHT_FOC_SETTLE=2 # settle active payment rail
+      - STRESS_WEIGHT_FOC_WITHDRAW=2 # withdraw USDFC from FilecoinPay
       #
       # DESTRUCTIVE: weight 0 = disabled by default, set >0 to opt-in
-      - STRESS_WEIGHT_FOC_DELETE_PIECE=0 # schedule piece deletion from proofset
+      - STRESS_WEIGHT_FOC_DELETE_PIECE=1 # schedule piece deletion from proofset
       - STRESS_WEIGHT_FOC_DELETE_DS=0 # delete entire dataset + reset lifecycle
       #
       - CURIO_PDP_URL=http://curio:80

@@ -286,6 +286,7 @@ func buildDeck() {
 			weightedAction{"DoFOCUploadPiece", "STRESS_WEIGHT_FOC_UPLOAD", DoFOCUploadPiece, 2},
 			weightedAction{"DoFOCAddPieces", "STRESS_WEIGHT_FOC_ADD_PIECES", DoFOCAddPieces, 1},
 			weightedAction{"DoFOCMonitorProofSet", "STRESS_WEIGHT_FOC_MONITOR", DoFOCMonitorProofSet, 3},
+			weightedAction{"DoFOCRetrieveAndVerify", "STRESS_WEIGHT_FOC_RETRIEVE", DoFOCRetrieveAndVerify, 1},
 			weightedAction{"DoFOCTransfer", "STRESS_WEIGHT_FOC_TRANSFER", DoFOCTransfer, 1},
 			weightedAction{"DoFOCSettle", "STRESS_WEIGHT_FOC_SETTLE", DoFOCSettle, 1},
 			weightedAction{"DoFOCWithdraw", "STRESS_WEIGHT_FOC_WITHDRAW", DoFOCWithdraw, 1},

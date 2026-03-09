@@ -149,11 +149,18 @@ Discovers active payment rails via `getRailsForPayerAndToken`, gets current chai
 ### DoFOCWithdraw (weight: 1)
 Reads available funds from FilecoinPay, withdraws 1–5% of available balance back to the client's wallet.
 
+### DoFOCRetrieveAndVerify (weight: 1)
+Downloads a random piece from Curio's PDP API (`GET /piece/{cid}`), recomputes PieceCIDv2 via CommP, and verifies the CID matches the original upload. Detects data corruption in the storage/retrieval pipeline.
+
 ### DoFOCDeletePiece (weight: 0, opt-in)
 Signs EIP-712 `SchedulePieceRemovals` and submits to PDPVerifier. Removes the last added piece from the proofset. **Destructive** — disabled by default.
 
 ### DoFOCDeleteDataSet (weight: 0, opt-in)
-Signs EIP-712 `DeleteDataSet` and submits to PDPVerifier. Deletes the entire dataset and resets the lifecycle to `Init`. **Destructive** — disabled by default.
+Two-phase dataset deletion following the FWSS termination pipeline:
+1. **Phase 1**: Calls `FWSS.terminateService(clientDataSetId)` to initiate service termination (sets end epoch on the payment rail).
+2. **Phase 2** (subsequent invocation): Signs EIP-712 `DeleteDataSet` and submits to `PDPVerifier.deleteDataSet()`. Only succeeds after the termination epoch has passed.
+
+Resets the lifecycle to `Init` on success. **Destructive** — disabled by default.
 
 ---
 
@@ -182,7 +189,9 @@ All stress-engine assertions use `assert.Sometimes` because individual transacti
 | `"payment rail settlement succeeds"` | Sometimes | DoFOCSettle | `settleRail(railId, epoch)` tx accepted by mempool |
 | `"USDFC withdrawal from FilecoinPay succeeds"` | Sometimes | DoFOCWithdraw | `withdraw(USDFC, amount)` tx accepted by mempool |
 | `"piece deletion scheduled"` | Sometimes | DoFOCDeletePiece | `schedulePieceDeletions` tx accepted by mempool |
-| `"dataset deletion succeeds"` | Sometimes | DoFOCDeleteDataSet | `deleteDataSet` tx accepted by mempool |
+| `"FWSS service termination initiated"` | Sometimes | DoFOCDeleteDataSet | `terminateService(clientDataSetId)` confirmed on-chain (phase 1) |
+| `"dataset deletion succeeds"` | Sometimes | DoFOCDeleteDataSet | `deleteDataSet` confirmed on-chain after termination epoch passed (phase 2) |
+| `"piece retrieval integrity verified"` | Sometimes | DoFOCRetrieveAndVerify | Downloaded piece recomputed CID matches original. Detects data corruption in storage/retrieval. |
 
 ### Sidecar Assertions (`assertions.go`)
 
@@ -196,6 +205,11 @@ Sidecar assertions use `assert.Always` for safety invariants that must hold on e
 | `"Active proofset is live on-chain"` | Always | checkProofSetLiveness | Every non-deleted dataset has `dataSetLive() == true`. Detects unexpected dataset termination or proof failure. |
 | `"Deleted proofset is not live"` | Always | checkDeletedDataSetNotLive | Every deleted dataset has `dataSetLive() == false`. Detects zombie datasets that survive deletion. |
 | `"Queried active piece count for dataset"` | Reachable | checkActivePieceCount | Confirms that the sidecar successfully queries `getActivePieceCount()` for tracked datasets. Coverage marker, not a safety check. |
+| `"Proving period advances (challenge epoch changed)"` | Sometimes | checkProvingAdvancement | `getNextChallengeEpoch` changes over time for active datasets. Confirms proving pipeline is running. |
+| `"Dataset proof submitted (proven epoch advanced)"` | Sometimes | checkProvingAdvancement | `getDataSetLastProvenEpoch` advances. Confirms Curio is submitting proofs. |
+| `"Active piece count does not exceed leaf count"` | Always | checkPieceAccountingConsistency | `getActivePieceCount <= getDataSetLeafCount`. Detects piece accounting corruption. |
+| `"Active dataset rail has non-zero payment rate"` | Always | checkRateConsistency | Datasets with pieces must have `paymentRate > 0` on their PDP rail. Detects rate miscalculation. |
+| `"Payer with active datasets has non-zero lockup"` | Always | checkPayerLockup | Payers storing data must have lockup > 0. Detects lockup accounting failures. |
 
 ### Event Tracking
 
@@ -258,7 +272,7 @@ Supported message types:
 | `AddPiecesHTTP` | `POST /pdp/data-sets/{id}/pieces` | Add pieces to dataset |
 | `WaitForPieceAddition` | `GET /pdp/data-sets/{id}/pieces/added/{txHash}` | Poll until confirmed |
 | `GetDataSet` | `GET /pdp/data-sets/{id}` | Read dataset info |
-| `DownloadPiece` | `GET /pdp/piece/{cid}` | Download piece data |
+| `DownloadPiece` | `GET /piece/{cid}` | Download piece data |
 
 ### `config.go` — Environment Parsing
 
@@ -362,3 +376,13 @@ go vet ./...
 5. **Sidecar independence** — Safety assertions run in a separate polling loop, not in the stress-engine's hot path. This ensures invariants are checked even under high load or engine failures.
 
 6. **30M gas limit** — FVM cross-contract EVM calls have significantly higher gas costs than native EVM. The deposit step alone uses ~22M gas due to `transferFrom` crossing contract boundaries.
+
+---
+
+## Future Work
+
+- **SP-to-SP piece pull (`/pull` flow)** — Curio supports `POST /pdp/piece/pull` for one SP to pull data from another, which is the core multi-copy/durability mechanism. Testing this requires a second Curio node (with its own Yugabyte, SP registration, and PDP wallet). Planned for when multi-Curio devnet support is added.
+- **`depositWithPermitAndApproveOperator`** — Combined deposit + operator approval in a single tx (the production flow). Requires EIP-2612 permit support in MockUSDFC.
+- **Session key testing** — `SessionKeyRegistry` enables delegated signing. Not yet exercised.
+- **Larger piece sizes (40+ MiB)** — Curio caches proof data above ~40 MiB, exercising different code paths. Currently limited to keep devnet test cycles fast.
+- **`addPieces` with `dataSetId=0`** — Production flow creates datasets along with the first piece. The separate `createDataSet` path may be removed upstream.

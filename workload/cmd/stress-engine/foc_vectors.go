@@ -77,6 +77,8 @@ type focRuntime struct {
 
 	UploadedPieces []pieceRef // uploaded to Curio, not yet added on-chain
 	AddedPieces    []pieceRef // confirmed on-chain in proofset
+
+	TerminationInitiated bool // true after terminateService has been called
 }
 
 type pieceRef struct {
@@ -453,10 +455,19 @@ func DoFOCAddPieces() {
 	})
 
 	focStateMu.Lock()
-	for _, pid := range pieceIDs {
+	if len(pieceIDs) > 0 {
+		for _, pid := range pieceIDs {
+			focState.AddedPieces = append(focState.AddedPieces, pieceRef{
+				PieceCID: piece.PieceCID,
+				PieceID:  pid,
+			})
+		}
+	} else {
+		// Curio confirmed the piece was added but didn't return IDs.
+		// Track by CID so retrieval verification can still work.
 		focState.AddedPieces = append(focState.AddedPieces, pieceRef{
 			PieceCID: piece.PieceCID,
-			PieceID:  pid,
+			PieceID:  0,
 		})
 	}
 	focStateMu.Unlock()
@@ -697,7 +708,14 @@ func DoFOCDeletePiece() {
 	})
 }
 
-// DoFOCDeleteDataSet deletes the entire dataset.
+// DoFOCDeleteDataSet deletes the entire dataset following the proper FWSS
+// termination pipeline:
+//   Phase 1: Call FWSS.terminateService(clientDataSetId) to initiate termination.
+//   Phase 2: Call PDPVerifier.deleteDataSet(dataSetId, extraData) after the
+//            service termination epoch has passed.
+//
+// Each deck invocation advances one phase. Phase 2 may need multiple attempts
+// while waiting for the PdpEndEpoch to pass (the contract will revert if early).
 func DoFOCDeleteDataSet() {
 	s, ok := requireReady()
 	if !ok || s.OnChainDataSetID == 0 {
@@ -715,6 +733,32 @@ func DoFOCDeleteDataSet() {
 
 	node := focNode()
 
+	// Phase 1: Initiate service termination via FWSS
+	if !s.TerminationInitiated {
+		calldata := foc.BuildCalldata(foc.SigTerminateService,
+			foc.EncodeBigInt(s.ClientDataSetID),
+		)
+
+		ok := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.FWSSAddr, calldata, "foc-terminate-svc")
+		if !ok {
+			log.Printf("[foc-delete-ds] terminateService failed for clientDataSetId=%s, will retry", s.ClientDataSetID)
+			return
+		}
+
+		log.Printf("[foc-delete-ds] service termination initiated: clientDataSetId=%s dataSetID=%d",
+			s.ClientDataSetID, s.OnChainDataSetID)
+		assert.Sometimes(true, "FWSS service termination initiated", map[string]any{
+			"clientDataSetId": s.ClientDataSetID.String(),
+			"dataSetID":       s.OnChainDataSetID,
+		})
+
+		focStateMu.Lock()
+		focState.TerminationInitiated = true
+		focStateMu.Unlock()
+		return
+	}
+
+	// Phase 2: Delete the dataset on PDPVerifier (requires termination epoch to have passed)
 	sig, err := foc.SignEIP712DeleteDataSet(
 		focCfg.ClientKey, focCfg.FWSSAddr, s.ClientDataSetID,
 	)
@@ -730,7 +774,7 @@ func DoFOCDeleteDataSet() {
 		extraData,
 	)
 
-	sent := foc.SendEthTx(ctx, node, focCfg.SPKey, focCfg.PDPAddr, calldata, "foc-delete-ds")
+	sent := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.PDPAddr, calldata, "foc-delete-ds")
 
 	log.Printf("[foc-delete-ds] dataSetID=%d ok=%v", s.OnChainDataSetID, sent)
 	assert.Sometimes(sent, "dataset deletion succeeds", map[string]any{
@@ -744,7 +788,55 @@ func DoFOCDeleteDataSet() {
 		focState.ClientDataSetID = nil
 		focState.AddedPieces = nil
 		focState.UploadedPieces = nil
+		focState.TerminationInitiated = false
 		focStateMu.Unlock()
+	}
+}
+
+// DoFOCRetrieveAndVerify downloads a piece from Curio and verifies that the
+// retrieved data produces the same PieceCID as the original upload.
+func DoFOCRetrieveAndVerify() {
+	if _, ok := requireReady(); !ok {
+		return
+	}
+
+	focStateMu.Lock()
+	nPieces := len(focState.AddedPieces)
+	var piece pieceRef
+	if nPieces > 0 {
+		piece = focState.AddedPieces[rngIntn(nPieces)]
+	}
+	focStateMu.Unlock()
+
+	if nPieces == 0 {
+		return
+	}
+
+	data, err := foc.DownloadPiece(ctx, piece.PieceCID)
+	if err != nil {
+		log.Printf("[foc-retrieve] download failed for %s: %v", piece.PieceCID, err)
+		return
+	}
+
+	computedCID, err := foc.CalculatePieceCID(data)
+	if err != nil {
+		log.Printf("[foc-retrieve] CalculatePieceCID failed for %s: %v", piece.PieceCID, err)
+		return
+	}
+
+	match := computedCID == piece.PieceCID
+
+	assert.Sometimes(match, "piece retrieval integrity verified", map[string]any{
+		"pieceCID":    piece.PieceCID,
+		"computedCID": computedCID,
+		"dataLen":     len(data),
+	})
+
+	if !match {
+		log.Printf("[foc-retrieve] INTEGRITY MISMATCH: expected=%s computed=%s len=%d",
+			piece.PieceCID, computedCID, len(data))
+	} else {
+		log.Printf("[foc-retrieve] verified: cid=%s len=%d", piece.PieceCID, len(data))
 	}
 }
 

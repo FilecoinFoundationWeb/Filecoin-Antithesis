@@ -402,7 +402,7 @@ func GetDataSet(ctx context.Context, dataSetID int) (*DataSetInfo, error) {
 
 // DownloadPiece retrieves raw piece data from Curio.
 func DownloadPiece(ctx context.Context, pieceCID string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", CurioBaseURL()+"/pdp/piece/"+pieceCID, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", CurioBaseURL()+"/piece/"+pieceCID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request: %w", err)
 	}

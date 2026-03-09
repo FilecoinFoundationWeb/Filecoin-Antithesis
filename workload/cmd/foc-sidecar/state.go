@@ -24,6 +24,11 @@ type DatasetInfo struct {
 	ServiceProvider []byte
 	Payee           []byte
 	Deleted         bool
+
+	// Proving lifecycle tracking
+	LastSeenChallengeEpoch uint64 // last observed getNextChallengeEpoch value
+	LastSeenProvenEpoch    uint64 // last observed getDataSetLastProvenEpoch value
+	ChallengeEpochStale    int    // consecutive polls where challenge epoch didn't advance
 }
 
 // RailInfo holds state for a tracked payment rail.
@@ -113,6 +118,34 @@ func (s *SidecarState) GetRailToDataset(railID uint64) (uint64, bool) {
 	defer s.mu.RUnlock()
 	dsID, ok := s.RailToDataset[railID]
 	return dsID, ok
+}
+
+// UpdateProvingState updates the proving lifecycle tracking for a dataset.
+// Returns (challengeAdvanced, provenAdvanced) indicating whether each metric changed.
+func (s *SidecarState) UpdateProvingState(dataSetID uint64, challengeEpoch, provenEpoch uint64) (bool, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ds, ok := s.Datasets[dataSetID]
+	if !ok || ds.Deleted {
+		return false, false
+	}
+
+	challengeAdvanced := challengeEpoch != ds.LastSeenChallengeEpoch && challengeEpoch > 0
+	provenAdvanced := provenEpoch != ds.LastSeenProvenEpoch && provenEpoch > 0
+
+	if challengeAdvanced {
+		ds.LastSeenChallengeEpoch = challengeEpoch
+		ds.ChallengeEpochStale = 0
+	} else if ds.LastSeenChallengeEpoch > 0 {
+		ds.ChallengeEpochStale++
+	}
+
+	if provenAdvanced {
+		ds.LastSeenProvenEpoch = provenEpoch
+	}
+
+	return challengeAdvanced, provenAdvanced
 }
 
 // MarkDatasetDeleted marks a dataset as deleted by its on-chain ID.
