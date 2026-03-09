@@ -32,11 +32,26 @@ if [ ! -f $CURIO_REPO_PATH/.init.curio ]; then
     CURIO_WALLET=$(lotus wallet new bls)
     echo "Created new curio wallet: $CURIO_WALLET"
 
-    FUND_CID=$(lotus send --from $DEFAULT_WALLET $CURIO_WALLET 10000 | tail -1)                                                                                                                                        
-    echo "Funding message CID: $FUND_CID"                                                                                                                                                                   
-    echo "Waiting for funding message to be confirmed on-chain..."                                                                                                                                          
-    lotus state wait-msg "$FUND_CID"                                                                                                                                                                          
-    echo "Funding confirmed."    
+    FUND_CID=$(lotus send --from $DEFAULT_WALLET $CURIO_WALLET 10000 | tail -1)
+    echo "Funding message CID: $FUND_CID"
+    echo "Waiting for funding message to be confirmed on-chain..."
+    lotus state wait-msg "$FUND_CID"
+    echo "Funding confirmed."
+
+    # Create a delegated (secp256k1) wallet for PDP — required by PDP verifier
+    PDP_WALLET=$(lotus wallet new delegated)
+    echo "Created PDP delegated wallet: $PDP_WALLET"
+
+    FUND_PDP_CID=$(lotus send --from $DEFAULT_WALLET $PDP_WALLET 100 | tail -1)
+    echo "Funding PDP wallet: $FUND_PDP_CID"
+    lotus state wait-msg "$FUND_PDP_CID"
+    echo "PDP wallet funded."
+
+    # Export PDP wallet private key early so filwizard can read it
+    PRIVATE_KEY_HEX=$(lotus wallet export $PDP_WALLET | xxd -r -p | jq -r '.PrivateKey' | base64 -d | xxd -p -c 32)
+    echo "$PRIVATE_KEY_HEX" > ${CURIO_REPO_PATH}/private_key
+    echo "$PDP_WALLET" > ${CURIO_REPO_PATH}/pdp_wallet_address
+    echo "PDP private key written to ${CURIO_REPO_PATH}/private_key"
 
     lotus-shed miner create --deposit-margin-factor 1.01 $CURIO_WALLET $CURIO_WALLET $CURIO_WALLET 2KiB
     touch $CURIO_REPO_PATH/.init.setup
@@ -135,17 +150,13 @@ if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
   echo "Public Key (formatted):"
   echo "$PUB_KEY"
 
-  # Get and format private key
-  echo "Preparing private key..."
-  PRIVATE_KEY_HEX=$(lotus wallet export $DEFAULT_WALLET | xxd -r -p | jq -r '.PrivateKey' | base64 -d | xxd -p -c 32)
-  
-  # Save private key to file
-  echo "Saving private key to ${CURIO_REPO_PATH}/private_key..."
-  echo "$PRIVATE_KEY_HEX" > ${CURIO_REPO_PATH}/private_key
-  
+  # Read PDP private key (already written during .init.setup)
+  echo "Reading PDP private key from ${CURIO_REPO_PATH}/private_key..."
+  PRIVATE_KEY_HEX=$(cat ${CURIO_REPO_PATH}/private_key | tr -d '[:space:]')
+
   echo "Importing PDP private key..."
   
-  sleep 30
+  sleep 10
   
   # Import the private key using RPC
   echo "Importing private key via RPC..."

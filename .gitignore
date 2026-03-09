@@ -6,7 +6,10 @@ shared/
 # Compiled Go binaries that may land in workload/
 workload/stress-engine
 workload/genesis-prep
+workload/foc-sidecar
+workload/setup-complete
 
 # Local env overrides
 *.env.local
 *.log
+*.zip

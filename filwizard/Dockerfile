@@ -1,6 +1,7 @@
 # Stage 1: Clone and build the filwizard binary
 FROM golang:latest AS builder
 
+RUN ls
 # Clone FilWizard repo (for contract deployment only)
 RUN git clone https://github.com/parthshah1/FilWizard /build
 WORKDIR /build
