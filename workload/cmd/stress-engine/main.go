@@ -277,12 +277,21 @@ func buildDeck() {
 		{"DoActorLifecycleStress", "STRESS_WEIGHT_ACTOR_LIFECYCLE", DoActorLifecycleStress, 1},
 	}
 
-	// FWSS lifecycle vectors — only when FOC profile is active
+	// FOC lifecycle vectors — only when FOC profile is active
 	if focCfg != nil {
 		actions = append(actions,
-			weightedAction{"DoFWSSDeposit", "STRESS_WEIGHT_FWSS_DEPOSIT", DoFWSSDeposit, 2},
-			weightedAction{"DoFWSSApproveOperator", "STRESS_WEIGHT_FWSS_APPROVE_OP", DoFWSSApproveOperator, 1},
-			weightedAction{"DoFWSSCreateDataSet", "STRESS_WEIGHT_FWSS_CREATE_DS", DoFWSSCreateDataSet, 2},
+			// Sequential lifecycle state machine (drives setup to completion)
+			weightedAction{"DoFOCLifecycle", "STRESS_WEIGHT_FOC_LIFECYCLE", DoFOCLifecycle, 3},
+			// Steady-state vectors (only fire once lifecycle reaches Ready)
+			weightedAction{"DoFOCUploadPiece", "STRESS_WEIGHT_FOC_UPLOAD", DoFOCUploadPiece, 2},
+			weightedAction{"DoFOCAddPieces", "STRESS_WEIGHT_FOC_ADD_PIECES", DoFOCAddPieces, 1},
+			weightedAction{"DoFOCMonitorProofSet", "STRESS_WEIGHT_FOC_MONITOR", DoFOCMonitorProofSet, 3},
+			weightedAction{"DoFOCTransfer", "STRESS_WEIGHT_FOC_TRANSFER", DoFOCTransfer, 1},
+			weightedAction{"DoFOCSettle", "STRESS_WEIGHT_FOC_SETTLE", DoFOCSettle, 1},
+			weightedAction{"DoFOCWithdraw", "STRESS_WEIGHT_FOC_WITHDRAW", DoFOCWithdraw, 1},
+			// Destructive — weight 0 by default (opt-in)
+			weightedAction{"DoFOCDeletePiece", "STRESS_WEIGHT_FOC_DELETE_PIECE", DoFOCDeletePiece, 0},
+			weightedAction{"DoFOCDeleteDataSet", "STRESS_WEIGHT_FOC_DELETE_DS", DoFOCDeleteDataSet, 0},
 		)
 	}
 
@@ -349,6 +358,9 @@ func main() {
 			log.Printf("[engine] === iteration %d summary ===", iteration)
 			for name, count := range actionCounts {
 				log.Printf("[engine]   %s: %d", name, count)
+			}
+			if focCfg != nil {
+				logFOCProgress()
 			}
 		}
 	}

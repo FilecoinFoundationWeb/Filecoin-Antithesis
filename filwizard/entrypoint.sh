@@ -133,7 +133,7 @@ echo "CLIENT_ETH_ADDRESS=$CLIENT_ETH_ADDRESS" >> "$ENV_OUTPUT"
 SP_PRIVATE_KEY_FILE="/shared/curio/private_key"
 wait_for_file "$SP_PRIVATE_KEY_FILE" "SP private key from Curio"
 SP_PRIVATE_KEY=$(cat "$SP_PRIVATE_KEY_FILE" | tr -d '[:space:]')
-
+echo $SP_PRIVATE_KEY
 # ── 8. Mint tokens ──
 log_info "Minting tokens..."
 
@@ -141,13 +141,13 @@ filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" \
     --private-key "$CLIENT_PRIVATE_KEY" --amount 1000000000000000000000 --fil 0
 
 filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" \
-    --private-key "$CLIENT_PRIVATE_KEY" --amount 0 --fil 10
+    --private-key "$CLIENT_PRIVATE_KEY" --amount 0 --fil 100
 
 filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" \
     --private-key "$SP_PRIVATE_KEY" --amount 10000000000000000000000 --fil 0
 
 filwizard payments mint-private-key --workspace "$WORKSPACE_PATH" \
-    --private-key "$SP_PRIVATE_KEY" --amount 0 --fil 10
+    --private-key "$SP_PRIVATE_KEY" --amount 0 --fil 100
 
 log_info "Tokens minted"
 

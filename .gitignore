@@ -12,3 +12,4 @@ workload/setup-complete
 # Local env overrides
 *.env.local
 *.log
+*.zip

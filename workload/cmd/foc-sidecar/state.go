@@ -20,10 +20,10 @@ type DatasetInfo struct {
 	DataSetID       uint64
 	ProviderID      uint64
 	PDPRailID       uint64
-	FilPayRailID    uint64
 	Payer           []byte
 	ServiceProvider []byte
 	Payee           []byte
+	Deleted         bool
 }
 
 // RailInfo holds state for a tracked payment rail.
@@ -53,7 +53,6 @@ func (s *SidecarState) AddDataset(ev DataSetCreatedEvent) {
 		DataSetID:       dsID,
 		ProviderID:      ev.ProviderID.Uint64(),
 		PDPRailID:       ev.PDPRailID.Uint64(),
-		FilPayRailID:    ev.FilPayRailID.Uint64(),
 		Payer:           ev.Payer,
 		ServiceProvider: ev.ServiceProvider,
 		Payee:           ev.Payee,
@@ -88,13 +87,13 @@ func (s *SidecarState) AddRail(ev RailCreatedEvent) {
 	}
 }
 
-// GetDatasets returns a snapshot of all tracked datasets.
-func (s *SidecarState) GetDatasets() []*DatasetInfo {
+// GetDatasets returns a deep-copy snapshot of all tracked datasets.
+func (s *SidecarState) GetDatasets() []DatasetInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	result := make([]*DatasetInfo, 0, len(s.Datasets))
+	result := make([]DatasetInfo, 0, len(s.Datasets))
 	for _, d := range s.Datasets {
-		result = append(result, d)
+		result = append(result, *d)
 	}
 	return result
 }
@@ -114,6 +113,15 @@ func (s *SidecarState) GetRailToDataset(railID uint64) (uint64, bool) {
 	defer s.mu.RUnlock()
 	dsID, ok := s.RailToDataset[railID]
 	return dsID, ok
+}
+
+// MarkDatasetDeleted marks a dataset as deleted by its on-chain ID.
+func (s *SidecarState) MarkDatasetDeleted(dataSetID uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ds, ok := s.Datasets[dataSetID]; ok {
+		ds.Deleted = true
+	}
 }
 
 func bytesEqual(a, b []byte) bool {

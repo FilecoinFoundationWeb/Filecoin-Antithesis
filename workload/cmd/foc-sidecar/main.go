@@ -81,9 +81,12 @@ func main() {
 		pollEvents(ctx, node, cfg, state, fromBlock, finalizedHeight)
 
 		// Run assertions
-		checkS03RailToDataset(ctx, node, cfg, state)
-		checkS05FilecoinPaySolvency(ctx, node, cfg, state)
-		checkS10ProviderIDConsistency(ctx, node, cfg, state)
+		checkRailToDataset(ctx, node, cfg, state)
+		checkFilecoinPaySolvency(ctx, node, cfg, state)
+		checkProviderIDConsistency(ctx, node, cfg, state)
+		checkProofSetLiveness(ctx, node, cfg, state)
+		checkDeletedDataSetNotLive(ctx, node, cfg, state)
+		checkActivePieceCount(ctx, node, cfg, state)
 
 		lastPolledBlock = finalizedHeight
 		pollCount++
@@ -118,9 +121,24 @@ func pollEvents(ctx context.Context, node api.FullNode, cfg *foc.Config, state *
 		} else {
 			events := parseDataSetCreatedLogs(logs)
 			for _, ev := range events {
-				log.Printf("[foc-sidecar] DataSetCreated: dsId=%s pdpRailId=%s providerId=%s payer=%x sp=%x payee=%x",
-					ev.DataSetID, ev.PDPRailID, ev.ProviderID, ev.Payer, ev.ServiceProvider, ev.Payee)
+				log.Printf("[foc-sidecar] DataSetCreated: dsId=%s providerId=%s pdpRailId=%s payer=%x sp=%x payee=%x",
+					ev.DataSetID, ev.ProviderID, ev.PDPRailID, ev.Payer, ev.ServiceProvider, ev.Payee)
 				state.AddDataset(ev)
+			}
+		}
+	}
+
+	// DataSetDeleted events from PDPVerifier
+	if cfg.PDPAddr != nil {
+		logs, err := fetchAndParseLogs(ctx, node, cfg.PDPAddr, TopicDataSetDeleted, from, to)
+		if err != nil {
+			log.Printf("[foc-sidecar] fetchLogs(DataSetDeleted) error: %v", err)
+		} else {
+			events := parseDataSetDeletedLogs(logs)
+			for _, ev := range events {
+				log.Printf("[foc-sidecar] DataSetDeleted: dsId=%s leafCount=%s",
+					ev.DataSetID, ev.DeletedLeafCount)
+				state.MarkDatasetDeleted(ev.DataSetID.Uint64())
 			}
 		}
 	}

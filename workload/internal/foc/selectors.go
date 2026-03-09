@@ -23,7 +23,8 @@ var (
 	SigSetOpApproval   = CalcSelector("setOperatorApproval(address,address,bool,uint256,uint256,uint256)")
 	SigSettleRail      = CalcSelector("settleRail(uint256,uint256)")
 	SigGetRailsByPayer = CalcSelector("getRailsForPayerAndToken(address,address,uint256,uint256)")
-	SigWithdraw        = CalcSelector("withdraw(address,uint256)")
+	SigWithdraw          = CalcSelector("withdraw(address,uint256)")
+	SigOperatorApprovals = CalcSelector("operatorApprovals(address,address,address)")
 	SigCreateRail      = CalcSelector("createRail(address,address,address,address,uint256,address)")
 	SigModifyRailPayment = CalcSelector("modifyRailPayment(uint256,uint256,uint256)")
 
@@ -35,5 +36,12 @@ var (
 	SigRailToDataSet    = CalcSelector("railToDataSet(uint256)")
 
 	// PDPVerifier
-	SigCreateDataSet = CalcSelector("createDataSet(address,bytes)")
+	SigCreateDataSet          = CalcSelector("createDataSet(address,bytes)")
+	SigAddPieces              = CalcSelector("addPieces(uint256,address,bytes[],bytes)")
+	SigSchedulePieceDeletions = CalcSelector("schedulePieceDeletions(uint256,uint256[],bytes)")
+	SigDeleteDataSet          = CalcSelector("deleteDataSet(uint256,bytes)")
+	SigGetActivePieceCount    = CalcSelector("getActivePieceCount(uint256)")
+	SigDataSetLive            = CalcSelector("dataSetLive(uint256)")
+	SigGetNextChallengeEpoch  = CalcSelector("getNextChallengeEpoch(uint256)")
+	SigGetDataSetLeafCount    = CalcSelector("getDataSetLeafCount(uint256)")
 )

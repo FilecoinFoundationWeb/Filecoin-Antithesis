@@ -15,6 +15,19 @@ var (
 	CreateDataSetTypehash = Keccak256([]byte(
 		"CreateDataSet(uint256 clientDataSetId,address payee,MetadataEntry[] metadata)MetadataEntry(string key,string value)",
 	))
+	CidTypehash = Keccak256([]byte("Cid(bytes data)"))
+	PieceMetadataTypehash = Keccak256([]byte(
+		"PieceMetadata(uint256 pieceIndex,MetadataEntry[] metadata)MetadataEntry(string key,string value)",
+	))
+	AddPiecesTypehash = Keccak256([]byte(
+		"AddPieces(uint256 clientDataSetId,uint256 nonce,Cid[] pieceData,PieceMetadata[] pieceMetadata)Cid(bytes data)MetadataEntry(string key,string value)PieceMetadata(uint256 pieceIndex,MetadataEntry[] metadata)",
+	))
+	SchedulePieceRemovalsTypehash = Keccak256([]byte(
+		"SchedulePieceRemovals(uint256 clientDataSetId,uint256[] pieceIds)",
+	))
+	DeleteDataSetTypehash = Keccak256([]byte(
+		"DeleteDataSet(uint256 clientDataSetId)",
+	))
 	// EIP-712 domain type hash
 	EIP712DomainTypehash = Keccak256([]byte(
 		"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)",
@@ -124,4 +137,101 @@ func Secp256k1Sign(privKey []byte, hash []byte) ([]byte, error) {
 	result[64] = sigBytes[0] - 27        // V (recovery ID: 0 or 1)
 
 	return result, nil
+}
+
+// HashCid hashes a CID bytes value for EIP-712.
+func HashCid(cidBytes []byte) []byte {
+	encoded := make([]byte, 0, 64)
+	encoded = append(encoded, CidTypehash...)
+	encoded = append(encoded, Keccak256(cidBytes)...)
+	return Keccak256(encoded)
+}
+
+// HashPieceMetadata hashes a PieceMetadata struct for EIP-712.
+func HashPieceMetadata(pieceIndex *big.Int, metadataKeys, metadataValues []string) []byte {
+	metadataHash := HashMetadataEntries(metadataKeys, metadataValues)
+
+	encoded := make([]byte, 0, 96)
+	encoded = append(encoded, PieceMetadataTypehash...)
+	encoded = append(encoded, EncodeBigInt(pieceIndex)...)
+	encoded = append(encoded, metadataHash...)
+	return Keccak256(encoded)
+}
+
+// AddPiecesStructHash builds the EIP-712 struct hash for AddPieces.
+func AddPiecesStructHash(clientDataSetId, nonce *big.Int, cidBytesSlice [][]byte, metadataKeysPerPiece, metadataValuesPerPiece [][]string) []byte {
+	// Hash the pieceData array (Cid[])
+	cidHashes := make([]byte, 0, 32*len(cidBytesSlice))
+	for _, cb := range cidBytesSlice {
+		cidHashes = append(cidHashes, HashCid(cb)...)
+	}
+	pieceDataHash := Keccak256(cidHashes)
+
+	// Hash the pieceMetadata array (PieceMetadata[])
+	metaHashes := make([]byte, 0, 32*len(cidBytesSlice))
+	for i := range cidBytesSlice {
+		var keys, vals []string
+		if i < len(metadataKeysPerPiece) {
+			keys = metadataKeysPerPiece[i]
+			vals = metadataValuesPerPiece[i]
+		}
+		metaHashes = append(metaHashes, HashPieceMetadata(big.NewInt(int64(i)), keys, vals)...)
+	}
+	pieceMetadataHash := Keccak256(metaHashes)
+
+	encoded := make([]byte, 0, 32*5)
+	encoded = append(encoded, AddPiecesTypehash...)
+	encoded = append(encoded, EncodeBigInt(clientDataSetId)...)
+	encoded = append(encoded, EncodeBigInt(nonce)...)
+	encoded = append(encoded, pieceDataHash...)
+	encoded = append(encoded, pieceMetadataHash...)
+	return Keccak256(encoded)
+}
+
+// SignEIP712AddPieces signs an AddPieces EIP-712 message.
+func SignEIP712AddPieces(privKey, fwssAddr []byte, clientDataSetId, nonce *big.Int, cidBytesSlice [][]byte, metadataKeysPerPiece, metadataValuesPerPiece [][]string) ([]byte, error) {
+	domainSep := BuildDomainSeparator(fwssAddr)
+	structHash := AddPiecesStructHash(clientDataSetId, nonce, cidBytesSlice, metadataKeysPerPiece, metadataValuesPerPiece)
+	digest := BuildEIP712Digest(domainSep, structHash)
+	return Secp256k1Sign(privKey, digest)
+}
+
+// SchedulePieceRemovalsStructHash builds the EIP-712 struct hash for SchedulePieceRemovals.
+func SchedulePieceRemovalsStructHash(clientDataSetId *big.Int, pieceIDs []*big.Int) []byte {
+	// Hash the pieceIds array (uint256[])
+	packed := make([]byte, 0, 32*len(pieceIDs))
+	for _, id := range pieceIDs {
+		packed = append(packed, EncodeBigInt(id)...)
+	}
+	pieceIDsHash := Keccak256(packed)
+
+	encoded := make([]byte, 0, 96)
+	encoded = append(encoded, SchedulePieceRemovalsTypehash...)
+	encoded = append(encoded, EncodeBigInt(clientDataSetId)...)
+	encoded = append(encoded, pieceIDsHash...)
+	return Keccak256(encoded)
+}
+
+// SignEIP712SchedulePieceRemovals signs a SchedulePieceRemovals EIP-712 message.
+func SignEIP712SchedulePieceRemovals(privKey, fwssAddr []byte, clientDataSetId *big.Int, pieceIDs []*big.Int) ([]byte, error) {
+	domainSep := BuildDomainSeparator(fwssAddr)
+	structHash := SchedulePieceRemovalsStructHash(clientDataSetId, pieceIDs)
+	digest := BuildEIP712Digest(domainSep, structHash)
+	return Secp256k1Sign(privKey, digest)
+}
+
+// DeleteDataSetStructHash builds the EIP-712 struct hash for DeleteDataSet.
+func DeleteDataSetStructHash(clientDataSetId *big.Int) []byte {
+	encoded := make([]byte, 0, 64)
+	encoded = append(encoded, DeleteDataSetTypehash...)
+	encoded = append(encoded, EncodeBigInt(clientDataSetId)...)
+	return Keccak256(encoded)
+}
+
+// SignEIP712DeleteDataSet signs a DeleteDataSet EIP-712 message.
+func SignEIP712DeleteDataSet(privKey, fwssAddr []byte, clientDataSetId *big.Int) ([]byte, error) {
+	domainSep := BuildDomainSeparator(fwssAddr)
+	structHash := DeleteDataSetStructHash(clientDataSetId)
+	digest := BuildEIP712Digest(domainSep, structHash)
+	return Secp256k1Sign(privKey, digest)
 }

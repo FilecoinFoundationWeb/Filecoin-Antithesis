@@ -123,14 +123,22 @@ async function registerServiceProvider() {
     'paymentTokenAddress'
   ];
 
+  // USDFC address for paymentTokenAddress — SP must declare which token it accepts
+  const USDFC_ADDRESS = process.env.USDFC_ADDRESS;
+  if (!USDFC_ADDRESS) {
+    console.error('❌ USDFC_ADDRESS not set in environment');
+    process.exit(1);
+  }
+  console.log(`ℹ️  USDFC Token: ${USDFC_ADDRESS}`);
+
   const capabilityValues = [
     ethers.hexlify(ethers.toUtf8Bytes(SP_SERVICE_URL)),                    // serviceURL (string)
     encodeNumber(1024),                                                      // minPieceSizeInBytes (1 KiB)
     encodeNumber(1024 * 1024 * 1024),                                       // maxPieceSizeInBytes (1 GiB)
-    encodeNumber(ethers.parseEther('0.001')),                               // storagePricePerTibPerDay (0.001 FIL/TiB/day)
-    encodeNumber(2880),                                                      // minProvingPeriodInEpochs (2880 epochs ≈ 1 day)
+    encodeNumber(1000000),                                                   // storagePricePerTibPerDay (1e6 attoUSDFC — matches SDK devnet)
+    encodeNumber(30),                                                        // minProvingPeriodInEpochs (30 epochs ≈ 15 min — fast for testing)
     ethers.hexlify(ethers.toUtf8Bytes('us-east-1')),                        // location (string)
-    ethers.zeroPadValue('0x00', 20)                                          // paymentTokenAddress (0x00...00 = FIL)
+    ethers.zeroPadValue(USDFC_ADDRESS, 20)                                   // paymentTokenAddress (USDFC, not zero/FIL)
   ];
 
   // ProductType.PDP = 0

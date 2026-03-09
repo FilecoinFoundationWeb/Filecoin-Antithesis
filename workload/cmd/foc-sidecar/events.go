@@ -15,9 +15,10 @@ import (
 
 // Event topic hashes for FWSS and related contracts.
 var (
-	// DataSetCreated(uint256 dataSetId, uint256 pdpRailId, uint256 providerId,
-	//   uint256 clientDataSetId, uint256 filPayRailId, address payer,
-	//   address serviceProvider, address payee, string[] metadataKeys, string[] metadataValues)
+	// DataSetCreated(uint256 indexed dataSetId, uint256 indexed providerId,
+	//   uint256 pdpRailId, uint256 cacheMissRailId, uint256 cdnRailId,
+	//   address payer, address serviceProvider, address payee,
+	//   string[] metadataKeys, string[] metadataValues)
 	TopicDataSetCreated = ethtypes.EthHash(
 		([32]byte)(foc.Keccak256([]byte(
 			"DataSetCreated(uint256,uint256,uint256,uint256,uint256,address,address,address,string[],string[])"))))
@@ -31,18 +32,23 @@ var (
 	TopicFaultRecord = ethtypes.EthHash(
 		([32]byte)(foc.Keccak256([]byte(
 			"FaultRecord(uint256,uint256,uint256)"))))
+
+	// DataSetDeleted(uint256 dataSetId, uint256 deletedLeafCount)
+	TopicDataSetDeleted = ethtypes.EthHash(
+		([32]byte)(foc.Keccak256([]byte(
+			"DataSetDeleted(uint256,uint256)"))))
 )
 
 // DataSetCreatedEvent is the parsed form of a DataSetCreated log.
 type DataSetCreatedEvent struct {
-	DataSetID       *big.Int
-	PDPRailID       *big.Int
-	ProviderID      *big.Int
-	ClientDataSetID *big.Int
-	FilPayRailID    *big.Int
-	Payer           []byte // 20 bytes
-	ServiceProvider []byte // 20 bytes
-	Payee           []byte // 20 bytes
+	DataSetID       *big.Int // indexed — from Topics[1]
+	ProviderID      *big.Int // indexed — from Topics[2]
+	PDPRailID       *big.Int // from Data
+	CacheMissRailID *big.Int // from Data
+	CDNRailID       *big.Int // from Data
+	Payer           []byte   // 20 bytes
+	ServiceProvider []byte   // 20 bytes
+	Payee           []byte   // 20 bytes
 }
 
 // RailCreatedEvent is the parsed form of a RailCreated log.
@@ -51,6 +57,12 @@ type RailCreatedEvent struct {
 	Token  []byte // 20 bytes
 	From   []byte // 20 bytes
 	To     []byte // 20 bytes
+}
+
+// DataSetDeletedEvent is the parsed form of a DataSetDeleted log.
+type DataSetDeletedEvent struct {
+	DataSetID       *big.Int
+	DeletedLeafCount *big.Int
 }
 
 // fetchAndParseLogs retrieves logs for a given address and topic over a block range,
@@ -95,26 +107,31 @@ func fetchAndParseLogs(ctx context.Context, node api.FullNode, contractAddr []by
 }
 
 // parseDataSetCreatedLogs extracts DataSetCreatedEvent from raw logs.
-// The event data layout: dataSetId(32) | pdpRailId(32) | providerID(32) |
+// Indexed fields (dataSetId, providerId) are in Topics[1] and Topics[2].
+// Non-indexed data layout: pdpRailId(32) | cacheMissRailId(32) | cdnRailId(32) |
 //
-//	clientDataSetId(32) | filPayRailId(32) | payer(32) | serviceProvider(32) | payee(32) | ...
+//	payer(32) | serviceProvider(32) | payee(32) | ... (dynamic string[] arrays)
 func parseDataSetCreatedLogs(logs []ethtypes.EthLog) []DataSetCreatedEvent {
 	var events []DataSetCreatedEvent
 	for _, l := range logs {
+		if len(l.Topics) < 3 {
+			log.Printf("[sidecar-events] DataSetCreated log has only %d topics, need 3", len(l.Topics))
+			continue
+		}
 		data := []byte(l.Data)
-		if len(data) < 256 { // minimum 8 * 32 bytes
+		if len(data) < 192 { // minimum 6 * 32 bytes (3 uint256 + 3 address)
 			log.Printf("[sidecar-events] DataSetCreated log too short: %d bytes", len(data))
 			continue
 		}
 		ev := DataSetCreatedEvent{
-			DataSetID:       new(big.Int).SetBytes(data[0:32]),
-			PDPRailID:       new(big.Int).SetBytes(data[32:64]),
-			ProviderID:      new(big.Int).SetBytes(data[64:96]),
-			ClientDataSetID: new(big.Int).SetBytes(data[96:128]),
-			FilPayRailID:    new(big.Int).SetBytes(data[128:160]),
-			Payer:           data[172:192],  // address at offset 160, right-aligned in 32 bytes
-			ServiceProvider: data[204:224],  // offset 192
-			Payee:           data[236:256],  // offset 224
+			DataSetID:       new(big.Int).SetBytes(l.Topics[1][:]),  // indexed
+			ProviderID:      new(big.Int).SetBytes(l.Topics[2][:]),  // indexed
+			PDPRailID:       new(big.Int).SetBytes(data[0:32]),
+			CacheMissRailID: new(big.Int).SetBytes(data[32:64]),
+			CDNRailID:       new(big.Int).SetBytes(data[64:96]),
+			Payer:           data[108:128], // address at offset 96, right-aligned in 32 bytes
+			ServiceProvider: data[140:160], // offset 128
+			Payee:           data[172:192], // offset 160
 		}
 		events = append(events, ev)
 	}
@@ -135,6 +152,24 @@ func parseRailCreatedLogs(logs []ethtypes.EthLog) []RailCreatedEvent {
 			Token:  data[44:64],
 			From:   data[76:96],
 			To:     data[108:128],
+		}
+		events = append(events, ev)
+	}
+	return events
+}
+
+// parseDataSetDeletedLogs extracts DataSetDeletedEvent from raw logs.
+// Data layout: dataSetId(32) | deletedLeafCount(32)
+func parseDataSetDeletedLogs(logs []ethtypes.EthLog) []DataSetDeletedEvent {
+	var events []DataSetDeletedEvent
+	for _, l := range logs {
+		data := []byte(l.Data)
+		if len(data) < 64 {
+			continue
+		}
+		ev := DataSetDeletedEvent{
+			DataSetID:        new(big.Int).SetBytes(data[0:32]),
+			DeletedLeafCount: new(big.Int).SetBytes(data[32:64]),
 		}
 		events = append(events, ev)
 	}
