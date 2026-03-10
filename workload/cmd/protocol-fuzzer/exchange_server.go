@@ -159,10 +159,7 @@ func okResponse(chain ...[]byte) []byte {
 	return buildResponseCBOR(0, "", chain)
 }
 
-// ---------------------------------------------------------------------------
-// Multi-block tipset attacks — trigger NewTipSet() sort → nil deref panic
-// ---------------------------------------------------------------------------
-
+// buildMultiBlockMsgsCBOR builds CompactedMessages for a 2-block tipset.
 func buildMultiBlockMsgsCBOR() []byte {
 	return cborArray(
 		cborArray(),
@@ -170,24 +167,6 @@ func buildMultiBlockMsgsCBOR() []byte {
 		cborArray(),
 		cborArray(cborArray(), cborArray()),
 	)
-}
-
-func respNilTicketMultiBlock(base blockHeaderOpts) []byte {
-	optsA := mergeOpts(base, blockHeaderOpts{overrideMiner: []byte{0x00, 0xe8, 0x07}})
-	optsB := mergeOpts(base, blockHeaderOpts{nilTicket: true, overrideMiner: []byte{0x00, 0xe9, 0x07}})
-	return okResponse(buildBSTipSetCBOR([][]byte{buildBlockHeaderCBOR(optsA), buildBlockHeaderCBOR(optsB)}, buildMultiBlockMsgsCBOR()))
-}
-
-func respBothNilTickets(base blockHeaderOpts) []byte {
-	optsA := mergeOpts(base, blockHeaderOpts{nilTicket: true, overrideMiner: []byte{0x00, 0xe8, 0x07}})
-	optsB := mergeOpts(base, blockHeaderOpts{nilTicket: true, overrideMiner: []byte{0x00, 0xe9, 0x07}})
-	return okResponse(buildBSTipSetCBOR([][]byte{buildBlockHeaderCBOR(optsA), buildBlockHeaderCBOR(optsB)}, buildMultiBlockMsgsCBOR()))
-}
-
-func respNilElectionProofMultiBlock(base blockHeaderOpts) []byte {
-	optsA := mergeOpts(base, blockHeaderOpts{overrideMiner: []byte{0x00, 0xe8, 0x07}})
-	optsB := mergeOpts(base, blockHeaderOpts{nilElectionProof: true, overrideMiner: []byte{0x00, 0xe9, 0x07}})
-	return okResponse(buildBSTipSetCBOR([][]byte{buildBlockHeaderCBOR(optsA), buildBlockHeaderCBOR(optsB)}, buildMultiBlockMsgsCBOR()))
 }
 
 // ---------------------------------------------------------------------------

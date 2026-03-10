@@ -146,10 +146,10 @@ func buildBSTipSetCBOR(blocks [][]byte, messages []byte) []byte {
 // properly structured for a single-block tipset.
 func buildEmptyCompactedMsgsCBOR() []byte {
 	return cborArray(
-		cborArray(),                    // Bls: []
-		cborArray(cborArray()),         // BlsIncludes: [[]]
-		cborArray(),                    // Secpk: []
-		cborArray(cborArray()),         // SecpkIncludes: [[]]
+		cborArray(),            // Bls: []
+		cborArray(cborArray()), // BlsIncludes: [[]]
+		cborArray(),            // Secpk: []
+		cborArray(cborArray()), // SecpkIncludes: [[]]
 	)
 }
 
@@ -157,9 +157,9 @@ func buildEmptyCompactedMsgsCBOR() []byte {
 // in the Secpk array. The victim calls .Cid() on the nil → panic.
 func buildNilSecpkCompactedMsgsCBOR() []byte {
 	return cborArray(
-		cborArray(),                    // Bls: []
-		cborArray(cborArray()),         // BlsIncludes: [[]]
-		cborArray(cborNil()),           // Secpk: [null]
+		cborArray(),                         // Bls: []
+		cborArray(cborArray()),              // BlsIncludes: [[]]
+		cborArray(cborNil()),                // Secpk: [null]
 		cborArray(cborArray(cborUint64(0))), // SecpkIncludes: [[0]]
 	)
 }
@@ -168,10 +168,10 @@ func buildNilSecpkCompactedMsgsCBOR() []byte {
 // in the Bls array.
 func buildNilBlsCompactedMsgsCBOR() []byte {
 	return cborArray(
-		cborArray(cborNil()),           // Bls: [null]
+		cborArray(cborNil()),                // Bls: [null]
 		cborArray(cborArray(cborUint64(0))), // BlsIncludes: [[0]]
-		cborArray(),                    // Secpk: []
-		cborArray(cborArray()),         // SecpkIncludes: [[]]
+		cborArray(),                         // Secpk: []
+		cborArray(cborArray()),              // SecpkIncludes: [[]]
 	)
 }
 
@@ -179,10 +179,10 @@ func buildNilBlsCompactedMsgsCBOR() []byte {
 // index in BlsIncludes.
 func buildOOBBlsIndexMsgsCBOR() []byte {
 	return cborArray(
-		cborArray(),                                 // Bls: [] (empty)
-		cborArray(cborArray(cborUint64(99999))),      // BlsIncludes: [[99999]] (OOB)
-		cborArray(),                                 // Secpk: []
-		cborArray(cborArray()),                      // SecpkIncludes: [[]]
+		cborArray(),                             // Bls: [] (empty)
+		cborArray(cborArray(cborUint64(99999))), // BlsIncludes: [[99999]] (OOB)
+		cborArray(),                             // Secpk: []
+		cborArray(cborArray()),                  // SecpkIncludes: [[]]
 	)
 }
 
@@ -190,21 +190,10 @@ func buildOOBBlsIndexMsgsCBOR() []byte {
 // index in SecpkIncludes.
 func buildOOBSecpkIndexMsgsCBOR() []byte {
 	return cborArray(
-		cborArray(),                                 // Bls: []
-		cborArray(cborArray()),                      // BlsIncludes: [[]]
-		cborArray(),                                 // Secpk: [] (empty)
-		cborArray(cborArray(cborUint64(99999))),      // SecpkIncludes: [[99999]] (OOB)
-	)
-}
-
-// buildMismatchedIncludesMsgsCBOR returns CompactedMessages with 3 include
-// entries for a 1-block tipset (should be 1 entry per block).
-func buildMismatchedIncludesMsgsCBOR() []byte {
-	return cborArray(
-		cborArray(),
-		cborArray(cborArray(), cborArray(), cborArray()), // 3 entries for 1 block
-		cborArray(),
-		cborArray(cborArray(), cborArray(), cborArray()),
+		cborArray(),                             // Bls: []
+		cborArray(cborArray()),                  // BlsIncludes: [[]]
+		cborArray(),                             // Secpk: [] (empty)
+		cborArray(cborArray(cborUint64(99999))), // SecpkIncludes: [[99999]] (OOB)
 	)
 }
 
