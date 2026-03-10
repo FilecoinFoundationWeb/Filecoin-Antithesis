@@ -6,7 +6,7 @@ ARG LOTUS_TAG=latest
 ARG ANTITHESIS_REGISTRY=us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository
 FROM ${BUILD_MODE:+${ANTITHESIS_REGISTRY}/}lotus:${LOTUS_TAG} as lotus-builder
 
-FROM docker.io/golang:latest
+FROM docker.io/golang:1.25
 
 # Copy the lotus binaries and their instrumentation symbols from the builder stage
 COPY --from=lotus-builder /usr/local/bin /usr/local/bin
