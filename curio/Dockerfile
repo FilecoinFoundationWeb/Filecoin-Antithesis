@@ -6,10 +6,11 @@ ARG LOTUS_TAG=latest
 ARG ANTITHESIS_REGISTRY=us-central1-docker.pkg.dev/molten-verve-216720/filecoin-repository
 FROM ${BUILD_MODE:+${ANTITHESIS_REGISTRY}/}lotus:${LOTUS_TAG} as lotus-builder
 
-FROM docker.io/golang:latest
+FROM docker.io/golang:1.25
 
-# First, copy the lotus binaries from the builder stage into our final image
+# Copy the lotus binaries and their instrumentation symbols from the builder stage
 COPY --from=lotus-builder /usr/local/bin /usr/local/bin
+COPY --from=lotus-builder /symbols /lotus-symbols
 
 # Now, proceed with the Curio build
 RUN apt-get update && apt-get install -y --no-install-recommends dnsutils git ca-certificates build-essential clang ocl-icd-opencl-dev aria2 ocl-icd-libopencl1 jq libhwloc-dev xxd
@@ -54,6 +55,10 @@ RUN git apply increase-cpu-avail-antithesis.patch
 COPY ./reduce-reservations-size.patch ./reduce-reservations-size.patch
 RUN git apply reduce-reservations-size.patch
 RUN git merge origin/antithesis-panic 
+RUN sed -i \
+  -e 's|\$(GOCC) build \$(GOFLAGS) \\|$(GOCC) build $(GOFLAGS) -gcflags "all=-N -l" \\|' \
+  -e 's|-o curio -ldflags " -s -w \\|-o curio -ldflags " -compressdwarf=false \\|' \
+  Makefile
 
 RUN git submodule update --init
 
@@ -67,6 +72,7 @@ RUN mkdir /curio_instrumented
 RUN antithesis-go-instrumentor -exclude ./go_exclude.txt /opt/curio /curio_instrumented 
 RUN mkdir -p /symbols
 RUN cp -r /curio_instrumented/symbols/* /symbols
+RUN cp -r /lotus-symbols/* /symbols
 
 WORKDIR /curio_instrumented/customer
 RUN rm -r /opt/curio

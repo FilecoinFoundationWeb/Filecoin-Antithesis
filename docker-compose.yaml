@@ -72,7 +72,7 @@ services:
   lotus0:
     <<: [ *filecoin_service, *needs_all_drand_healthy ]
     container_name: lotus0
-    image: lotus:latest
+    image: lotus:${LOTUS_0_TAG:-${LOTUS_TAG:-latest}}
     entrypoint: [ "./scripts/start-lotus.sh", "0" ]
     healthcheck:
       <<: *healthcheck_settings
@@ -80,7 +80,7 @@ services:
 
   lotus1:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
-    image: lotus:latest
+    image: lotus:${LOTUS_1_TAG:-${LOTUS_TAG:-latest}}
     container_name: lotus1
     entrypoint: [ "./scripts/start-lotus.sh", "1" ]
     healthcheck:
@@ -185,13 +185,13 @@ services:
 
   lotus-miner0:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
-    image: lotus:latest
+    image: lotus:${LOTUS_MINER_0_TAG:-${LOTUS_TAG:-latest}}
     container_name: lotus-miner0
     entrypoint: [ "./scripts/start-lotus-miner.sh", "0" ]
 
   lotus-miner1:
     <<: [ *filecoin_service, *needs_lotus1_healthy ]
-    image: lotus:latest
+    image: lotus:${LOTUS_MINER_1_TAG:-${LOTUS_TAG:-latest}}
     container_name: lotus-miner1
     entrypoint: [ "./scripts/start-lotus-miner.sh", "1" ]
 
