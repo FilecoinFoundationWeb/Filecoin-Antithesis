@@ -90,7 +90,7 @@ func main() {
 		checkProvingAdvancement(ctx, node, cfg, state)
 		checkPieceAccountingConsistency(ctx, node, cfg, state)
 		checkRateConsistency(ctx, node, cfg, state)
-		checkPayerLockup(ctx, node, cfg, state)
+
 
 		lastPolledBlock = finalizedHeight
 		pollCount++
