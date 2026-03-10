@@ -70,7 +70,7 @@ func (p *IdentityPool) GetForStream(ctx context.Context) (host.Host, error) {
 		return nil, err
 	}
 	p.streamHost = h
-	log.Printf("[identity] created stream host: %s", h.ID().String()[:16])
+	log.Printf("[protocol-fuzzer] created stream host: %s", h.ID().String()[:16])
 	return h, nil
 }
 
@@ -103,7 +103,7 @@ func (p *IdentityPool) GetForGossip(ctx context.Context, budget int) (host.Host,
 	}
 	p.hosts = append(p.hosts, h)
 	p.budgets[h] = budget - 1 // consume one use
-	log.Printf("[identity] created gossip host: %s (budget=%d)", h.ID().String()[:16], budget-1)
+	log.Printf("[protocol-fuzzer] created gossip host: %s (budget=%d)", h.ID().String()[:16], budget-1)
 	return h, nil
 }
 

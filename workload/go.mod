@@ -14,6 +14,8 @@ require (
 	github.com/filecoin-project/lotus v1.34.3
 	github.com/ipfs/go-cid v0.5.0
 	github.com/libp2p/go-libp2p v0.44.0
+	github.com/multiformats/go-multiaddr v0.16.1
+	github.com/multiformats/go-multihash v0.2.3
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/whyrusleeping/cbor-gen v0.3.1
 	golang.org/x/crypto v0.43.0

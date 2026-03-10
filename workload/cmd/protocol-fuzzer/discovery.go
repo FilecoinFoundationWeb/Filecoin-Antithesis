@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 )
@@ -35,30 +36,30 @@ func discoverNodes(names []string, devgenDir string) []TargetNode {
 
 		data, err := os.ReadFile(addrFile)
 		if err != nil {
-			log.Printf("[discovery] skipping %s: cannot read %s: %v", name, addrFile, err)
+			log.Printf("[protocol-fuzzer] skipping %s: cannot read %s: %v", name, addrFile, err)
 			continue
 		}
 
 		addrStr := strings.TrimSpace(string(data))
 		if addrStr == "" {
-			log.Printf("[discovery] skipping %s: empty address file %s", name, addrFile)
+			log.Printf("[protocol-fuzzer] skipping %s: empty address file %s", name, addrFile)
 			continue
 		}
 
 		ma, err := multiaddr.NewMultiaddr(addrStr)
 		if err != nil {
-			log.Printf("[discovery] skipping %s: invalid multiaddr %q: %v", name, addrStr, err)
+			log.Printf("[protocol-fuzzer] skipping %s: invalid multiaddr %q: %v", name, addrStr, err)
 			continue
 		}
 
 		ai, err := peer.AddrInfoFromP2pAddr(ma)
 		if err != nil {
-			log.Printf("[discovery] skipping %s: cannot parse AddrInfo from %q: %v", name, addrStr, err)
+			log.Printf("[protocol-fuzzer] skipping %s: cannot parse AddrInfo from %q: %v", name, addrStr, err)
 			continue
 		}
 
 		targets = append(targets, TargetNode{Name: name, AddrInfo: *ai})
-		log.Printf("[discovery] found %s: peer=%s addr=%s", name, ai.ID.String()[:16], addrStr)
+		log.Printf("[protocol-fuzzer] found %s: peer=%s addr=%s", name, ai.ID.String()[:16], addrStr)
 	}
 	return targets
 }
@@ -70,14 +71,14 @@ func waitForNodes(names []string, devgenDir string) []TargetNode {
 	for time.Now().Before(deadline) {
 		targets := discoverNodes(names, devgenDir)
 		if len(targets) > 0 {
-			log.Printf("[discovery] found %d/%d nodes", len(targets), len(names))
+			log.Printf("[protocol-fuzzer] found %d/%d nodes", len(targets), len(names))
 			return targets
 		}
-		log.Printf("[discovery] no nodes found yet, retrying in %s...", discoveryRetryInterval)
+		log.Printf("[protocol-fuzzer] no nodes found yet, retrying in %s...", discoveryRetryInterval)
 		time.Sleep(discoveryRetryInterval)
 	}
 
-	log.Fatal("[discovery] FATAL: no nodes found within timeout")
+	log.Fatal("[protocol-fuzzer] FATAL: no nodes found within timeout")
 	return nil
 }
 
@@ -91,15 +92,91 @@ func loadNetworkName(devgenDir string) string {
 		if err == nil {
 			name := strings.TrimSpace(string(data))
 			if name != "" {
-				log.Printf("[discovery] network name: %s", name)
+				log.Printf("[protocol-fuzzer] network name: %s", name)
 				return name
 			}
 		}
 		time.Sleep(discoveryRetryInterval)
 	}
 
-	log.Fatal("[discovery] FATAL: cannot read network name from " + path)
+	log.Fatal("[protocol-fuzzer] FATAL: cannot read network name from " + path)
 	return ""
+}
+
+// chainHeadInfo holds the current chain head state from a node's RPC.
+type chainHeadInfo struct {
+	CIDs   []cid.Cid
+	Height uint64
+}
+
+// rpcURLForTarget returns the JSON-RPC URL for the given node name.
+func rpcURLForTarget(name string) string {
+	port := envOrDefault("STRESS_RPC_PORT", "1234")
+	if strings.HasPrefix(name, "forest") {
+		port = envOrDefault("STRESS_FOREST_RPC_PORT", "3456")
+	}
+	return fmt.Sprintf("http://%s:%s/rpc/v1", name, port)
+}
+
+// fetchChainHead calls Filecoin.ChainHead on the target node and returns
+// the tipset CIDs and height. Returns nil on any error (non-fatal).
+func fetchChainHead(targetName string) *chainHeadInfo {
+	type rpcRequest struct {
+		Jsonrpc string `json:"jsonrpc"`
+		Method  string `json:"method"`
+		Params  []any  `json:"params"`
+		ID      int    `json:"id"`
+	}
+	type rpcResponse struct {
+		Result struct {
+			Cids   []struct{ Root string `json:"/"` } `json:"Cids"`
+			Height int64                               `json:"Height"`
+		} `json:"result"`
+	}
+
+	rpcURL := rpcURLForTarget(targetName)
+	reqBody, _ := json.Marshal(rpcRequest{
+		Jsonrpc: "2.0",
+		Method:  "Filecoin.ChainHead",
+		Params:  []any{},
+		ID:      1,
+	})
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(rpcURL, "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		debugLog("[chain-head] RPC to %s failed: %v", targetName, err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var rpcResp rpcResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+		debugLog("[chain-head] decode failed for %s: %v", targetName, err)
+		return nil
+	}
+
+	if len(rpcResp.Result.Cids) == 0 {
+		debugLog("[chain-head] empty CIDs from %s", targetName)
+		return nil
+	}
+
+	var cids []cid.Cid
+	for _, c := range rpcResp.Result.Cids {
+		parsed, err := cid.Decode(c.Root)
+		if err != nil {
+			debugLog("[chain-head] bad CID %q from %s: %v", c.Root, targetName, err)
+			return nil
+		}
+		cids = append(cids, parsed)
+	}
+
+	info := &chainHeadInfo{
+		CIDs:   cids,
+		Height: uint64(rpcResp.Result.Height),
+	}
+	debugLog("[chain-head] %s: height=%d cids=%d", targetName, info.Height, len(info.CIDs))
+	return info
 }
 
 // discoverGenesisCID fetches the genesis CID from a Lotus node's RPC endpoint.
@@ -130,7 +207,7 @@ func discoverGenesisCID(rpcURL string) string {
 	for time.Now().Before(deadline) {
 		resp, err := http.Post(rpcURL, "application/json", bytes.NewReader(reqBody))
 		if err != nil {
-			log.Printf("[discovery] genesis CID fetch failed: %v, retrying...", err)
+			log.Printf("[protocol-fuzzer] genesis CID fetch failed: %v, retrying...", err)
 			time.Sleep(discoveryRetryInterval)
 			continue
 		}
@@ -138,7 +215,7 @@ func discoverGenesisCID(rpcURL string) string {
 		var rpcResp rpcResponse
 		if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
 			resp.Body.Close()
-			log.Printf("[discovery] genesis CID decode failed: %v, retrying...", err)
+			log.Printf("[protocol-fuzzer] genesis CID decode failed: %v, retrying...", err)
 			time.Sleep(discoveryRetryInterval)
 			continue
 		}
@@ -146,14 +223,14 @@ func discoverGenesisCID(rpcURL string) string {
 
 		if len(rpcResp.Result.Cids) > 0 {
 			genCID := rpcResp.Result.Cids[0].Root
-			log.Printf("[discovery] genesis CID: %s", genCID)
+			log.Printf("[protocol-fuzzer] genesis CID: %s", genCID)
 			return genCID
 		}
 
-		log.Printf("[discovery] genesis CID empty, retrying...")
+		log.Printf("[protocol-fuzzer] genesis CID empty, retrying...")
 		time.Sleep(discoveryRetryInterval)
 	}
 
-	log.Fatal("[discovery] FATAL: cannot discover genesis CID")
+	log.Fatal("[protocol-fuzzer] FATAL: cannot discover genesis CID")
 	return ""
 }

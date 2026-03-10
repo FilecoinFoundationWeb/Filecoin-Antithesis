@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"math"
-	"sync"
 	"time"
 
 	"github.com/ipfs/go-cid"
@@ -33,187 +31,10 @@ func parseGenesisCID() cid.Cid {
 	}
 	c, err := cid.Decode(genesisCID)
 	if err != nil {
-		log.Printf("[hello] cannot parse genesis CID %q: %v, using random", genesisCID, err)
+		log.Printf("[protocol-fuzzer] cannot parse genesis CID %q: %v, using random", genesisCID, err)
 		return randomCID()
 	}
 	return c
-}
-
-// getAllHelloAttacks returns all 8 Hello protocol attack vectors.
-func getAllHelloAttacks() []namedAttack {
-	attacks := []struct {
-		name string
-		fn   func(context.Context, host.Host, peer.AddrInfo)
-	}{
-		{"hello-empty-tipset", helloEmptyTipSet},
-		{"hello-huge-tipset", helloHugeTipSet},
-		{"hello-inflated-weight", helloInflatedWeight},
-		{"hello-future-height", helloFutureHeight},
-		{"hello-immediate-disconnect", helloImmediateDisconnect},
-		{"hello-partial-cbor", helloPartialCBOR},
-		{"hello-wrong-genesis", helloWrongGenesis},
-		{"hello-spam-50", helloSpam50},
-	}
-
-	result := make([]namedAttack, len(attacks))
-	for i, a := range attacks {
-		a := a
-		result[i] = namedAttack{
-			name: a.name,
-			fn: func() {
-				target := rngChoice(targets)
-				h, err := pool.GetForStream(ctx)
-				if err != nil {
-					log.Printf("[%s] get host failed: %v", a.name, err)
-					return
-				}
-				a.fn(ctx, h, target.AddrInfo)
-			},
-		}
-	}
-	return result
-}
-
-// --- Individual attack vectors ---
-
-// H1: Empty TipSet array
-func helloEmptyTipSet(ctx context.Context, h host.Host, target peer.AddrInfo) {
-	s, err := openHelloStream(ctx, h, target)
-	if err != nil {
-		debugLog("[hello-empty-tipset] stream open failed: %v", err)
-		return
-	}
-	defer s.Close()
-
-	payload := buildHelloMessage(nil, 1, 100, parseGenesisCID())
-	s.Write(payload)
-	s.CloseWrite()
-}
-
-// H2: Huge TipSet (50 random CIDs)
-func helloHugeTipSet(ctx context.Context, h host.Host, target peer.AddrInfo) {
-	s, err := openHelloStream(ctx, h, target)
-	if err != nil {
-		debugLog("[hello-huge-tipset] stream open failed: %v", err)
-		return
-	}
-	defer s.Close()
-
-	cids := make([]cid.Cid, 50)
-	for i := range cids {
-		cids[i] = randomCID()
-	}
-
-	payload := buildHelloMessage(cids, 1, 100, parseGenesisCID())
-	s.Write(payload)
-	s.CloseWrite()
-}
-
-// H3: Inflated weight (MaxInt64) with correct genesis
-func helloInflatedWeight(ctx context.Context, h host.Host, target peer.AddrInfo) {
-	s, err := openHelloStream(ctx, h, target)
-	if err != nil {
-		debugLog("[hello-inflated-weight] stream open failed: %v", err)
-		return
-	}
-	defer s.Close()
-
-	payload := buildHelloMessage(
-		[]cid.Cid{randomCID()},
-		1,
-		uint64(math.MaxInt64),
-		parseGenesisCID(),
-	)
-	s.Write(payload)
-	s.CloseWrite()
-}
-
-// H4: Future height (100000)
-func helloFutureHeight(ctx context.Context, h host.Host, target peer.AddrInfo) {
-	s, err := openHelloStream(ctx, h, target)
-	if err != nil {
-		debugLog("[hello-future-height] stream open failed: %v", err)
-		return
-	}
-	defer s.Close()
-
-	payload := buildHelloMessage([]cid.Cid{randomCID()}, 100000, 100, parseGenesisCID())
-	s.Write(payload)
-	s.CloseWrite()
-}
-
-// H5: Immediate disconnect - send Hello then reset stream
-func helloImmediateDisconnect(ctx context.Context, h host.Host, target peer.AddrInfo) {
-	s, err := openHelloStream(ctx, h, target)
-	if err != nil {
-		debugLog("[hello-immediate-disconnect] stream open failed: %v", err)
-		return
-	}
-
-	payload := buildHelloMessage([]cid.Cid{randomCID()}, 1, 100, parseGenesisCID())
-	s.Write(payload)
-	s.Reset() // abrupt disconnect
-}
-
-// H6: Partial CBOR - first half of valid Hello, then hang 15s
-func helloPartialCBOR(ctx context.Context, h host.Host, target peer.AddrInfo) {
-	s, err := openHelloStream(ctx, h, target)
-	if err != nil {
-		debugLog("[hello-partial-cbor] stream open failed: %v", err)
-		return
-	}
-	defer s.Close()
-
-	valid := buildHelloMessage([]cid.Cid{randomCID()}, 1, 100, parseGenesisCID())
-	s.Write(valid[:len(valid)/2])
-	time.Sleep(15 * time.Second)
-	s.CloseWrite()
-}
-
-// H7: Wrong genesis CID
-func helloWrongGenesis(ctx context.Context, h host.Host, target peer.AddrInfo) {
-	s, err := openHelloStream(ctx, h, target)
-	if err != nil {
-		debugLog("[hello-wrong-genesis] stream open failed: %v", err)
-		return
-	}
-	defer s.Close()
-
-	// Use a completely random CID as genesis (definitely wrong)
-	fakeGenesis := randomCID()
-	payload := buildHelloMessage([]cid.Cid{randomCID()}, 1, 100, fakeGenesis)
-	s.Write(payload)
-	s.CloseWrite()
-}
-
-// H8: Spam 50 - fresh identities sending Hello simultaneously
-func helloSpam50(ctx context.Context, _ host.Host, target peer.AddrInfo) {
-	var wg sync.WaitGroup
-
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			freshHost, err := pool.GetFresh(ctx)
-			if err != nil {
-				return
-			}
-			defer freshHost.Close()
-
-			s, err := openHelloStream(ctx, freshHost, target)
-			if err != nil {
-				return
-			}
-			defer s.Close()
-
-			payload := buildHelloMessage([]cid.Cid{randomCID()}, 1, 100, parseGenesisCID())
-			s.Write(payload)
-			s.CloseWrite()
-		}()
-	}
-
-	wg.Wait()
 }
 
 // openHelloStream connects to the target and opens a Hello protocol stream.
@@ -245,9 +66,6 @@ type wrappedStream struct {
 		Reset() error
 	}
 }
-
-// compile-time check that wrappedStream is usable — we just need Write/Close/Reset.
-var _ = (*wrappedStream)(nil)
 
 func (w *wrappedStream) Write(b []byte) (int, error) { return w.s.Write(b) }
 func (w *wrappedStream) Close() error                { return w.s.Close() }

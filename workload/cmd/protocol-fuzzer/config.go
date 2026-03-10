@@ -26,7 +26,7 @@ func envInt(key string, fallback int) int {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		log.Printf("[config] invalid int for %s=%q, using default %d", key, v, fallback)
+		log.Printf("[protocol-fuzzer] invalid int for %s=%q, using default %d", key, v, fallback)
 		return fallback
 	}
 	return n
