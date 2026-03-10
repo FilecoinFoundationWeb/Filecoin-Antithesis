@@ -209,7 +209,6 @@ Sidecar assertions use `assert.Always` for safety invariants that must hold on e
 | `"Dataset proof submitted (proven epoch advanced)"` | Sometimes | checkProvingAdvancement | `getDataSetLastProvenEpoch` advances. Confirms Curio is submitting proofs. |
 | `"Active piece count does not exceed leaf count"` | Always | checkPieceAccountingConsistency | `getActivePieceCount <= getDataSetLeafCount`. Detects piece accounting corruption. |
 | `"Active dataset rail has non-zero payment rate"` | Always | checkRateConsistency | Datasets with pieces must have `paymentRate > 0` on their PDP rail. Detects rate miscalculation. |
-| `"Payer with active datasets has non-zero lockup"` | Always | checkPayerLockup | Payers storing data must have lockup > 0. Detects lockup accounting failures. |
 
 ### Event Tracking
 

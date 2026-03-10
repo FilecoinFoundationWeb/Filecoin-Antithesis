@@ -517,7 +517,7 @@ func DoFOCMonitorProofSet() {
 	assert.Sometimes(live, "proofset is live", map[string]any{
 		"dataSetID": s.OnChainDataSetID,
 	})
-	if activePieces != nil {
+	if activePieces != nil && len(s.AddedPieces) > 0 {
 		assert.Sometimes(activePieces.Sign() > 0, "proofset has active pieces", map[string]any{
 			"dataSetID":    s.OnChainDataSetID,
 			"activePieces": activePieces.String(),
