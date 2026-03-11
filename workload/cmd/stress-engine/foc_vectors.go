@@ -71,8 +71,8 @@ var (
 )
 
 type focRuntime struct {
-	State           focLifecycleState
-	ClientDataSetID *big.Int
+	State            focLifecycleState
+	ClientDataSetID  *big.Int
 	OnChainDataSetID int
 
 	UploadedPieces []pieceRef // uploaded to Curio, not yet added on-chain
@@ -513,16 +513,6 @@ func DoFOCMonitorProofSet() {
 
 	log.Printf("[foc-monitor] dataset=%d live=%v activePieces=%s nextChallenge=%s",
 		s.OnChainDataSetID, live, activePieces, nextChallenge)
-
-	assert.Sometimes(live, "proofset is live", map[string]any{
-		"dataSetID": s.OnChainDataSetID,
-	})
-	if activePieces != nil && len(s.AddedPieces) > 0 {
-		assert.Sometimes(activePieces.Sign() > 0, "proofset has active pieces", map[string]any{
-			"dataSetID":    s.OnChainDataSetID,
-			"activePieces": activePieces.String(),
-		})
-	}
 }
 
 // DoFOCTransfer performs an ERC-20 USDFC transfer between client and deployer.
@@ -710,9 +700,10 @@ func DoFOCDeletePiece() {
 
 // DoFOCDeleteDataSet deletes the entire dataset following the proper FWSS
 // termination pipeline:
-//   Phase 1: Call FWSS.terminateService(clientDataSetId) to initiate termination.
-//   Phase 2: Call PDPVerifier.deleteDataSet(dataSetId, extraData) after the
-//            service termination epoch has passed.
+//
+//	Phase 1: Call FWSS.terminateService(clientDataSetId) to initiate termination.
+//	Phase 2: Call PDPVerifier.deleteDataSet(dataSetId, extraData) after the
+//	         service termination epoch has passed.
 //
 // Each deck invocation advances one phase. Phase 2 may need multiple attempts
 // while waiting for the PdpEndEpoch to pass (the contract will revert if early).

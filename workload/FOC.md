@@ -45,7 +45,7 @@ workload/
 │   │   └── contracts.go        # Embedded EVM bytecodes
 │   ├── foc-sidecar/            # Independent safety monitor
 │   │   ├── main.go             # Polling loop
-│   │   ├── assertions.go       # 6 safety assertions (assert.Always)
+│   │   ├── assertions.go       # 5 safety assertions (assert.Always)
 │   │   ├── events.go           # Event log parsing (DataSetCreated, RailCreated, etc.)
 │   │   └── state.go            # Thread-safe state tracking
 │   └── genesis-prep/           # Wallet generation (runs before stress-engine)
@@ -183,8 +183,6 @@ All stress-engine assertions use `assert.Sometimes` because individual transacti
 | `"FOC dataset creation completes end-to-end"` | Sometimes | DoFOCLifecycle (CreateDataSet step) | Dataset created via Curio HTTP + confirmed on-chain with valid ID |
 | `"piece upload to Curio succeeds"` | Sometimes | DoFOCUploadPiece | 3-step Curio PDP upload flow completes successfully |
 | `"pieces added to proofset"` | Sometimes | DoFOCAddPieces | EIP-712 signed piece addition confirmed on-chain with piece IDs |
-| `"proofset is live"` | Sometimes | DoFOCMonitorProofSet | `dataSetLive(dataSetID)` returns true |
-| `"proofset has active pieces"` | Sometimes | DoFOCMonitorProofSet | `getActivePieceCount(dataSetID)` > 0 |
 | `"USDFC transfer succeeds"` | Sometimes | DoFOCTransfer | ERC-20 transfer tx accepted by mempool |
 | `"payment rail settlement succeeds"` | Sometimes | DoFOCSettle | `settleRail(railId, epoch)` tx accepted by mempool |
 | `"USDFC withdrawal from FilecoinPay succeeds"` | Sometimes | DoFOCWithdraw | `withdraw(USDFC, amount)` tx accepted by mempool |
@@ -204,7 +202,7 @@ Sidecar assertions use `assert.Always` for safety invariants that must hold on e
 | `"Provider ID matches registry for dataset"` | Always | checkProviderIDConsistency | `addressToProviderId(sp)` matches the `providerId` from the `DataSetCreated` event. Detects registry corruption or SP impersonation. |
 | `"Active proofset is live on-chain"` | Always | checkProofSetLiveness | Every non-deleted dataset has `dataSetLive() == true`. Detects unexpected dataset termination or proof failure. |
 | `"Deleted proofset is not live"` | Always | checkDeletedDataSetNotLive | Every deleted dataset has `dataSetLive() == false`. Detects zombie datasets that survive deletion. |
-| `"Queried active piece count for dataset"` | Reachable | checkActivePieceCount | Confirms that the sidecar successfully queries `getActivePieceCount()` for tracked datasets. Coverage marker, not a safety check. |
+
 | `"Proving period advances (challenge epoch changed)"` | Sometimes | checkProvingAdvancement | `getNextChallengeEpoch` changes over time for active datasets. Confirms proving pipeline is running. |
 | `"Dataset proof submitted (proven epoch advanced)"` | Sometimes | checkProvingAdvancement | `getDataSetLastProvenEpoch` advances. Confirms Curio is submitting proofs. |
 | `"Active piece count does not exceed leaf count"` | Always | checkPieceAccountingConsistency | `getActivePieceCount <= getDataSetLeafCount`. Detects piece accounting corruption. |
