@@ -87,11 +87,11 @@ services:
       <<: *healthcheck_settings
       test: curl --fail http://lotus1:1234/health/livez
 
-  # forest0:
-  #   <<: [ *filecoin_service, *needs_lotus0_healthy ]
-  #   image: forest:latest
-  #   container_name: forest0
-  #   entrypoint: [ "./scripts/start-forest.sh", "0" ]
+  forest0:
+    <<: [ *filecoin_service, *needs_lotus0_healthy ]
+    image: forest:latest
+    container_name: forest0
+    entrypoint: [ "./scripts/start-forest.sh", "0" ]
 
   workload:
     <<: [ *filecoin_service ]

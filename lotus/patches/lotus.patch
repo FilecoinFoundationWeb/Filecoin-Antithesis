@@ -116,7 +116,7 @@ index 12d03b2bc..d423285cf 100644
  			{
  				id := uint64(genesis2.MinerStart) + uint64(len(template.Miners))
 diff --git a/node/modules/lp2p/pubsub.go b/node/modules/lp2p/pubsub.go
-index 0f63072d1..4f242603e 100644
+index 0f63072d1..ab423880e 100644
 --- a/node/modules/lp2p/pubsub.go
 +++ b/node/modules/lp2p/pubsub.go
 @@ -43,9 +43,9 @@ func init() {
@@ -176,6 +176,48 @@ index 0f63072d1..4f242603e 100644
  				BehaviourPenaltyDecay:     pubsub.ScoreParameterDecay(time.Hour),
  
  				DecayInterval: pubsub.DefaultDecayInterval,
+@@ -350,24 +350,23 @@ func GossipSub(in GossipIn) (service *pubsub.PubSub, err error) {
+ 		options = append(options, pubsub.WithDirectPeers(directPeerInfo))
+ 	}
+ 
+-	// validation queue RED
+-	var pgParams *pubsub.PeerGaterParams
+-
+-	if isBootstrapNode {
+-		pgParams = pubsub.NewPeerGaterParams(
+-			0.33,
+-			pubsub.ScoreParameterDecay(2*time.Minute),
+-			pubsub.ScoreParameterDecay(10*time.Minute),
+-		).WithTopicDeliveryWeights(pgTopicWeights)
+-	} else {
+-		pgParams = pubsub.NewPeerGaterParams(
+-			0.33,
+-			pubsub.ScoreParameterDecay(2*time.Minute),
+-			pubsub.ScoreParameterDecay(time.Hour),
+-		).WithTopicDeliveryWeights(pgTopicWeights)
+-	}
+-
+-	options = append(options, pubsub.WithPeerGater(pgParams))
++	// Antithesis: disable peer gater to allow sustained spam testing without message drops
++	// var pgParams *pubsub.PeerGaterParams
++	//
++	// if isBootstrapNode {
++	// 	pgParams = pubsub.NewPeerGaterParams(
++	// 		0.33,
++	// 		pubsub.ScoreParameterDecay(2*time.Minute),
++	// 		pubsub.ScoreParameterDecay(10*time.Minute),
++	// 	).WithTopicDeliveryWeights(pgTopicWeights)
++	// } else {
++	// 	pgParams = pubsub.NewPeerGaterParams(
++	// 		0.33,
++	// 		pubsub.ScoreParameterDecay(2*time.Minute),
++	// 		pubsub.ScoreParameterDecay(time.Hour),
++	// 	).WithTopicDeliveryWeights(pgTopicWeights)
++	// }
++	// options = append(options, pubsub.WithPeerGater(pgParams))
+ 
+ 	allowTopics := []string{
+ 		build.BlocksTopic(in.Nn),
 diff --git a/node/modules/lp2p/rcmgr.go b/node/modules/lp2p/rcmgr.go
 index 337eb21a6..a3f1a847a 100644
 --- a/node/modules/lp2p/rcmgr.go

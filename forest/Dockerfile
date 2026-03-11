@@ -18,12 +18,16 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path --profile mini
 ENV PATH="/root/.cargo/bin:${PATH}" 
 # Step 3: Clone the repository (this is cached unless the repository changes)
 RUN git clone https://github.com/chainsafe/forest /forest
+
+WORKDIR /forest
+COPY ./patches/forest.patch ./forest.patch
+RUN git apply forest.patch
 # After Go installation and before Rust build
 WORKDIR /forest/f3-sidecar
 RUN go mod tidy
 WORKDIR /forest
-RUN git checkout ${GIT_COMMIT}
 
+RUN git checkout ${GIT_COMMIT}
 COPY ./forest_config.toml.tpl .
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}" 
