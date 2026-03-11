@@ -436,6 +436,42 @@ func parseRequestOptions(data []byte) uint64 {
 	return options
 }
 
+// ---------------------------------------------------------------------------
+// Fake-length CBOR helpers for length-prefix bomb attacks
+// ---------------------------------------------------------------------------
+
+// cborArrayWithFakeLength writes a CBOR array header claiming claimedLen
+// elements, but only appends the actual elements provided. When a decoder
+// reads the header it calls make([]T, claimedLen) before discovering the
+// mismatch — triggering OOM if claimedLen is large enough.
+func cborArrayWithFakeLength(claimedLen uint64, actualElements ...[]byte) []byte {
+	var buf bytes.Buffer
+	cbg.WriteMajorTypeHeader(&buf, cbg.MajArray, claimedLen)
+	for _, e := range actualElements {
+		buf.Write(e)
+	}
+	return buf.Bytes()
+}
+
+// cborBytesWithFakeLength writes a CBOR bytestring header claiming claimedLen
+// bytes, but only writes the actual data. Triggers make([]byte, claimedLen).
+func cborBytesWithFakeLength(claimedLen uint64, actual []byte) []byte {
+	var buf bytes.Buffer
+	cbg.WriteMajorTypeHeader(&buf, cbg.MajByteString, claimedLen)
+	buf.Write(actual)
+	return buf.Bytes()
+}
+
+// cborMapWithFakeLength writes a CBOR map header claiming claimedLen pairs.
+func cborMapWithFakeLength(claimedLen uint64, entries ...[]byte) []byte {
+	var buf bytes.Buffer
+	cbg.WriteMajorTypeHeader(&buf, cbg.MajMap, claimedLen)
+	for _, e := range entries {
+		buf.Write(e)
+	}
+	return buf.Bytes()
+}
+
 // bigIntBytes encodes a big integer value as Filecoin-style BigInt bytes.
 // Filecoin BigInt: first byte is sign (0x00 = positive), rest is big-endian value.
 func bigIntBytes(v uint64) []byte {

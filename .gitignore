@@ -8,6 +8,7 @@ workload/stress-engine
 workload/genesis-prep
 workload/foc-sidecar
 workload/setup-complete
+workload/protocol-fuzzer
 
 # Local env overrides
 *.env.local

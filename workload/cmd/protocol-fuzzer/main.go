@@ -63,8 +63,8 @@ func main() {
 	targets = waitForNodes(nodeNames, devgenDir)
 	log.Printf("[protocol-fuzzer] discovered %d targets", len(targets))
 
-	// Load network name
-	networkName = loadNetworkName(devgenDir)
+	// Network name — always "2k" for devnet
+	networkName = "2k"
 
 	// Discover genesis CID via RPC
 	rpcPort := envOrDefault("STRESS_RPC_PORT", "1234")
@@ -130,7 +130,9 @@ func buildDeck() {
 	categories := []weightedCategory{
 		{"FUZZER_WEIGHT_EXCHANGE_SERVER", 3, getAllExchangeServerAttacks()},
 		{"FUZZER_WEIGHT_GOSSIP", 3, getAllGossipAttacks()},
-		{"FUZZER_WEIGHT_CHAOS", 0, getAllChaosAttacks()},
+		{"FUZZER_WEIGHT_CHAOS", 2, getAllChaosAttacks()},
+		{"FUZZER_WEIGHT_CBOR_BOMBS", 4, getAllCBORBombAttacks()},
+		{"FUZZER_WEIGHT_F3", 4, getAllF3Attacks()},
 	}
 
 	deck = nil

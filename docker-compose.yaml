@@ -87,18 +87,18 @@ services:
       <<: *healthcheck_settings
       test: curl --fail http://lotus1:1234/health/livez
 
-  forest0:
-    <<: [ *filecoin_service, *needs_lotus0_healthy ]
-    image: forest:latest
-    container_name: forest0
-    entrypoint: [ "./scripts/start-forest.sh", "0" ]
+  # forest0:
+  #   <<: [ *filecoin_service, *needs_lotus0_healthy ]
+  #   image: forest:latest
+  #   container_name: forest0
+  #   entrypoint: [ "./scripts/start-forest.sh", "0" ]
 
   workload:
     <<: [ *filecoin_service ]
     image: workload:latest
     container_name: workload
     environment:
-      - STRESS_NODES=lotus0,lotus1,forest0
+      - STRESS_NODES=lotus0,lotus1
       - STRESS_RPC_PORT=1234
       - STRESS_FOREST_RPC_PORT=3456
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
@@ -169,12 +169,11 @@ services:
       - FUZZER_RATE_MS=500
       - FUZZER_DEBUG=1
       - FUZZER_IDENTITY_POOL_SIZE=20
-      - FUZZER_WEIGHT_EXCHANGE_CLIENT=3
-      - FUZZER_WEIGHT_EXCHANGE_SERVER=3
-      - FUZZER_WEIGHT_HELLO=3
+      - FUZZER_WEIGHT_CBOR_BOMBS=4
+      - FUZZER_WEIGHT_F3=4
       - FUZZER_WEIGHT_GOSSIP=3
-      - FUZZER_WEIGHT_BITSWAP=0
-      - FUZZER_WEIGHT_CHAOS=0
+      - FUZZER_WEIGHT_EXCHANGE_SERVER=3
+      - FUZZER_WEIGHT_CHAOS=2
     volumes:
       - ./shared/configs:/shared/configs
       - ./shared:/shared

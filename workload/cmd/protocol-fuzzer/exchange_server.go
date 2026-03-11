@@ -37,21 +37,21 @@ func getAllExchangeServerAttacks() []namedAttack {
 
 	result = append(result,
 		namedAttack{
-			name: "poison-block-reuse",
+			name: "exchange/poison-block-duplicate-cid",
 			fn: func() {
 				target := rngChoice(targets)
 				runPoisonBlockReuse(ctx, target)
 			},
 		},
 		namedAttack{
-			name: "split-fetch-nil-secpk",
+			name: "exchange/nil-secpk-message",
 			fn: func() {
 				target := rngChoice(targets)
 				runSplitFetchNilSecpk(ctx, target)
 			},
 		},
 		namedAttack{
-			name: "random-nil-fields",
+			name: "exchange/random-nil-fields",
 			fn: func() {
 				target := rngChoice(targets)
 				runRandomNilFields(ctx, target)

