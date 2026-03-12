@@ -11,7 +11,9 @@ lotus_path="LOTUS_${node_number}_PATH"
 export LOTUS_PATH="${!lotus_path}"
 
 lotus_miner_path="LOTUS_MINER_${node_number}_PATH"
-export LOTUS_MINER_PATH="${!lotus_miner_path}"
+if [ -n "${!lotus_miner_path:-}" ]; then
+    export LOTUS_MINER_PATH="${!lotus_miner_path}"
+fi
 
 export LOTUS_RPC_PORT=$LOTUS_RPC_PORT
 export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
