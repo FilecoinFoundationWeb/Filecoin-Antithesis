@@ -120,20 +120,20 @@ services:
       - STRESS_WEIGHT_CONTRACT_CALL=3 # invokes deep recursion, delegatecall, external recursive calls
       - STRESS_WEIGHT_SELFDESTRUCT=1 # tests actor destruction state consistency across nodes
       - STRESS_WEIGHT_CONTRACT_RACE=2 # sends conflicting SimpleCoin sends with same nonce to diff nodes
-      - STRESS_WEIGHT_HEAVY_COMPUTE=0 # checks recomputed state root matches stored parent
-      - STRESS_WEIGHT_LOG_BLASTER=0 # stresses receipt storage, bloom filters, and event indexing
-      - STRESS_WEIGHT_MEMORY_BOMB=0 # stresses FVM memory accounting and allocator
-      - STRESS_WEIGHT_STORAGE_SPAM=0 # stresses state trie (HAMT), SplitStore, and snapshot size
+      - STRESS_WEIGHT_HEAVY_COMPUTE=3 # checks recomputed state root matches stored parent
+      - STRESS_WEIGHT_LOG_BLASTER=3 # stresses receipt storage, bloom filters, and event indexing
+      - STRESS_WEIGHT_MEMORY_BOMB=3 # stresses FVM memory accounting and allocator
+      - STRESS_WEIGHT_STORAGE_SPAM=3 # stresses state trie (HAMT), SplitStore, and snapshot size
       # FIL transfers
       - STRESS_WEIGHT_TRANSFER=1 # tests liveness via random node FIL token transfers
       # Nonce/ordering chaos
       - STRESS_WEIGHT_MSG_ORDERING=1 # tests interdependent interdependent cross-node message replacement/mempool ordering
       - STRESS_WEIGHT_NONCE_BOMBARD=1 # tests N+x gap handling & out-of-order execution across nodes
-      - STRESS_WEIGHT_ADVERSARIAL=0 # cross-node double-spends, invalid signatures rejected
+      - STRESS_WEIGHT_ADVERSARIAL=2 # cross-node double-spends, invalid signatures rejected
       # Gas pressure
       - STRESS_WEIGHT_GAS_EXHAUST=1 # tests high-gas call competing with small msgs across nodes
-      - STRESS_WEIGHT_GAS_WAR=0 # mempool replacement/greedy selection
-      - STRESS_WEIGHT_MAX_BLOCK_GAS=0 # maxes out block gas with tight keccak256 loop
+      - STRESS_WEIGHT_GAS_WAR=1 # mempool replacement/greedy selection
+      - STRESS_WEIGHT_MAX_BLOCK_GAS=1 # maxes out block gas with tight keccak256 loop
       # Cross-node consistency
       - STRESS_WEIGHT_RECEIPT_AUDIT=2 # asserts ALL receipt fields (ExitCode, Return, GasUsed) match across EVERY node
       - STRESS_WEIGHT_ACTOR_MIGRATION=1 # burst-creates & deletes actors, asserts HAMT tree matches
