@@ -4,6 +4,7 @@ x-templates:
     env_file: .env
     environment:
       - NUM_LOTUS_CLIENTS=2
+      - NUM_LOTUS_MINERS=2
       - NUM_FOREST_CLIENTS=1
     volumes:
       - ./data/lotus0:${LOTUS_0_DATA_DIR}

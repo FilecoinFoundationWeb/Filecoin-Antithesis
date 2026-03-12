@@ -1,3 +1,5 @@
-# problem instrumenting this
+# Paths excluded from Antithesis instrumentation:
+# - lib/harmony/harmonydb: external DB driver incompatible with instrumentation
+# - extern: vendored C libraries that cannot be instrumented
 lib/harmony/harmonydb
 extern
