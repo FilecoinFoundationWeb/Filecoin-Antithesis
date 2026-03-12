@@ -38,20 +38,19 @@ entrypoint.sh → stress-engine binary
 | Vector | Env Var | Description |
 |--------|---------|-------------|
 | `DoHeavyCompute` | `STRESS_WEIGHT_HEAVY_COMPUTE` | Re-execute `StateCompute` for recent epochs, verify roots match |
-| `DoChainMonitor` | `STRESS_WEIGHT_CHAIN_MONITOR` | 6 sub-checks (see below) |
 
-#### DoChainMonitor Sub-checks
+#### Chain Monitor Sub-checks
 
 All state-sensitive checks use `ChainGetFinalizedTipSet` to avoid false positives during partition → reorg chaos.
 
-| Sub-check | What it verifies |
-|-----------|-----------------|
-| `tipset-consensus` | All nodes agree on tipset at a finalized height |
-| `height-progression` | All node heights within 10 epochs of each other |
-| `peer-count` | Every node has ≥1 peer |
-| `head-comparison` | Finalized tipset keys match across nodes |
-| `state-root-comparison` | Parent state roots match at finalized height |
-| `state-audit` | State roots + parent messages/receipts match at finalized height |
+| Vector | Env Var | What it verifies |
+|--------|---------|------------------|
+| `DoTipsetConsensus` | `STRESS_WEIGHT_TIPSET_CONSENSUS` | All nodes agree on tipset at a finalized height |
+| `DoHeightProgression` | `STRESS_WEIGHT_HEIGHT_PROGRESSION` | All node heights within 10 epochs of each other |
+| `DoPeerCount` | `STRESS_WEIGHT_PEER_COUNT` | Every node has ≥1 peer |
+| `DoHeadComparison` | `STRESS_WEIGHT_HEAD_COMPARISON` | Finalized tipset keys match across nodes |
+| `DoStateRootComparison` | `STRESS_WEIGHT_STATE_ROOT` | Parent state roots match at finalized height |
+| `DoStateAudit` | `STRESS_WEIGHT_STATE_AUDIT` | State roots + parent messages/receipts match at finalized height |
 
 ## Configuration
 
@@ -63,7 +62,12 @@ environment:
   - STRESS_WEIGHT_GAS_WAR=2
   - STRESS_WEIGHT_ADVERSARIAL=2
   - STRESS_WEIGHT_HEAVY_COMPUTE=1
-  - STRESS_WEIGHT_CHAIN_MONITOR=3
+  - STRESS_WEIGHT_TIPSET_CONSENSUS=3
+  - STRESS_WEIGHT_HEIGHT_PROGRESSION=2
+  - STRESS_WEIGHT_PEER_COUNT=2
+  - STRESS_WEIGHT_HEAD_COMPARISON=3
+  - STRESS_WEIGHT_STATE_ROOT=4
+  - STRESS_WEIGHT_STATE_AUDIT=5
   - STRESS_WEIGHT_DEPLOY=5
   - STRESS_WEIGHT_CONTRACT_CALL=3
   - STRESS_WEIGHT_SELFDESTRUCT=1
@@ -84,7 +88,7 @@ workload/cmd/stress-engine/
 ├── helpers.go            # Shared: baseMsg, signMsg, pushMsg, nodeType
 ├── mempool_vectors.go    # Transfer, gas war, adversarial vectors
 ├── evm_vectors.go        # Contract deploy, invoke, selfdestruct, race
-├── consensus_vectors.go  # Heavy compute, chain monitor (6 sub-checks)
+├── consensus_vectors.go  # Heavy compute, and consensus/health sub-checks
 └── contracts.go          # EVM bytecodes, deploy/invoke helpers, ABI encoding
 ```
 

@@ -1,0 +1,85 @@
+diff --git a/f3-sidecar/pubsub.go b/f3-sidecar/pubsub.go
+index 32e34106c..dc8e01860 100644
+--- a/f3-sidecar/pubsub.go
++++ b/f3-sidecar/pubsub.go
+@@ -28,13 +28,13 @@ var PubsubPeerScoreParams = &pubsub.PeerScoreParams{
+ 	AppSpecificWeight: 1,
+ 
+ 	// This sets the IP colocation threshold to 5 peers before we apply penalties
+-	IPColocationFactorThreshold: 5,
+-	IPColocationFactorWeight:    -100,
++	IPColocationFactorThreshold: 1000,
++	IPColocationFactorWeight:    0,
+ 	IPColocationFactorWhitelist: nil,
+ 
+ 	// P7: behavioural penalties, decay after 1hr
+ 	BehaviourPenaltyThreshold: 6,
+-	BehaviourPenaltyWeight:    -10,
++	BehaviourPenaltyWeight:    0,
+ 	BehaviourPenaltyDecay:     pubsub.ScoreParameterDecay(time.Hour),
+ 
+ 	DecayInterval: pubsub.DefaultDecayInterval,
+@@ -57,9 +57,9 @@ var PubsubPeerScoreThresholds = &pubsub.PeerScoreThresholds{
+ 
+ // Borrowed from lotus
+ const (
+-	GossipScoreThreshold             = -500
+-	PublishScoreThreshold            = -1000
+-	GraylistScoreThreshold           = -2500
++	GossipScoreThreshold             = -50000
++	PublishScoreThreshold            = -100000
++	GraylistScoreThreshold           = -250000
+ 	AcceptPXScoreThreshold           = 1000
+ 	OpportunisticGraftScoreThreshold = 3.5
+ )
+diff --git a/src/libp2p/gossip_params.rs b/src/libp2p/gossip_params.rs
+index 26298991e..5873e3cd1 100644
+--- a/src/libp2p/gossip_params.rs
++++ b/src/libp2p/gossip_params.rs
+@@ -45,7 +45,7 @@ fn build_msg_topic_config() -> TopicScoreParams {
+         mesh_failure_penalty_decay: 0.0,
+ 
+         // invalid messages decay after 1 hour
+-        invalid_message_deliveries_weight: -1000.0,
++        invalid_message_deliveries_weight: 0.0,
+         invalid_message_deliveries_decay: score_parameter_decay(Duration::from_secs(60 * 60)),
+     }
+ }
+@@ -76,7 +76,7 @@ fn build_block_topic_config() -> TopicScoreParams {
+         mesh_failure_penalty_decay: 0.0,
+ 
+         // invalid messages decay after 1 hour
+-        invalid_message_deliveries_weight: -1000.0,
++        invalid_message_deliveries_weight: 0.0,
+         invalid_message_deliveries_decay: score_parameter_decay(Duration::from_secs(60 * 60)),
+     }
+ }
+@@ -97,12 +97,12 @@ pub(in crate::libp2p) fn build_peer_score_params(
+     PeerScoreParams {
+         app_specific_weight: 1.0,
+ 
+-        ip_colocation_factor_threshold: 5.0,
+-        ip_colocation_factor_weight: -100.0,
++        ip_colocation_factor_threshold: 1000.0,
++        ip_colocation_factor_weight: 0.0,
+         ip_colocation_factor_whitelist: Default::default(),
+ 
+         behaviour_penalty_threshold: 6.0,
+-        behaviour_penalty_weight: -10.0,
++        behaviour_penalty_weight: 0.0,
+         behaviour_penalty_decay: score_parameter_decay(Duration::from_secs(60 * 60)),
+ 
+         decay_interval: Duration::from_secs(1),
+@@ -120,9 +120,9 @@ pub(in crate::libp2p) fn build_peer_score_params(
+ 
+ pub(in crate::libp2p) fn build_peer_score_threshold() -> PeerScoreThresholds {
+     PeerScoreThresholds {
+-        gossip_threshold: -500.0,
+-        publish_threshold: -1000.0,
+-        graylist_threshold: -2500.0,
++        gossip_threshold: -50000.0,
++        publish_threshold: -100000.0,
++        graylist_threshold: -250000.0,
+         accept_px_threshold: 1000.0,
+         opportunistic_graft_threshold: 3.5,
+     }

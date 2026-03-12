@@ -67,7 +67,7 @@ func DoHeavyCompute() {
 
 			stateMatches := st.Root == checkTs.ParentState()
 
-			assert.Always(stateMatches, "Recomputed state root matches stored state", map[string]any{
+			assert.Always(stateMatches, nodeName+": Recomputed state root matches stored state", map[string]any{
 				"node":           nodeName,
 				"node_type":      nodeType(nodeName),
 				"exec_height":    parentTs.Height(),
@@ -296,7 +296,7 @@ func DoPeerCount() {
 
 		peerCount := len(peers)
 
-		assert.Sometimes(peerCount > 0, "Node has active peer connections", map[string]any{
+		assert.Sometimes(peerCount > 0, name+": Node has active peer connections", map[string]any{
 			"node":       name,
 			"node_type":  nodeType(name),
 			"peer_count": peerCount,

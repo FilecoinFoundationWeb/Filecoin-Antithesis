@@ -74,4 +74,13 @@ fi
 
 # ── 7. Launch stress engine ──
 log_info "Launching stress engine..."
-exec /opt/antithesis/stress-engine
+/opt/antithesis/stress-engine &
+STRESS_PID=$!
+
+if [ "${FUZZER_ENABLED:-1}" = "1" ]; then
+    log_info "Launching protocol fuzzer..."
+    /opt/antithesis/protocol-fuzzer &
+    FUZZER_PID=$!
+fi
+
+wait -n $STRESS_PID ${FUZZER_PID:-}

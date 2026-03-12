@@ -115,3 +115,123 @@ index 12d03b2bc..d423285cf 100644
  			log.Infof("Adding miner %s to genesis template", mn)
  			{
  				id := uint64(genesis2.MinerStart) + uint64(len(template.Miners))
+diff --git a/node/modules/lp2p/pubsub.go b/node/modules/lp2p/pubsub.go
+index 0f63072d1..ab423880e 100644
+--- a/node/modules/lp2p/pubsub.go
++++ b/node/modules/lp2p/pubsub.go
+@@ -43,9 +43,9 @@ func init() {
+ }
+ 
+ const (
+-	GossipScoreThreshold             = -500
+-	PublishScoreThreshold            = -1000
+-	GraylistScoreThreshold           = -2500
++	GossipScoreThreshold             = -50000
++	PublishScoreThreshold            = -100000
++	GraylistScoreThreshold           = -250000
+ 	AcceptPXScoreThreshold           = 1000
+ 	OpportunisticGraftScoreThreshold = 3.5
+ )
+@@ -141,7 +141,7 @@ func GossipSub(in GossipIn) (service *pubsub.PubSub, err error) {
+ 		// We should revisit this once the network grows.
+ 
+ 		// invalid messages decay after 1 hour
+-		InvalidMessageDeliveriesWeight: -1000,
++		InvalidMessageDeliveriesWeight: 0,
+ 		InvalidMessageDeliveriesDecay:  pubsub.ScoreParameterDecay(time.Hour),
+ 	}
+ 
+@@ -184,7 +184,7 @@ func GossipSub(in GossipIn) (service *pubsub.PubSub, err error) {
+ 			// MeshFailurePenaltyDecay:  pubsub.ScoreParameterDecay(15 * time.Minute),
+ 
+ 			// invalid messages decay after 1 hour
+-			InvalidMessageDeliveriesWeight: -1000,
++			InvalidMessageDeliveriesWeight: 0,
+ 			InvalidMessageDeliveriesDecay:  pubsub.ScoreParameterDecay(time.Hour),
+ 		},
+ 		build.MessagesTopic(in.Nn): {
+@@ -218,7 +218,7 @@ func GossipSub(in GossipIn) (service *pubsub.PubSub, err error) {
+ 			// MeshFailurePenaltyDecay:  pubsub.ScoreParameterDecay(5 * time.Minute),
+ 
+ 			// invalid messages decay after 1 hour
+-			InvalidMessageDeliveriesWeight: -1000,
++			InvalidMessageDeliveriesWeight: 0,
+ 			InvalidMessageDeliveriesDecay:  pubsub.ScoreParameterDecay(time.Hour),
+ 		},
+ 	}
+@@ -286,13 +286,13 @@ func GossipSub(in GossipIn) (service *pubsub.PubSub, err error) {
+ 				AppSpecificWeight: 1,
+ 
+ 				// This sets the IP colocation threshold to 5 peers before we apply penalties
+-				IPColocationFactorThreshold: 5,
+-				IPColocationFactorWeight:    -100,
++				IPColocationFactorThreshold: 1000,
++				IPColocationFactorWeight:    0,
+ 				IPColocationFactorWhitelist: ipcoloWhitelist,
+ 
+ 				// P7: behavioural penalties, decay after 1hr
+ 				BehaviourPenaltyThreshold: 6,
+-				BehaviourPenaltyWeight:    -10,
++				BehaviourPenaltyWeight:    0,
+ 				BehaviourPenaltyDecay:     pubsub.ScoreParameterDecay(time.Hour),
+ 
+ 				DecayInterval: pubsub.DefaultDecayInterval,
+@@ -350,24 +350,23 @@ func GossipSub(in GossipIn) (service *pubsub.PubSub, err error) {
+ 		options = append(options, pubsub.WithDirectPeers(directPeerInfo))
+ 	}
+ 
+-	// validation queue RED
+-	var pgParams *pubsub.PeerGaterParams
+-
+-	if isBootstrapNode {
+-		pgParams = pubsub.NewPeerGaterParams(
+-			0.33,
+-			pubsub.ScoreParameterDecay(2*time.Minute),
+-			pubsub.ScoreParameterDecay(10*time.Minute),
+-		).WithTopicDeliveryWeights(pgTopicWeights)
+-	} else {
+-		pgParams = pubsub.NewPeerGaterParams(
+-			0.33,
+-			pubsub.ScoreParameterDecay(2*time.Minute),
+-			pubsub.ScoreParameterDecay(time.Hour),
+-		).WithTopicDeliveryWeights(pgTopicWeights)
+-	}
+-
+-	options = append(options, pubsub.WithPeerGater(pgParams))
++	// Antithesis: disable peer gater to allow sustained spam testing without message drops
++	// var pgParams *pubsub.PeerGaterParams
++	//
++	// if isBootstrapNode {
++	// 	pgParams = pubsub.NewPeerGaterParams(
++	// 		0.33,
++	// 		pubsub.ScoreParameterDecay(2*time.Minute),
++	// 		pubsub.ScoreParameterDecay(10*time.Minute),
++	// 	).WithTopicDeliveryWeights(pgTopicWeights)
++	// } else {
++	// 	pgParams = pubsub.NewPeerGaterParams(
++	// 		0.33,
++	// 		pubsub.ScoreParameterDecay(2*time.Minute),
++	// 		pubsub.ScoreParameterDecay(time.Hour),
++	// 	).WithTopicDeliveryWeights(pgTopicWeights)
++	// }
++	// options = append(options, pubsub.WithPeerGater(pgParams))
+ 
+ 	allowTopics := []string{
+ 		build.BlocksTopic(in.Nn),
+diff --git a/node/modules/lp2p/rcmgr.go b/node/modules/lp2p/rcmgr.go
+index 337eb21a6..a3f1a847a 100644
+--- a/node/modules/lp2p/rcmgr.go
++++ b/node/modules/lp2p/rcmgr.go
+@@ -32,9 +32,9 @@ var rcmgrMetricsOnce sync.Once
+ func ResourceManager(connMgrHi uint) func(lc fx.Lifecycle, repo repo.LockedRepo, bs dtypes.BootstrapPeers) (network.ResourceManager, error) {
+ 	return func(lc fx.Lifecycle, repo repo.LockedRepo, bs dtypes.BootstrapPeers) (network.ResourceManager, error) {
+ 		isFullNode := repo.RepoType().Type() == "FullNode"
+-		envvar := os.Getenv("LOTUS_RCMGR")
+-		if (isFullNode && envvar == "0") || // only set NullResourceManager if envvar is explicitly "0"
+-			(!isFullNode && envvar != "1") { // set NullResourceManager *unless* envvar is explicitly "1"
++		_ = isFullNode
++		// Antithesis: always disable resource manager to allow sustained fuzzing
++		if true {
+ 			log.Info("libp2p resource manager is disabled")
+ 			return &network.NullResourceManager{}, nil
+ 		}
