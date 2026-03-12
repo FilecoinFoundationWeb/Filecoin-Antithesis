@@ -1,6 +1,6 @@
 # Curio Package
 
-This package builds and configures Curio, a Filecoin storage provider with Proof of Data Possession (PDP) capabilities.
+This package builds and configures Curio, a Filecoin storage provider with Proof of Data Possession (PDP) capabilities, for the Antithesis testing environment.
 
 ## Overview
 
@@ -18,6 +18,7 @@ make build-curio
 
 Or directly:
 ```bash
+# Run from repository root:
 docker build -t curio:latest -f curio/Dockerfile curio
 ```
 
@@ -25,7 +26,7 @@ docker build -t curio:latest -f curio/Dockerfile curio
 
 ### Environment Variables (set by workload)
 
-Curio reads contract addresses from `/root/devgen/curio/.env.curio`:
+Curio reads contract addresses from `$CURIO_REPO_PATH/.env.curio`:
 ```bash
 CURIO_DEVNET_PDP_VERIFIER_ADDRESS=0x...
 CURIO_DEVNET_FWSS_ADDRESS=0x...
@@ -44,24 +45,24 @@ CURIO_DEVNET_MULTICALL_ADDRESS=0x...
 ## Start Script (`start_scripts/curio-init.sh`)
 
 Initialization flow:
-1. Wait for Lotus node (minimum 10 blocks)
-2. Initialize Curio cluster with miner actor
-3. Create base configuration with subsystems:
-   - CommP, ParkPiece, PDP, MoveStorage, DealMarket, WebGui
-4. Set up PDP service (keys, JWT token)
+1. Wait for Lotus node (minimum 5 epochs)
+2. Create wallets and fund them
+3. Initialize Curio cluster with miner actor
+4. Create base and PDP configuration layers
 5. Wait for contract addresses from workload container
-6. Export contract addresses as environment variables
-7. Start Curio with layers: seal, post, pdp-only, gui
+6. Attach storage via temporary Curio node
+7. Set up PDP service (keys, JWT token)
+8. Start Curio with layers: seal, post, pdp-only, gui
 
-## Patches (`curio.patch`)
+## Patches
 
-Applied modifications for Build2k devnet:
-- Environment variable support for contract addresses
-- Dynamic contract loading from runtime deployments
+Applied modifications for testing:
+- `increase-cpu-avail-antithesis.patch`: Hardcode CPU count to 32 for Antithesis environment
+- `reduce-reservations-size.patch`: Use 2KiB proof type for faster test execution
 
 ## Dependencies
 
-- **Lotus**: Uses Lotus binaries for node operations
+- **Lotus**: Uses Lotus binaries for wallet and chain operations
 - **Yugabyte**: Database for state storage
 - **Workload**: Provides contract addresses via shared volume
 
@@ -76,11 +77,11 @@ Curio integrates with runtime-deployed contracts:
 
 ## Docker Compose
 
-Defined in `config/docker-compose.yml`:
+Defined in `docker-compose.yaml` (repo root):
 - Depends on: lotus0, yugabyte
 - Waits for contract deployment from workload
 
 ## Shared Volumes
 
-- `/root/devgen/curio/` — Curio data and private key
-- `/root/devgen/curio/.env.curio` — Contract addresses (from workload)
+- `$CURIO_REPO_PATH/` — Curio data and private key
+- `$CURIO_REPO_PATH/.env.curio` — Contract addresses (from workload)
