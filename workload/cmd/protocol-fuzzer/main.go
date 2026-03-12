@@ -133,6 +133,8 @@ func buildDeck() {
 		{"FUZZER_WEIGHT_CHAOS", 2, getAllChaosAttacks()},
 		{"FUZZER_WEIGHT_CBOR_BOMBS", 4, getAllCBORBombAttacks()},
 		{"FUZZER_WEIGHT_F3", 4, getAllF3Attacks()},
+		{"FUZZER_WEIGHT_F3_CHAINEX", 4, getAllF3ChainExAttacks()},
+		{"FUZZER_WEIGHT_F3_CERTEX", 3, getAllF3CertExAttacks()},
 	}
 
 	deck = nil

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 
+	"github.com/filecoin-project/go-bitfield"
 	cbg "github.com/whyrusleeping/cbor-gen"
 
 	"github.com/ipfs/go-cid"
@@ -468,6 +469,19 @@ func cborMapWithFakeLength(claimedLen uint64, entries ...[]byte) []byte {
 	cbg.WriteMajorTypeHeader(&buf, cbg.MajMap, claimedLen)
 	for _, e := range entries {
 		buf.Write(e)
+	}
+	return buf.Bytes()
+}
+
+// buildRLEPlusBitfieldCBOR creates a CBOR-encoded RLE+ bitfield with the given
+// bit positions set. This produces the exact wire format expected by
+// Justification.Signers (bitfield.BitField): CBOR byte string containing RLE+ data.
+func buildRLEPlusBitfieldCBOR(bits []uint64) []byte {
+	bf := bitfield.NewFromSet(bits)
+	var buf bytes.Buffer
+	if err := bf.MarshalCBOR(&buf); err != nil {
+		// Fallback: CBOR byte string with empty RLE+ (version byte only)
+		return cborBytes([]byte{0x00})
 	}
 	return buf.Bytes()
 }
