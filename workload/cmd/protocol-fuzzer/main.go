@@ -76,6 +76,10 @@ func main() {
 	pool = newIdentityPool(poolSize)
 	defer pool.CloseAll()
 
+	// Create gossip publisher (reuses host across publishes)
+	gossipPub = newGossipPublisher(50)
+	defer gossipPub.close()
+
 	// Build weighted attack deck
 	buildDeck()
 
@@ -95,11 +99,10 @@ func main() {
 
 	for {
 		attack := deck[rngIntn(len(deck))]
-		target := rngChoice(targets)
 
-		log.Printf("[protocol-fuzzer] starting vector=%s target=%s", attack.name, target.Name)
+		log.Printf("[protocol-fuzzer] starting vector=%s", attack.name)
 		attack.fn()
-		log.Printf("[protocol-fuzzer] completed vector=%s target=%s", attack.name, target.Name)
+		log.Printf("[protocol-fuzzer] completed vector=%s", attack.name)
 
 		actionCounts[attack.name]++
 		iteration++
@@ -135,6 +138,7 @@ func buildDeck() {
 		{"FUZZER_WEIGHT_F3", 4, getAllF3Attacks()},
 		{"FUZZER_WEIGHT_F3_CHAINEX", 4, getAllF3ChainExAttacks()},
 		{"FUZZER_WEIGHT_F3_CERTEX", 3, getAllF3CertExAttacks()},
+		{"FUZZER_WEIGHT_HELLO", 3, getAllHelloAttacks()},
 	}
 
 	deck = nil

@@ -455,10 +455,10 @@ func DoGasExhaustionEdge() {
 		return
 	}
 
-	// Need a gasguzzler contract
-	contracts := getContractsByType("gasguzzler")
+	// Need a maxblockgas contract
+	contracts := getContractsByType("maxblockgas")
 	if len(contracts) == 0 {
-		doDeployStressContract("gasguzzler")
+		doDeployStressContract("maxblockgas")
 		return
 	}
 	target := rngChoice(contracts)

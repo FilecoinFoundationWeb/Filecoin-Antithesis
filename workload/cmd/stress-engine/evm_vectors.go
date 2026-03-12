@@ -521,12 +521,12 @@ func DoConflictingContractCalls() {
 // trie degradation that could cause node crashes or consensus splits.
 // ===========================================================================
 
-// DoGasGuzzler calls burnGas(iterations) — tight keccak256 loop to max
+// DoMaxBlockGas calls burnGas(iterations) — tight keccak256 loop to max
 // out block gas consumption and stress the compute pipeline.
-func DoGasGuzzler() {
-	contracts := getContractsByType("gasguzzler")
+func DoMaxBlockGas() {
+	contracts := getContractsByType("maxblockgas")
 	if len(contracts) == 0 {
-		doDeployStressContract("gasguzzler")
+		doDeployStressContract("maxblockgas")
 		return
 	}
 
@@ -538,13 +538,13 @@ func DoGasGuzzler() {
 
 	calldata, err := cborWrapCalldata(calcSelector("burnGas(uint256)"), encodeUint256(iterations))
 	if err != nil {
-		log.Printf("[gas-guzzler] cborWrap failed: %v", err)
+		log.Printf("[max-block-gas] cborWrap failed: %v", err)
 		return
 	}
 
-	msgCid, ok := invokeContract(node, c.deployer, c.deployKI, c.addr, calldata, "gas-guzzler")
+	msgCid, ok := invokeContract(node, c.deployer, c.deployKI, c.addr, calldata, "max-block-gas")
 
-	debugLog("  [gas-guzzler] iterations=%d via %s ok=%v cid=%s",
+	debugLog("  [max-block-gas] iterations=%d via %s ok=%v cid=%s",
 		iterations, nodeName, ok, cidStr(msgCid))
 }
 

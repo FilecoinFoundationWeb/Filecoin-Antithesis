@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -43,55 +44,120 @@ func runGossipAttack(buildPayload func() gossipPayload) {
 	publishGossipPayload(topicName, payload.data)
 }
 
-// publishGossipPayload creates a fresh host, connects to a random target,
-// joins the GossipSub topic, publishes data, then tears down.
+// publishGossipPayload publishes data to a GossipSub topic using the shared
+// gossip publisher. The publisher reuses a single host and GossipSub instance
+// across publishes, only rotating when the use budget is exhausted.
 // This is the shared publish mechanism for all gossip-based attacks
 // (gossip vectors, CBOR bombs, F3 attacks).
 func publishGossipPayload(topicName string, data []byte) {
-	target := rngChoice(targets)
-
-	h, err := pool.GetFresh(ctx)
-	if err != nil {
-		log.Printf("[gossip] create host failed: %v", err)
-		return
-	}
-	defer h.Close()
-
-	// Connect to target first so GossipSub can mesh
-	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	if err := h.Connect(connectCtx, target.AddrInfo); err != nil {
-		debugLog("[gossip] connect to %s failed: %v", target.Name, err)
-		return
-	}
-
-	if err := publishToTopic(ctx, h, topicName, data); err != nil {
+	if err := gossipPub.publish(ctx, topicName, data); err != nil {
 		debugLog("[gossip] publish to %s failed: %v", topicName, err)
 	}
 }
 
-// publishToTopic creates a GossipSub instance, joins the topic, waits for
-// mesh formation, publishes data, then returns.
-func publishToTopic(ctx context.Context, h host.Host, topicName string, data []byte) error {
+// ---------------------------------------------------------------------------
+// gossipPublisher — reusable GossipSub host with topic caching
+//
+// Creating a new GossipSub + 2-second mesh wait per publish was the single
+// biggest performance bottleneck. This publisher keeps a long-lived host and
+// rotates it after maxUse publishes (when peer score is likely exhausted).
+// ---------------------------------------------------------------------------
+
+type gossipPublisher struct {
+	mu     sync.Mutex
+	h      host.Host
+	ps     *pubsub.PubSub
+	topics map[string]*pubsub.Topic
+	uses   int
+	maxUse int
+}
+
+func newGossipPublisher(maxUse int) *gossipPublisher {
+	return &gossipPublisher{
+		topics: make(map[string]*pubsub.Topic),
+		maxUse: maxUse,
+	}
+}
+
+func (gp *gossipPublisher) publish(ctx context.Context, topicName string, data []byte) error {
+	gp.mu.Lock()
+	defer gp.mu.Unlock()
+
+	if gp.h == nil || gp.uses >= gp.maxUse {
+		if err := gp.reset(ctx); err != nil {
+			return err
+		}
+	}
+
+	topic, ok := gp.topics[topicName]
+	if !ok {
+		var err error
+		topic, err = gp.ps.Join(topicName)
+		if err != nil {
+			return fmt.Errorf("join topic %s: %w", topicName, err)
+		}
+		gp.topics[topicName] = topic
+		// Wait for mesh formation only on first join of this topic
+		time.Sleep(3 * time.Second)
+	}
+
+	gp.uses++
+	publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return topic.Publish(publishCtx, data)
+}
+
+func (gp *gossipPublisher) reset(ctx context.Context) error {
+	// Tear down old resources
+	for _, t := range gp.topics {
+		t.Close()
+	}
+	if gp.h != nil {
+		gp.h.Close()
+	}
+
+	// Create fresh host
+	h, err := createHost(ctx)
+	if err != nil {
+		return fmt.Errorf("create gossip host: %w", err)
+	}
+
+	// Connect to a random target so GossipSub can mesh
+	target := rngChoice(targets)
+	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := h.Connect(connectCtx, target.AddrInfo); err != nil {
+		h.Close()
+		return fmt.Errorf("connect to %s: %w", target.Name, err)
+	}
+
 	ps, err := pubsub.NewGossipSub(ctx, h)
 	if err != nil {
+		h.Close()
 		return fmt.Errorf("create gossipsub: %w", err)
 	}
 
-	topic, err := ps.Join(topicName)
-	if err != nil {
-		return fmt.Errorf("join topic %s: %w", topicName, err)
-	}
-	defer topic.Close()
-
-	// Wait for mesh formation — peers need time to GRAFT us
-	time.Sleep(2 * time.Second)
-
-	publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	return topic.Publish(publishCtx, data)
+	gp.h = h
+	gp.ps = ps
+	gp.topics = make(map[string]*pubsub.Topic)
+	gp.uses = 0
+	log.Printf("[gossip] rotated publisher host: %s", h.ID().String()[:16])
+	return nil
 }
+
+func (gp *gossipPublisher) close() {
+	gp.mu.Lock()
+	defer gp.mu.Unlock()
+	for _, t := range gp.topics {
+		t.Close()
+	}
+	if gp.h != nil {
+		gp.h.Close()
+	}
+}
+
+// gossipPub is the shared gossip publisher, initialized in main().
+var gossipPub *gossipPublisher
 
 // ---------------------------------------------------------------------------
 // BlockMsg wire format (CBOR): {Header: *BlockHeader, BlsMessages: []CID, SecpkMessages: []CID}

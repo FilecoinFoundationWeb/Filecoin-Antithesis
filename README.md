@@ -103,7 +103,7 @@ The engine runs two different vector decks depending on the profile:
 | `DoContractCall` | `STRESS_WEIGHT_CONTRACT_CALL` | Invoke contracts (recursion, delegatecall, tokens) |
 | `DoSelfDestructCycle` | `STRESS_WEIGHT_SELFDESTRUCT` | Deploy, destroy, cross-node verify |
 | `DoConflictingContractCalls` | `STRESS_WEIGHT_CONTRACT_RACE` | Same-nonce contract calls to different nodes |
-| `DoGasGuzzler` | `STRESS_WEIGHT_GAS_GUZZLER` | Gas limit edge cases |
+| `DoMaxBlockGas` | `STRESS_WEIGHT_MAX_BLOCK_GAS` | Gas limit edge cases |
 | `DoLogBlaster` | `STRESS_WEIGHT_LOG_BLASTER` | Excessive event logging |
 | `DoMemoryBomb` | `STRESS_WEIGHT_MEMORY_BOMB` | Memory pressure |
 | `DoStorageSpam` | `STRESS_WEIGHT_STORAGE_SPAM` | Storage stress |
