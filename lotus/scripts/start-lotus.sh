@@ -68,8 +68,11 @@ if [ "$INIT_MODE" = "true" ]; then
         lotus --repo="${LOTUS_PATH}" daemon --genesis=${SHARED_CONFIGS}/devgen.car --bootstrap=false --config=config.toml&
     fi
 else
-    lotus --repo="${LOTUS_PATH}" daemon --bootstrap=false --config=config.toml&
+    echo "lotus${no}: Restart detected, skipping init..."
+    lotus --repo="${LOTUS_PATH}" daemon --bootstrap=false --config=config.toml &
 fi
+
+LOTUS_PID=$!
 
 lotus --version
 lotus wait-api
@@ -127,4 +130,4 @@ done
 
 echo "lotus${no}: completed startup"
 
-sleep infinity
+wait $LOTUS_PID

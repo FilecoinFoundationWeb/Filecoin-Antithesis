@@ -22,7 +22,8 @@ export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
 lotus-miner --version
-lotus wallet import --as-default ${SHARED_CONFIGS}/.genesis-sector-${no}/pre-seal-${LOTUS_MINER_ACTOR_ADDRESS}.key
+lotus wait-api
+lotus wallet import --as-default ${SHARED_CONFIGS}/.genesis-sector-${no}/pre-seal-${LOTUS_MINER_ACTOR_ADDRESS}.key || true
 
 if [ -f "${LOTUS_MINER_PATH}/config.toml" ]; then
     echo "lotus-miner${no}: Repo already exists, skipping init..."

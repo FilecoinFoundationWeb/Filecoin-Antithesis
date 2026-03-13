@@ -72,6 +72,8 @@ forest --genesis "${SHARED_CONFIGS}/devgen.car" \
        --p2p-listen-address "/ip4/${host_ip}/tcp/${FOREST_P2P_PORT}" \
        --healthcheck-address "${host_ip}:${FOREST_HEALTHZ_RPC_PORT}" &
 
+FOREST_PID=$!
+
 # Admin token is required for connection commands and wallet management.
 export TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
 export FULLNODE_API_INFO="$TOKEN:/ip4/$host_ip/tcp/${FOREST_RPC_PORT}/http"
@@ -156,4 +158,4 @@ forest-cli healthcheck healthy --healthcheck-port "${FOREST_HEALTHZ_RPC_PORT}"
 
 echo "forest${no}: completed startup"
 
-sleep infinity
+wait $FOREST_PID

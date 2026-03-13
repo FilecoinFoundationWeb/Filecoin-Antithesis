@@ -187,6 +187,13 @@ if [ ! -f $CURIO_REPO_PATH/.init.pdp ]; then
   echo "PDP service setup complete"
 fi
 
+# Source .env.curio on every boot (not just first) so curio has contract addresses after restart
+if [ -f $CURIO_REPO_PATH/.env.curio ]; then
+  echo "Loading contract addresses from .env.curio..."
+  set -a
+  source ${CURIO_REPO_PATH}/.env.curio
+  set +a
+fi
+
 echo Starting curio node ...
 CURIO_FAKE_CPU=5 curio run --nosync --name devnet --layers seal,post,pdp-only,gui
-sleep infinity
