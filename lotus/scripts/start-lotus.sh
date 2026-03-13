@@ -19,10 +19,14 @@ export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
-if [ ! -f "${LOTUS_DATA_DIR}/config.toml" ]; then
-    INIT_MODE=true
-else
+# Use a dedicated sentinel instead of config.toml — the daemon creates config.toml
+# early during init, so a restart mid-genesis would falsely skip init.
+if [ -f "${LOTUS_DATA_DIR}/.init.complete" ]; then
     INIT_MODE=false
+else
+    INIT_MODE=true
+    # Clean up any partial repo state from a prior interrupted init
+    rm -rf "${LOTUS_PATH}"
 fi
 
 while true; do
@@ -81,6 +85,12 @@ lotus net listen | grep -v "127.0.0.1" | grep -v "::1" | head -n 1 > ${LOTUS_DAT
 lotus net id > ${LOTUS_DATA_DIR}/lotus${no}-p2pID
 if [ ! -f "${LOTUS_DATA_DIR}/lotus${no}-jwt" ]; then
     lotus auth create-token --perm admin > ${LOTUS_DATA_DIR}/lotus${no}-jwt
+fi
+
+# Mark init as complete — must be after daemon is confirmed running
+if [ "$INIT_MODE" = "true" ]; then
+    touch "${LOTUS_DATA_DIR}/.init.complete"
+    echo "lotus${no}: Init complete, sentinel written"
 fi
 
 # connecting to peers
