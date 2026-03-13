@@ -124,6 +124,14 @@ func rngChoice[T any](items []T) T {
 }
 
 func pickNode() (string, api.FullNode) {
+	// When FOC is active, bias toward lotus0 (Curio's backend) ~70% of the time.
+	// This ensures stress vectors create contention on the same node Curio uses
+	// for on-chain transactions, eth_call reads, and receipt processing.
+	if focCfg != nil {
+		if n, ok := nodes["lotus0"]; ok && rngIntn(100) < 70 {
+			return "lotus0", n
+		}
+	}
 	name := rngChoice(nodeKeys)
 	return name, nodes[name]
 }
@@ -287,7 +295,20 @@ func buildDeck() {
 	if focCfg == nil {
 		actions = append(actions, stress...)
 	} else {
-		log.Println("[init] FOC active — skipping non-FOC stress vectors (covered by filecoin run)")
+		// Targeted stress vectors that exercise subsystems FOC depends on.
+		// These create state trie churn, gas contention, and reorgs on the
+		// Curio-backing node (lotus0 via pickNode() bias).
+		// Weights are low (1) so FOC lifecycle vectors still dominate the deck.
+		log.Println("[init] FOC active — adding targeted stress vectors for Curio-backing node")
+		focStress := []weightedAction{
+			{"DoStorageSpam", "STRESS_WEIGHT_STORAGE_SPAM", DoStorageSpam, 1},
+			{"DoDeployContracts", "STRESS_WEIGHT_DEPLOY", DoDeployContracts, 1},
+			{"DoContractCall", "STRESS_WEIGHT_CONTRACT_CALL", DoContractCall, 1},
+			{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 1},
+			{"DoSelfDestructCycle", "STRESS_WEIGHT_SELFDESTRUCT", DoSelfDestructCycle, 1},
+			{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 1},
+		}
+		actions = append(actions, focStress...)
 	}
 
 	// FOC lifecycle vectors — only when FOC profile is active
@@ -303,8 +324,8 @@ func buildDeck() {
 			weightedAction{"DoFOCTransfer", "STRESS_WEIGHT_FOC_TRANSFER", DoFOCTransfer, 1},
 			weightedAction{"DoFOCSettle", "STRESS_WEIGHT_FOC_SETTLE", DoFOCSettle, 1},
 			weightedAction{"DoFOCWithdraw", "STRESS_WEIGHT_FOC_WITHDRAW", DoFOCWithdraw, 1},
-			// Destructive — weight 0 by default (opt-in)
-			weightedAction{"DoFOCDeletePiece", "STRESS_WEIGHT_FOC_DELETE_PIECE", DoFOCDeletePiece, 0},
+			weightedAction{"DoFOCDeletePiece", "STRESS_WEIGHT_FOC_DELETE_PIECE", DoFOCDeletePiece, 1},
+			weightedAction{"DoFOCPaymentPreflight", "STRESS_WEIGHT_FOC_PREFLIGHT", DoFOCPaymentPreflight, 1},
 			weightedAction{"DoFOCDeleteDataSet", "STRESS_WEIGHT_FOC_DELETE_DS", DoFOCDeleteDataSet, 0},
 		)
 	}

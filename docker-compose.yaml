@@ -111,7 +111,7 @@ services:
       - STRESS_WEIGHT_HEAD_COMPARISON=3 # cross-node chain head match
       - STRESS_WEIGHT_STATE_ROOT=4 # cross-node state root match
       - STRESS_WEIGHT_STATE_AUDIT=5 # full state tree audit
-      - STRESS_WEIGHT_REORG=0 # checks cluster converges correctly after partitioned periods
+      - STRESS_WEIGHT_REORG=1 # checks cluster converges correctly after partitioned periods
       #
       # --- Non-FOC stress vectors ---
       #

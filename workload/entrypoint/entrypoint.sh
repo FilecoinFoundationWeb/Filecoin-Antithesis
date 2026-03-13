@@ -77,7 +77,12 @@ log_info "Launching stress engine..."
 /opt/antithesis/stress-engine &
 STRESS_PID=$!
 
-if [ "${FUZZER_ENABLED:-1}" = "1" ]; then
+# Skip protocol fuzzer in FOC profile — FOC vectors target Curio's
+# application layer, not the libp2p wire protocols the fuzzer attacks.
+# Running both adds noise to the report without finding FOC-relevant bugs.
+if getent hosts filwizard &>/dev/null; then
+    log_info "FOC profile — skipping protocol fuzzer"
+elif [ "${FUZZER_ENABLED:-1}" = "1" ]; then
     log_info "Launching protocol fuzzer..."
     /opt/antithesis/protocol-fuzzer &
     FUZZER_PID=$!

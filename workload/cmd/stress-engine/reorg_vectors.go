@@ -42,8 +42,20 @@ func DoReorgChaos() {
 		return
 	}
 
-	// Pick a victim node to isolate
-	victimName := rngChoice(nodeKeys)
+	// Pick a victim node to isolate.
+	// When FOC is active, bias toward lotus0 (Curio's backend) 60% of the time.
+	// This tests Curio's zero-reorg-awareness: receipts it read and acted on
+	// become invalid after partition heal, but Curio never re-validates.
+	var victimName string
+	if focCfg != nil {
+		if _, ok := nodes["lotus0"]; ok && rngIntn(100) < 60 {
+			victimName = "lotus0"
+		} else {
+			victimName = rngChoice(nodeKeys)
+		}
+	} else {
+		victimName = rngChoice(nodeKeys)
+	}
 	victim := nodes[victimName]
 
 	// Random number of rapid split-heal cycles: 1-10
