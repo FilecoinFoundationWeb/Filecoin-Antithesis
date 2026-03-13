@@ -93,6 +93,7 @@ if [ "$INIT_MODE" = "true" ]; then
     touch "${LOTUS_DATA_DIR}/.init.complete"
     echo "lotus${node_number}: Init complete, sentinel written"
 fi
+
 connect_with_retries() {
     local max_retries=10
     local addr_file="$1"
