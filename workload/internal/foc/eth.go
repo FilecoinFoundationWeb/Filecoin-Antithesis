@@ -2,6 +2,7 @@ package foc
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/big"
 	"sync"
@@ -313,4 +314,18 @@ func EncodeUint256(n uint64) []byte {
 	buf[30] = byte(n >> 8)
 	buf[31] = byte(n)
 	return buf
+}
+
+// VerifyTxReceipt fetches a transaction receipt by hash string and returns
+// (receipt, error). Returns (nil, nil) if the tx is not yet mined.
+func VerifyTxReceipt(ctx context.Context, node api.FullNode, txHashStr string) (*ethtypes.EthTxReceipt, error) {
+	hash, err := ethtypes.ParseEthHash(txHashStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse tx hash %q: %w", txHashStr, err)
+	}
+	receipt, err := node.EthGetTransactionReceipt(ctx, hash)
+	if err != nil {
+		return nil, fmt.Errorf("EthGetTransactionReceipt: %w", err)
+	}
+	return receipt, nil
 }
