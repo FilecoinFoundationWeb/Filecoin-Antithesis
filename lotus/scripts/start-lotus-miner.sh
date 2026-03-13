@@ -1,20 +1,16 @@
 #!/bin/bash
 
-no="$1"
+node_number="$1"
 
-# lotus_data_dir="LOTUS_${no}_DATA_DIR"
-# export LOTUS_DATA_DIR="${!lotus_data_dir}"
-
-lotus_miner_actor_address="LOTUS_MINER_${no}_ACTOR_ADDRESS"
+lotus_miner_actor_address="LOTUS_MINER_${node_number}_ACTOR_ADDRESS"
 export LOTUS_MINER_ACTOR_ADDRESS="${!lotus_miner_actor_address}"
 
-lotus_path="LOTUS_${no}_PATH"
+lotus_path="LOTUS_${node_number}_PATH"
 export LOTUS_PATH="${!lotus_path}"
 
-lotus_miner_path="LOTUS_MINER_${no}_PATH"
+lotus_miner_path="LOTUS_MINER_${node_number}_PATH"
 export LOTUS_MINER_PATH="${!lotus_miner_path}"
 
-# Are all of these environment variables necessary?
 export LOTUS_F3_BOOTSTRAP_EPOCH=21
 export DRAND_CHAIN_INFO=chain_info
 export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
@@ -23,22 +19,54 @@ export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
 lotus-miner --version
 lotus wait-api
-lotus wallet import --as-default ${SHARED_CONFIGS}/.genesis-sector-${no}/pre-seal-${LOTUS_MINER_ACTOR_ADDRESS}.key || true
+lotus wallet import --as-default "${SHARED_CONFIGS}/.genesis-sector-${node_number}/pre-seal-${LOTUS_MINER_ACTOR_ADDRESS}.key" || true
 
 if [ -f "${LOTUS_MINER_PATH}/.init.complete" ]; then
-    echo "lotus-miner${no}: Restart detected, skipping init..."
+    echo "lotus-miner${node_number}: Restart detected, skipping init..."
 else
     # Clean up any partial repo state from a prior interrupted init
     rm -rf "${LOTUS_MINER_PATH}"
-    if [ "$no" -eq 0 ]; then
-        lotus-miner init --genesis-miner --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${no} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
+    if [ "$node_number" -eq 0 ]; then
+        lotus-miner init --genesis-miner --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${node_number} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
     else
-        lotus-miner init --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${no} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
+        lotus-miner init --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${node_number} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
     fi
     touch "${LOTUS_MINER_PATH}/.init.complete"
 fi
-echo "lotus-miner${no}: setup complete"
+echo "lotus-miner${node_number}: setup complete"
 
-lotus-miner log set-level --system panic-reporter --system incrt --system bitswap-client --system table --system pubsub --system test-logger --system routedhost --system f3/internal/caching --system engine --system badgerbs --system chainstore --system genesis --system messagesigner --system sqlite --system providers --system miner --system f3/certexchange --system cliutil --system lotus-tracer --system fullnode --system gen --system tarutil --system ipns --system websocket-transport --system cli --system stores --system paramfetch --system amt --system splitstore --system blockservice --system webrtc-transport-pion --system build --system ctladdr --system pstoremanager --system quic-utils --system repo --system wallet-ledger --system lock --system dht.pb --system blankhost --system mocknet --system chainindex --system hello --system httpreader --system build/buildtypes --system tracing --system advmgr --system webrtc-udpmux --system paych --system healthcheck --system beacon --system statetree --system bundle --system connmgr --system swarm2 --system chainxchg --system chain --system harmonydb --system peerstore --system net/identify --system autonatv2 --system relay --system fsjournal --system peermgr --system builder --system alerting --system webtransport --system bs:peermgr --system merkledag --system discovery-backoff --system basichost --system disputer --system storageminer --system backupds --system rpcenc --system pathresolv --system peerstore/ds --system sub --system bs:sess --system consensus-common --system f3/manifest-provider --system wallet --system api_proxy --system wdpost --system eventlog --system types --system autonat --system p2p-circuit --system bitswap-server --system actors --system modules --system bitswap --system ulimit --system pubsub/timecache --system slashsvc --system quic-transport --system p2pnode --system payment-channel-settler --system partialfile --system cborrrpc --system nat --system sectors --system canonical-log --system f3/ohshitstore --system diversityFilter --system f3 --system ffiwrapper --system main --system f3/gpbft --system bs:sprmgr --system dht/RtRefreshManager --system drand --system f3/wal --system blockstore --system routing/composable --system bitswap_network --system rand --system market_adapter --system fsutil --system evtsm --system autorelay --system preseal --system node --system system --system p2p-holepunch --system messagepool --system watchdog --system metrics-prometheus --system ping --system reuseport-transport --system resources --system dht/netsize --system fil-consensus --system metrics --system events --system p2p-config --system dht --system net/conngater --system vm --system auth --system webrtc-transport --system badger --system rcmgr --system tcp-tpt --system retry --system upgrader --system statemgr --system conngater --system f3/blssig --system rpc error
-lotus-miner log set-level --system panic-reporter --system incrt --system bitswap-client --system table --system pubsub --system test-logger --system routedhost --system f3/internal/caching --system engine --system badgerbs --system chainstore --system genesis --system messagesigner --system sqlite --system providers --system miner --system f3/certexchange --system cliutil --system lotus-tracer --system fullnode --system gen --system tarutil --system ipns --system websocket-transport --system cli --system stores --system paramfetch --system amt --system splitstore --system blockservice --system webrtc-transport-pion --system build --system ctladdr --system pstoremanager --system quic-utils --system repo --system wallet-ledger --system lock --system dht.pb --system blankhost --system mocknet --system chainindex --system hello --system httpreader --system build/buildtypes --system tracing --system advmgr --system webrtc-udpmux --system paych --system healthcheck --system beacon --system statetree --system bundle --system connmgr --system swarm2 --system chainxchg --system chain --system harmonydb --system peerstore --system net/identify --system autonatv2 --system relay --system fsjournal --system peermgr --system builder --system alerting --system webtransport --system bs:peermgr --system merkledag --system discovery-backoff --system basichost --system disputer --system storageminer --system backupds --system rpcenc --system pathresolv --system peerstore/ds --system sub --system bs:sess --system consensus-common --system f3/manifest-provider --system wallet --system api_proxy --system wdpost --system eventlog --system types --system autonat --system p2p-circuit --system bitswap-server --system actors --system modules --system bitswap --system ulimit --system pubsub/timecache --system slashsvc --system quic-transport --system p2pnode --system payment-channel-settler --system partialfile --system cborrrpc --system nat --system sectors --system canonical-log --system f3/ohshitstore --system diversityFilter --system f3 --system ffiwrapper --system main --system f3/gpbft --system bs:sprmgr --system dht/RtRefreshManager --system drand --system f3/wal --system blockstore --system routing/composable --system bitswap_network --system rand --system market_adapter --system fsutil --system evtsm --system autorelay --system preseal --system node --system system --system p2p-holepunch --system messagepool --system watchdog --system metrics-prometheus --system ping --system reuseport-transport --system resources --system dht/netsize --system fil-consensus --system metrics --system events --system p2p-config --system dht --system net/conngater --system vm --system auth --system webrtc-transport --system badger --system rcmgr --system tcp-tpt --system retry --system upgrader --system statemgr --system conngater --system f3/blssig --system rpc warn
+# Reduce log noise: set all subsystems to error first, then selectively raise to warn.
+# The full list is generated from `lotus-miner log list`.
+LOG_SYSTEMS=(
+    panic-reporter incrt bitswap-client table pubsub test-logger routedhost
+    f3/internal/caching engine badgerbs chainstore genesis messagesigner sqlite
+    providers miner f3/certexchange cliutil lotus-tracer fullnode gen tarutil
+    ipns websocket-transport cli stores paramfetch amt splitstore blockservice
+    webrtc-transport-pion build ctladdr pstoremanager quic-utils repo
+    wallet-ledger lock dht.pb blankhost mocknet chainindex hello httpreader
+    build/buildtypes tracing advmgr webrtc-udpmux paych healthcheck beacon
+    statetree bundle connmgr swarm2 chainxchg chain harmonydb peerstore
+    net/identify autonatv2 relay fsjournal peermgr builder alerting webtransport
+    bs:peermgr merkledag discovery-backoff basichost disputer storageminer
+    backupds rpcenc pathresolv peerstore/ds sub bs:sess consensus-common
+    f3/manifest-provider wallet api_proxy wdpost eventlog types autonat
+    p2p-circuit bitswap-server actors modules bitswap ulimit pubsub/timecache
+    slashsvc quic-transport p2pnode payment-channel-settler partialfile cborrrpc
+    nat sectors canonical-log f3/ohshitstore diversityFilter f3 ffiwrapper main
+    f3/gpbft bs:sprmgr dht/RtRefreshManager drand f3/wal blockstore
+    routing/composable bitswap_network rand market_adapter fsutil evtsm
+    autorelay preseal node system p2p-holepunch messagepool watchdog
+    metrics-prometheus ping reuseport-transport resources dht/netsize
+    fil-consensus metrics events p2p-config dht net/conngater vm auth
+    webrtc-transport badger rcmgr tcp-tpt retry upgrader statemgr conngater
+    f3/blssig rpc
+)
+
+SYSTEM_FLAGS=()
+for sys in "${LOG_SYSTEMS[@]}"; do
+    SYSTEM_FLAGS+=("--system" "$sys")
+done
+
+lotus-miner log set-level "${SYSTEM_FLAGS[@]}" error
+lotus-miner log set-level "${SYSTEM_FLAGS[@]}" warn
 lotus-miner run --nosync

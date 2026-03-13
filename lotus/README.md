@@ -1,6 +1,6 @@
 # Lotus Package
 
-This package builds and configures Lotus Filecoin nodes and miners for the testing environment.
+This package builds and configures Lotus Filecoin nodes and miners for the Antithesis testing environment.
 
 ## Overview
 
@@ -25,40 +25,38 @@ docker build -t lotus:latest -f lotus/Dockerfile lotus
 
 ### Lotus0 (Primary)
 - RPC: `http://lotus0:1234/rpc/v1`
-- JWT: `/root/devgen/lotus0/lotus0-jwt`
-- Config: `config-0.toml`
-- Start script: `lotus-0.sh`
+- JWT: `${LOTUS_0_DATA_DIR}/lotus0-jwt`
+- Start script: `scripts/start-lotus.sh 0`
 
 ### Lotus1 (Secondary)
 - RPC: `http://lotus1:1234/rpc/v1`
-- JWT: `/root/devgen/lotus1/lotus1-jwt`
-- Config: `config-1.toml`
-- Start script: `lotus-1.sh`
+- JWT: `${LOTUS_1_DATA_DIR}/lotus1-jwt`
+- Start script: `scripts/start-lotus.sh 1`
 
 ## Miners
 
 ### lotus-miner0
 - Miner ID: `t01000`
-- Start script: `lotus-miner-0.sh`
+- Start script: `scripts/start-lotus-miner.sh 0`
 - Depends on: lotus0
 
 ### lotus-miner1
 - Miner ID: `t01001`
-- Start script: `lotus-miner-1.sh`
+- Start script: `scripts/start-lotus-miner.sh 1`
 - Depends on: lotus1
 
 ## Patches (`lotus.patch`)
 
 Applied modifications for testing:
 - Local Drand configuration instead of public beacons
-- F3 consensus parameters (BootstrapEpoch: 20, Finality: 10)
+- F3 consensus parameters (BootstrapEpoch: 5, Finality: 2)
 - Dynamic Drand chain info from environment variables
+- Disabled peer scoring / resource manager for sustained fuzzing
 
 ## Configuration
 
-### Config Files
-- `config-0.toml` — Lotus0 configuration
-- `config-1.toml` — Lotus1 configuration
+### Config Template
+- `lotus-config.toml.template` — Shared template, substituted per-node at startup
 
 ### Key Settings
 - Network bootstrapping
@@ -68,18 +66,23 @@ Applied modifications for testing:
 
 ## Artifacts Exported
 
-Each Lotus node exports to shared volume:
+Each Lotus node exports to its data directory:
 - `lotus{N}-jwt` — API authentication token
 - `lotus{N}-ipv4addr` — Container IP address
-- `lotus{N}-p2pid` — P2P peer ID
+- `lotus{N}-p2pID` — P2P peer ID
 
 ## Docker Compose
 
-Defined in `config/docker-compose.yml`:
+Defined in `docker-compose.yaml` (repo root):
 - lotus0: Port 1234 (RPC)
 - lotus1: Port 1234 (RPC)
 - lotus-miner0: Mining operations
 - lotus-miner1: Mining operations
+
+## Dependencies
+
+- **drand0**: Randomness beacon (must be running before Lotus starts)
+- **Forest nodes**: Connected as peers after startup
 
 ## API Features
 
