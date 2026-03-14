@@ -73,11 +73,33 @@ else
     generate_forest_config
 fi
 
-forest --genesis "${SHARED_CONFIGS}/devgen.car" \
-       --config "${FOREST_DATA_DIR}/forest_config.toml" \
-       --rpc-address "${host_ip}:${FOREST_RPC_PORT}" \
-       --p2p-listen-address "/ip4/${host_ip}/tcp/${FOREST_P2P_PORT}" \
-       --healthcheck-address "${host_ip}:${FOREST_HEALTHZ_RPC_PORT}" &
+# Launch daemon with retry — on restart the network interface may not be ready yet,
+# causing bind failures. Retry up to 10 times with backoff.
+launch_forest() {
+    forest --genesis "${SHARED_CONFIGS}/devgen.car" \
+           --config "${FOREST_DATA_DIR}/forest_config.toml" \
+           --rpc-address "${host_ip}:${FOREST_RPC_PORT}" \
+           --p2p-listen-address "/ip4/${host_ip}/tcp/${FOREST_P2P_PORT}" \
+           --healthcheck-address "${host_ip}:${FOREST_HEALTHZ_RPC_PORT}" &
+    FOREST_PID=$!
+}
+
+MAX_LAUNCH_RETRIES=10
+for (( attempt=1; attempt<=MAX_LAUNCH_RETRIES; attempt++ )); do
+    launch_forest
+    sleep 3
+    if kill -0 "$FOREST_PID" 2>/dev/null; then
+        echo "forest${node_number}: daemon started (pid=$FOREST_PID)"
+        break
+    fi
+    echo "forest${node_number}: daemon exited early (attempt $attempt/$MAX_LAUNCH_RETRIES), retrying in 5s..."
+    sleep 5
+done
+
+if ! kill -0 "$FOREST_PID" 2>/dev/null; then
+    echo "ERROR: forest${node_number} daemon failed to start after $MAX_LAUNCH_RETRIES attempts"
+    exit 1
+fi
 
 export TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
 export FULLNODE_API_INFO="$TOKEN:/ip4/$host_ip/tcp/${FOREST_RPC_PORT}/http"
@@ -152,4 +174,4 @@ forest-cli healthcheck healthy --healthcheck-port "${FOREST_HEALTHZ_RPC_PORT}"
 
 echo "forest${node_number}: completed startup"
 
-sleep infinity
+wait $FOREST_PID
