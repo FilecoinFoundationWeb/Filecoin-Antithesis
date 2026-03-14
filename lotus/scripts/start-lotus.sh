@@ -66,18 +66,41 @@ if [ "$INIT_MODE" = "true" ]; then
     fi
 
     jq -r '.NetworkName' "${SHARED_CONFIGS}/localnet.json" > "${LOTUS_DATA_DIR}/network_name"
-
-    if [ "$node_number" -eq 0 ]; then
-        lotus --repo="${LOTUS_PATH}" daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml&
-    else
-        lotus --repo="${LOTUS_PATH}" daemon --genesis=${SHARED_CONFIGS}/devgen.car --bootstrap=false --config=config.toml&
-    fi
-else
-    echo "lotus${node_number}: Restart detected, skipping init..."
-    lotus --repo="${LOTUS_PATH}" daemon --bootstrap=false --config=config.toml &
 fi
 
-LOTUS_PID=$!
+# Launch daemon with retry — on restart the network interface may not be ready yet,
+# causing "bind: cannot assign requested address". Retry up to 10 times with backoff.
+launch_daemon() {
+    if [ "$INIT_MODE" = "true" ]; then
+        if [ "$node_number" -eq 0 ]; then
+            lotus --repo="${LOTUS_PATH}" daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml &
+        else
+            lotus --repo="${LOTUS_PATH}" daemon --genesis=${SHARED_CONFIGS}/devgen.car --bootstrap=false --config=config.toml &
+        fi
+    else
+        echo "lotus${node_number}: Restart detected, skipping init..."
+        lotus --repo="${LOTUS_PATH}" daemon --bootstrap=false --config=config.toml &
+    fi
+    LOTUS_PID=$!
+}
+
+MAX_LAUNCH_RETRIES=10
+for (( attempt=1; attempt<=MAX_LAUNCH_RETRIES; attempt++ )); do
+    launch_daemon
+    # Give the daemon a moment to bind or crash
+    sleep 3
+    if kill -0 "$LOTUS_PID" 2>/dev/null; then
+        echo "lotus${node_number}: daemon started (pid=$LOTUS_PID)"
+        break
+    fi
+    echo "lotus${node_number}: daemon exited early (attempt $attempt/$MAX_LAUNCH_RETRIES), retrying in 5s..."
+    sleep 5
+done
+
+if ! kill -0 "$LOTUS_PID" 2>/dev/null; then
+    echo "ERROR: lotus${node_number} daemon failed to start after $MAX_LAUNCH_RETRIES attempts"
+    exit 1
+fi
 
 lotus --version
 lotus wait-api
