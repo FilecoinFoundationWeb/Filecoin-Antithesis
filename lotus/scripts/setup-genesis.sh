@@ -3,12 +3,16 @@
 SECTOR_SIZE="${SECTOR_SIZE:-2KiB}"
 NETWORK_NAME="${NETWORK_NAME:-2k}"
 
-# pre-seal each miner
+# pre-seal each miner with configurable sector counts
+# SECTORS_PER_MINER is a comma-separated list (e.g. "4,2"), defaults to 2 per miner
+IFS=',' read -ra _sector_counts <<< "${SECTORS_PER_MINER:-}"
+
 for ((i=0; i<NUM_LOTUS_MINERS; i++)); do
   miner_id=$(printf "t01%03d" "$i")
   sector_dir="${SHARED_CONFIGS}/.genesis-sector-${i}"
-  echo "Pre-sealing miner $miner_id into $sector_dir"
-  lotus-seed --sector-dir="$sector_dir" pre-seal --sector-size "$SECTOR_SIZE" --num-sectors 2 --miner-addr "$miner_id"
+  num_sectors="${_sector_counts[$i]:-2}"
+  echo "Pre-sealing miner $miner_id into $sector_dir (${num_sectors} sectors)"
+  lotus-seed --sector-dir="$sector_dir" pre-seal --sector-size "$SECTOR_SIZE" --num-sectors "$num_sectors" --miner-addr "$miner_id"
 done
 
 # create initial genesis template
