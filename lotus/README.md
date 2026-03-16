@@ -21,6 +21,8 @@ Or directly:
 docker build -t lotus:latest -f lotus/Dockerfile lotus
 ```
 
+**Note:** The `lotus-adversary` image is built externally from a private fork and assumed to exist as `lotus-adversary:latest` in the Antithesis GCR tenant. It is not built by this repository.
+
 ## Nodes
 
 ### Lotus0 (Primary)
@@ -32,6 +34,18 @@ docker build -t lotus:latest -f lotus/Dockerfile lotus
 - RPC: `http://lotus1:1234/rpc/v1`
 - JWT: `${LOTUS_1_DATA_DIR}/lotus1-jwt`
 - Start script: `scripts/start-lotus.sh 1`
+
+### Lotus Adversary (Adversarial Full Nodes)
+
+Adversarial nodes use the `lotus-adversary` image and are enumerated (`lotus-adversary0`, `lotus-adversary1`, ...). They join the network as non-mining full nodes.
+
+#### lotus-adversary0
+- RPC: `http://lotus-adversary0:1234/rpc/v1`
+- JWT: `/root/devgen/lotus-adversary0/lotus-adversary0-jwt`
+- Image: `lotus-adversary` (separate image, may diverge from standard lotus builds)
+- Start script: `start-lotus-adversary.sh 0`
+- No associated miner — joins as a pure full node
+- Connects to all lotus, adversary, and forest peers
 
 ## Miners
 
@@ -71,11 +85,17 @@ Each Lotus node exports to its data directory:
 - `lotus{N}-ipv4addr` — Container IP address
 - `lotus{N}-p2pID` — P2P peer ID
 
+Adversary nodes follow the same pattern with a `lotus-adversary` prefix:
+- `lotus-adversary{N}-jwt`
+- `lotus-adversary{N}-ipv4addr`
+- `lotus-adversary{N}-p2pID`
+
 ## Docker Compose
 
 Defined in `docker-compose.yaml` (repo root):
 - lotus0: Port 1234 (RPC)
 - lotus1: Port 1234 (RPC)
+- lotus-adversary0: Port 1234 (RPC) — adversarial full node, no miner
 - lotus-miner0: Mining operations
 - lotus-miner1: Mining operations
 

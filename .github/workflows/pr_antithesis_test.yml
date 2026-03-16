@@ -368,6 +368,9 @@ jobs:
             LOTUS_REF="lotus:latest"
           fi
 
+          # lotus-adversary is prebuilt externally; always use latest
+          LOTUS_ADVERSARY_REF="lotus-adversary:latest"
+
           if [[ "$FOREST_CHANGED" == "true" ]]; then
             FOREST_REF="forest:${SMOKE_TAG}"
           else
@@ -401,7 +404,7 @@ jobs:
           CONFIG_REF="config:${SMOKE_TAG}"
 
           # filwizard is only used by the filecoin-foc endpoint
-          IMAGES="${DRAND_REF};${FOREST_REF};${LOTUS_REF};${WORKLOAD_REF};${CURIO_REF}"
+          IMAGES="${DRAND_REF};${FOREST_REF};${LOTUS_REF};${LOTUS_ADVERSARY_REF};${WORKLOAD_REF};${CURIO_REF}"
           if [[ "$NOTEBOOK" == "filecoin-foc" ]]; then
             IMAGES="${IMAGES};${FILWIZARD_REF}"
           fi

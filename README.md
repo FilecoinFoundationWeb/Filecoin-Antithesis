@@ -6,9 +6,10 @@ This repository provides a comprehensive testing framework for the Filecoin netw
 
 ## Setup Overview
 
-The system runs **9 containers** by default (12 with `--profile foc`):
+The system runs **10 containers** by default (13 with `--profile foc`):
 - **Drand cluster**: `drand0`, `drand1`, `drand2` (randomness beacon)
 - **Lotus nodes**: `lotus0`, `lotus1` (Go implementation)
+- **Lotus adversary**: `lotus-adversary0` (adversarial Go full node — no miner)
 - **Lotus miners**: `lotus-miner0`, `lotus-miner1`
 - **Forest node**: `forest0` (Rust implementation)
 - **Workload**: Go stress engine container
