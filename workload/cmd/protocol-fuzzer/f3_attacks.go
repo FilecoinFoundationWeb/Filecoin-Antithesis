@@ -275,6 +275,7 @@ func getAllF3Attacks() []namedAttack {
 		{name: "f3/granite-wrong-justification", fn: f3GraniteWrongJustification},
 		{name: "f3/granite-bottom-value", fn: f3GraniteBottomValue},
 		{name: "f3/granite-extra-fields", fn: f3GraniteExtraFields},
+		{name: "f3/granite-converge-wrong-ticket-len", fn: f3GraniteConvergeWrongTicketLen},
 	}
 }
 
@@ -666,6 +667,33 @@ func f3GraniteExtraFields() {
 		cborBytes(randomBytes(64)), // extra field 6
 		cborBytes(randomBytes(64)), // extra field 7
 	)
+	publishF3Partial(gmsg, nil)
+}
+
+// f3GraniteConvergeWrongTicketLen: CONVERGE message with wrong-length ticket.
+// ticket_rank.go:42 in go-f3 expects exactly 16 bytes when ranking CONVERGE
+// tickets. Wrong lengths cause index-out-of-bounds or slice panic.
+// This hits Forest's Go F3 sidecar (FFI-linked, no panic recovery at boundary).
+func f3GraniteConvergeWrongTicketLen() {
+	lengths := []int{0, 1, 15, 17, 32, 96}
+	ticketLen := lengths[rngIntn(len(lengths))]
+
+	vote := buildVoteCBOR(f3VoteOpts{
+		phase:       phaseCONVERGE,
+		round:       1 + uint64(rngIntn(10)),
+		chainLength: 1,
+	})
+	justification := buildJustificationCBOR(f3JustificationOpts{
+		phase:       phasePREPARE,
+		chainLength: 1,
+	})
+	gmsg := buildGMessageCBOR(f3MessageOpts{
+		vote:             vote,
+		ticket:           randomBytes(ticketLen),
+		justification:    justification,
+		hasJustification: true,
+	})
+	log.Printf("[f3] converge-wrong-ticket-len: ticket=%d bytes", ticketLen)
 	publishF3Partial(gmsg, nil)
 }
 
