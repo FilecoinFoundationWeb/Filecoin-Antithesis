@@ -4,11 +4,13 @@
   #
   # type: string
   # env var: LOTUS_API_LISTENADDRESS
-  ListenAddress = "/ip4/${host_ip}/tcp/${LOTUS_RPC_PORT}/http"
+  ListenAddress = "/ip4/0.0.0.0/tcp/${LOTUS_RPC_PORT}/http"
 
   # type: string
   # env var: LOTUS_API_REMOTELISTENADDRESS
-  #RemoteListenAddress = ""
+  # This is what gets written to the api file — used by miners and other clients.
+  # Must use the container hostname (DNS), not IP, so it survives IP changes after restarts.
+  RemoteListenAddress = "/dns4/${hostname}/tcp/${LOTUS_RPC_PORT}/http"
 
   # type: Duration
   # env var: LOTUS_API_TIMEOUT

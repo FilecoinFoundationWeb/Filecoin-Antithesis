@@ -52,6 +52,9 @@ while true; do
     fi
 done
 
+# Always regenerate config — Antithesis may assign a new IP after container restart
+sed "s|\${LOTUS_RPC_PORT}|$LOTUS_RPC_PORT|g; s|\${hostname}|lotus${node_number}|g" config.toml.template > config.toml
+
 if [ "$INIT_MODE" = "true" ]; then
     host_ip=$(getent hosts "lotus${node_number}" | awk '{ print $1 }')
 
@@ -59,48 +62,23 @@ if [ "$INIT_MODE" = "true" ]; then
     echo "ip address: $host_ip"
     echo "---------------------------"
 
-    sed "s|\${host_ip}|$host_ip|g; s|\${LOTUS_RPC_PORT}|$LOTUS_RPC_PORT|g" config.toml.template > config.toml
-
     if [ "$node_number" -eq 0 ]; then
         ./scripts/setup-genesis.sh
     fi
 
     jq -r '.NetworkName' "${SHARED_CONFIGS}/localnet.json" > "${LOTUS_DATA_DIR}/network_name"
-fi
 
-# Launch daemon with retry — on restart the network interface may not be ready yet,
-# causing "bind: cannot assign requested address". Retry up to 10 times with backoff.
-launch_daemon() {
-    if [ "$INIT_MODE" = "true" ]; then
-        if [ "$node_number" -eq 0 ]; then
-            lotus --repo="${LOTUS_PATH}" daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml &
-        else
-            lotus --repo="${LOTUS_PATH}" daemon --genesis=${SHARED_CONFIGS}/devgen.car --bootstrap=false --config=config.toml &
-        fi
+    if [ "$node_number" -eq 0 ]; then
+        lotus --repo="${LOTUS_PATH}" daemon --lotus-make-genesis=${SHARED_CONFIGS}/devgen.car --genesis-template=${SHARED_CONFIGS}/localnet.json --bootstrap=false --config=config.toml&
     else
-        echo "lotus${node_number}: Restart detected, skipping init..."
-        lotus --repo="${LOTUS_PATH}" daemon --bootstrap=false --config=config.toml &
+        lotus --repo="${LOTUS_PATH}" daemon --genesis=${SHARED_CONFIGS}/devgen.car --bootstrap=false --config=config.toml&
     fi
-    LOTUS_PID=$!
-}
-
-MAX_LAUNCH_RETRIES=10
-for (( attempt=1; attempt<=MAX_LAUNCH_RETRIES; attempt++ )); do
-    launch_daemon
-    # Give the daemon a moment to bind or crash
-    sleep 3
-    if kill -0 "$LOTUS_PID" 2>/dev/null; then
-        echo "lotus${node_number}: daemon started (pid=$LOTUS_PID)"
-        break
-    fi
-    echo "lotus${node_number}: daemon exited early (attempt $attempt/$MAX_LAUNCH_RETRIES), retrying in 5s..."
-    sleep 5
-done
-
-if ! kill -0 "$LOTUS_PID" 2>/dev/null; then
-    echo "ERROR: lotus${node_number} daemon failed to start after $MAX_LAUNCH_RETRIES attempts"
-    exit 1
+else
+    echo "lotus${node_number}: Restart detected, skipping init..."
+    lotus --repo="${LOTUS_PATH}" daemon --bootstrap=false --config=config.toml &
 fi
+
+LOTUS_PID=$!
 
 lotus --version
 lotus wait-api
