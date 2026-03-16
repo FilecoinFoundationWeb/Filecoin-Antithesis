@@ -106,39 +106,39 @@ services:
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
       - STRESS_WAIT_HEIGHT=10
       # --- Consensus / health-check vectors (always active in both profiles) ---
-      - STRESS_WEIGHT_TIPSET_CONSENSUS=3 # cross-node tipset agreement
-      - STRESS_WEIGHT_HEIGHT_PROGRESSION=2 # chain height advances
+      - STRESS_WEIGHT_TIPSET_CONSENSUS=5 # cross-node tipset agreement (↑ unequal power → more tipset variation)
+      - STRESS_WEIGHT_HEIGHT_PROGRESSION=3 # chain height advances (↑ unequal power can stall weaker miner)
       - STRESS_WEIGHT_PEER_COUNT=2 # node peer connectivity
-      - STRESS_WEIGHT_HEAD_COMPARISON=3 # cross-node chain head match
-      - STRESS_WEIGHT_STATE_ROOT=4 # cross-node state root match
+      - STRESS_WEIGHT_HEAD_COMPARISON=5 # cross-node chain head match (↑ divergence more likely)
+      - STRESS_WEIGHT_STATE_ROOT=6 # cross-node state root match (↑ key bug signal with power asymmetry)
       - STRESS_WEIGHT_STATE_AUDIT=5 # full state tree audit
-      - STRESS_WEIGHT_REORG=0 # checks cluster converges correctly after partitioned periods
+      - STRESS_WEIGHT_REORG=2 # checks cluster converges correctly after partitioned periods (was 0)
       #
       # --- Non-FOC stress vectors ---
       #
       # EVM contract stress
       - STRESS_WEIGHT_DEPLOY=2 # tests Init actor & state tree growth via EAM.CreateExternal
-      - STRESS_WEIGHT_CONTRACT_CALL=3 # invokes deep recursion, delegatecall, external recursive calls
+      - STRESS_WEIGHT_CONTRACT_CALL=2 # invokes deep recursion, delegatecall, external recursive calls (↓ power-agnostic)
       - STRESS_WEIGHT_SELFDESTRUCT=1 # tests actor destruction state consistency across nodes
-      - STRESS_WEIGHT_CONTRACT_RACE=2 # sends conflicting SimpleCoin sends with same nonce to diff nodes
-      - STRESS_WEIGHT_HEAVY_COMPUTE=3 # checks recomputed state root matches stored parent
-      - STRESS_WEIGHT_LOG_BLASTER=3 # stresses receipt storage, bloom filters, and event indexing
-      - STRESS_WEIGHT_MEMORY_BOMB=3 # stresses FVM memory accounting and allocator
-      - STRESS_WEIGHT_STORAGE_SPAM=3 # stresses state trie (HAMT), SplitStore, and snapshot size
+      - STRESS_WEIGHT_CONTRACT_RACE=3 # sends conflicting SimpleCoin sends with same nonce to diff nodes (↑ exploits power asymmetry)
+      - STRESS_WEIGHT_HEAVY_COMPUTE=2 # checks recomputed state root matches stored parent (↓ power-agnostic)
+      - STRESS_WEIGHT_LOG_BLASTER=2 # stresses receipt storage, bloom filters, and event indexing (↓ power-agnostic)
+      - STRESS_WEIGHT_MEMORY_BOMB=2 # stresses FVM memory accounting and allocator (↓ power-agnostic)
+      - STRESS_WEIGHT_STORAGE_SPAM=2 # stresses state trie (HAMT), SplitStore, and snapshot size (↓ power-agnostic)
       # FIL transfers
       - STRESS_WEIGHT_TRANSFER=1 # tests liveness via random node FIL token transfers
       # Nonce/ordering chaos
-      - STRESS_WEIGHT_MSG_ORDERING=1 # tests interdependent interdependent cross-node message replacement/mempool ordering
-      - STRESS_WEIGHT_NONCE_BOMBARD=1 # tests N+x gap handling & out-of-order execution across nodes
-      - STRESS_WEIGHT_ADVERSARIAL=2 # cross-node double-spends, invalid signatures rejected
+      - STRESS_WEIGHT_MSG_ORDERING=2 # tests interdependent cross-node message replacement/mempool ordering (↑ power asymmetry affects inclusion)
+      - STRESS_WEIGHT_NONCE_BOMBARD=2 # tests N+x gap handling & out-of-order execution across nodes (↑ different block rates)
+      - STRESS_WEIGHT_ADVERSARIAL=3 # cross-node double-spends, invalid signatures rejected (↑ dominant miner exploitable)
       # Gas pressure
       - STRESS_WEIGHT_GAS_EXHAUST=1 # tests high-gas call competing with small msgs across nodes
       - STRESS_WEIGHT_GAS_WAR=1 # mempool replacement/greedy selection
       - STRESS_WEIGHT_MAX_BLOCK_GAS=1 # maxes out block gas with tight keccak256 loop
       # Cross-node consistency
-      - STRESS_WEIGHT_RECEIPT_AUDIT=2 # asserts ALL receipt fields (ExitCode, Return, GasUsed) match across EVERY node
-      - STRESS_WEIGHT_ACTOR_MIGRATION=1 # burst-creates & deletes actors, asserts HAMT tree matches
-      - STRESS_WEIGHT_ACTOR_LIFECYCLE=1 # tests full actor lifecycle: deploy → fund → invoke → self-destruct → post-mortem interact
+      - STRESS_WEIGHT_RECEIPT_AUDIT=3 # asserts ALL receipt fields (ExitCode, Return, GasUsed) match across EVERY node (↑ catch divergence)
+      - STRESS_WEIGHT_ACTOR_MIGRATION=2 # burst-creates & deletes actors, asserts HAMT tree matches (↑ state divergence with asymmetry)
+      - STRESS_WEIGHT_ACTOR_LIFECYCLE=2 # tests full actor lifecycle: deploy → fund → invoke → self-destruct → post-mortem interact (↑)
       # --- FOC (Filecoin On-Chain Cloud) vectors ---
       # All FOC vectors require the `foc` compose profile to be active.
       # The lifecycle state machine must reach "Ready" before steady-state
