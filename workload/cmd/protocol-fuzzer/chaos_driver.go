@@ -23,12 +23,12 @@ import (
 
 func getAllChaosAttacks() []namedAttack {
 	return []namedAttack{
-		{name: "libp2p/rapid-connect-disconnect", fn: chaosConnectionChurn},
-		{name: "libp2p/stream-exhaustion", fn: chaosStreamExhaustion},
-		{name: "libp2p/slow-read-backpressure", fn: chaosSlowRead},
-		{name: "libp2p/peer-identity-flood", fn: chaosIdentityFlood},
-		{name: "libp2p/half-open-streams", fn: chaosHalfOpenStreams},
-		{name: "libp2p/bogus-protocol-negotiation", fn: chaosProtocolNegotiation},
+		{name: "libp2p/all-rapid-connect-disconnect-cycles", fn: chaosConnectionChurn},
+		{name: "libp2p/all-open-hundreds-of-idle-streams", fn: chaosStreamExhaustion},
+		{name: "libp2p/all-read-response-at-one-byte-per-second", fn: chaosSlowRead},
+		{name: "libp2p/all-flood-with-many-peer-identities", fn: chaosIdentityFlood},
+		{name: "libp2p/all-open-streams-with-partial-data-never-close", fn: chaosHalfOpenStreams},
+		{name: "libp2p/all-negotiate-with-invalid-protocol-ids", fn: chaosProtocolNegotiation},
 	}
 }
 

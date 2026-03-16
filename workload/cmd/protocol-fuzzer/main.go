@@ -182,15 +182,15 @@ func buildDeck() {
 	}
 
 	categories := []weightedCategory{
-		{"FUZZER_WEIGHT_EXCHANGE_SERVER", 3, getAllExchangeServerAttacks()},
-		{"FUZZER_WEIGHT_GOSSIP", 3, getAllGossipAttacks()},
-		{"FUZZER_WEIGHT_CHAOS", 2, getAllChaosAttacks()},
-		{"FUZZER_WEIGHT_CBOR_BOMBS", 4, getAllCBORBombAttacks()},
-		{"FUZZER_WEIGHT_F3", 4, getAllF3Attacks()},
-		{"FUZZER_WEIGHT_F3_CHAINEX", 4, getAllF3ChainExAttacks()},
-		{"FUZZER_WEIGHT_F3_CERTEX", 3, getAllF3CertExAttacks()},
-		{"FUZZER_WEIGHT_HELLO", 3, getAllHelloAttacks()},
-		{"FUZZER_WEIGHT_FOREST", 3, getAllForestAttacks()},
+		{"FUZZER_WEIGHT_CHAINEXCHANGE_RESPONSES", 3, getAllExchangeServerAttacks()},
+		{"FUZZER_WEIGHT_BLOCK_AND_MESSAGE_VALIDATION", 3, getAllGossipAttacks()},
+		{"FUZZER_WEIGHT_LIBP2P_CONNECTION_ABUSE", 2, getAllChaosAttacks()},
+		{"FUZZER_WEIGHT_CBOR_DECODER_STRESS", 4, getAllCBORBombAttacks()},
+		{"FUZZER_WEIGHT_F3_GRANITE_CONSENSUS", 4, getAllF3Attacks()},
+		{"FUZZER_WEIGHT_F3_CHAIN_EXCHANGE", 4, getAllF3ChainExAttacks()},
+		{"FUZZER_WEIGHT_F3_CERT_EXCHANGE", 3, getAllF3CertExAttacks()},
+		{"FUZZER_WEIGHT_HELLO_PROTOCOL", 3, getAllHelloAttacks()},
+		{"FUZZER_WEIGHT_RUST_SPECIFIC_ATTACKS", 3, getAllForestAttacks()},
 	}
 
 	deck = nil

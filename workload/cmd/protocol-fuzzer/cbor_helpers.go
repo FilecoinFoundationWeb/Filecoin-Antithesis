@@ -558,3 +558,112 @@ func bigIntBytes(v uint64) []byte {
 	copy(result[1:], raw[start:])
 	return result
 }
+
+// generateRoundTripBombAddress produces address bytes that unmarshal
+// but fail re-serialization.
+func generateRoundTripBombAddress() []byte {
+	switch rngIntn(8) {
+	case 0: // Secp256k1 (proto 1) with 19 bytes (need 20)
+		b := make([]byte, 20)
+		b[0] = 0x01
+		copy(b[1:], randomBytes(19))
+		return b
+	case 1: // Actor (proto 2) with 21 bytes (need 20)
+		b := make([]byte, 22)
+		b[0] = 0x02
+		copy(b[1:], randomBytes(21))
+		return b
+	case 2: // BLS (proto 3) with 47 bytes (need 48)
+		b := make([]byte, 48)
+		b[0] = 0x03
+		copy(b[1:], randomBytes(47))
+		return b
+	case 3: // BLS (proto 3) with 49 bytes (need 48)
+		b := make([]byte, 50)
+		b[0] = 0x03
+		copy(b[1:], randomBytes(49))
+		return b
+	case 4: // Delegated (proto 4) with truncated namespace varint
+		return []byte{0x04, 0x80} // high bit set, no continuation
+	case 5: // ID (proto 0) with non-minimal varint (leading zeros)
+		return []byte{0x00, 0x80, 0x80, 0x80, 0x00} // zero encoded as 5 bytes
+	case 6: // Delegated with namespace=0 (invalid, must be >0)
+		return append([]byte{0x04, 0x00}, randomBytes(20)...)
+	default: // Secp256k1 with 0 payload bytes (need 20)
+		return []byte{0x01}
+	}
+}
+
+// generateRoundTripBombBigInt produces BigInt bytes that decode but fail re-serialization.
+func generateRoundTripBombBigInt() []byte {
+	switch rngIntn(5) {
+	case 0: // Leading zero after sign byte (non-canonical)
+		return []byte{0x00, 0x00, 0x01}
+	case 1: // Negative sign with empty magnitude
+		return []byte{0x01}
+	case 2: // Extremely large magnitude (>256 bytes)
+		b := make([]byte, 257+rngIntn(256))
+		b[0] = 0x00
+		copy(b[1:], randomBytes(len(b)-1))
+		return b
+	case 3: // Invalid sign byte (not 0x00 or 0x01)
+		return append([]byte{0x02}, randomBytes(8)...)
+	default: // Multiple leading zeros
+		return []byte{0x00, 0x00, 0x00, 0x00, 0x42}
+	}
+}
+
+// generateF4Address builds an f4 (delegated) address with the given namespace
+// and sub-address length.
+func generateF4Address(namespace uint64, subAddrLen int) []byte {
+	b := []byte{0x04} // protocol 4 = delegated
+	// Encode namespace as varint
+	ns := namespace
+	for ns >= 0x80 {
+		b = append(b, byte(ns&0x7f)|0x80)
+		ns >>= 7
+	}
+	b = append(b, byte(ns))
+	// Append sub-address
+	b = append(b, randomBytes(subAddrLen)...)
+	return b
+}
+
+// buildSignedMessageCBOR wraps a Message CBOR and signature into SignedMessage array(2).
+func buildSignedMessageCBOR(msg []byte, sig []byte) []byte {
+	if sig == nil {
+		sig = cborBytes(append([]byte{0x01}, randomBytes(65)...))
+	} else {
+		sig = cborBytes(sig)
+	}
+	return cborArray(msg, sig)
+}
+
+// buildCompactedMsgsWithBombMsg builds CompactedMessages containing a single
+// BLS message with the given address.
+func buildCompactedMsgsWithBombMsg(addr []byte) []byte {
+	msg := buildMessageCBOR(addr)
+	return cborArray(
+		cborArray(msg),              // Bls: [message]
+		cborArray(cborArray(cborUint64(0))), // BlsIncludes: [[0]]
+		cborArray(),                 // Secpk: []
+		cborArray(cborArray()),      // SecpkIncludes: [[]]
+	)
+}
+
+// buildMessageCBORWithBigInt builds a Message CBOR with custom BigInt Value.
+func buildMessageCBORWithBigInt(bigIntVal []byte) []byte {
+	validAddr := cborBytes([]byte{0x00, 0xe8, 0x07}) // f01000
+	return cborArray(
+		cborUint64(0),               // Version
+		validAddr,                   // To
+		validAddr,                   // From
+		cborUint64(0),               // Nonce
+		cborBytes(bigIntVal),        // Value (bomb)
+		cborInt64(1000000),          // GasLimit
+		cborBytes(bigIntBytes(100)), // GasFeeCap
+		cborBytes(bigIntBytes(100)), // GasPremium
+		cborUint64(0),               // Method
+		cborBytes(nil),              // Params
+	)
+}

@@ -32,40 +32,40 @@ const oomAllocSize = 1_000_000_000 // 1 billion — triggers ~8GB+ pre-allocatio
 func getAllCBORBombAttacks() []namedAttack {
 	return []namedAttack{
 		// BlockHeader field OOM — published to /fil/blocks/ topic
-		{name: "oom/header-parents", fn: oomHeaderParents},
-		{name: "oom/header-beacon-entries", fn: oomHeaderBeaconEntries},
-		{name: "oom/header-winpost-proof", fn: oomHeaderWinpostProof},
+		{name: "blocks/all-block-with-fake-length-parents-array", fn: oomHeaderParents},
+		{name: "blocks/all-block-with-fake-length-beacon-entries", fn: oomHeaderBeaconEntries},
+		{name: "blocks/all-block-with-fake-length-winpost-proof", fn: oomHeaderWinpostProof},
 
 		// BlockMsg CID array OOM — published to /fil/blocks/ topic
-		{name: "oom/blockmsg-bls-cids", fn: oomBlockmsgBlsCids},
-		{name: "oom/blockmsg-secpk-cids", fn: oomBlockmsgSecpkCids},
+		{name: "blocks/all-blockmsg-with-fake-length-bls-cids", fn: oomBlockmsgBlsCids},
+		{name: "blocks/all-blockmsg-with-fake-length-secpk-cids", fn: oomBlockmsgSecpkCids},
 
 		// SignedMessage field OOM — published to /fil/msgs/ topic
-		{name: "oom/signedmsg-params", fn: oomSignedmsgParams},
-		{name: "oom/signedmsg-signature", fn: oomSignedmsgSignature},
+		{name: "msgs/all-signed-message-with-fake-length-params", fn: oomSignedmsgParams},
+		{name: "msgs/all-signed-message-with-fake-length-signature", fn: oomSignedmsgSignature},
 
 		// Stack exhaustion via deep nesting
-		{name: "stack/deeply-nested-cbor", fn: stackDeeplyNestedCBOR},
+		{name: "blocks/all-block-with-deeply-nested-cbor", fn: stackDeeplyNestedCBOR},
 
 		// Forest 8MB Rust stack exhaustion (deeper nesting)
-		{name: "stack/forest-deep-beacon", fn: stackForestDeepBeacon},
-		{name: "stack/forest-deep-alternating", fn: stackForestDeepAlternating},
-		{name: "stack/forest-deep-msg-params", fn: stackForestDeepMsgParams},
+		{name: "blocks/all-block-with-deep-nested-beacon-500-2000", fn: stackForestDeepBeacon},
+		{name: "blocks/all-block-with-deep-nested-alternating-array-map", fn: stackForestDeepAlternating},
+		{name: "msgs/all-signed-message-with-deep-nested-params", fn: stackForestDeepMsgParams},
 
 		// DAG-CBOR strictness violations (Forest serde_ipld_dagcbor)
-		{name: "dagcbor/indefinite-array-block", fn: dagcborIndefiniteArrayBlock},
-		{name: "dagcbor/indefinite-array-msg", fn: dagcborIndefiniteArrayMsg},
-		{name: "dagcbor/noncanonical-uint-block", fn: dagcborNonCanonicalUintBlock},
-		{name: "dagcbor/noncanonical-uint-msg", fn: dagcborNonCanonicalUintMsg},
+		{name: "blocks/all-block-with-indefinite-length-array", fn: dagcborIndefiniteArrayBlock},
+		{name: "msgs/all-signed-message-with-indefinite-length-array", fn: dagcborIndefiniteArrayMsg},
+		{name: "blocks/all-block-with-noncanonical-integer-encoding", fn: dagcborNonCanonicalUintBlock},
+		{name: "msgs/all-signed-message-with-noncanonical-integer-encoding", fn: dagcborNonCanonicalUintMsg},
 
 		// CBOR type confusion attacks
-		{name: "typeconf/map-where-array-block", fn: typeconfMapWhereArrayBlock},
-		{name: "typeconf/text-where-bytes-block", fn: typeconfTextWhereBytesBlock},
-		{name: "typeconf/duplicate-map-keys-block", fn: typeconfDuplicateMapKeysBlock},
+		{name: "blocks/all-block-with-cbor-map-instead-of-array", fn: typeconfMapWhereArrayBlock},
+		{name: "blocks/all-block-with-text-string-instead-of-bytes", fn: typeconfTextWhereBytesBlock},
+		{name: "blocks/all-block-with-duplicate-cbor-map-keys", fn: typeconfDuplicateMapKeysBlock},
 
 		// Additional OOM paths (text string and map headers)
-		{name: "oom/header-text-string", fn: oomHeaderTextString},
-		{name: "oom/header-map-header", fn: oomHeaderMapHeader},
+		{name: "blocks/all-block-with-fake-length-text-string", fn: oomHeaderTextString},
+		{name: "blocks/all-block-with-fake-length-map", fn: oomHeaderMapHeader},
 	}
 }
 
@@ -452,13 +452,15 @@ func oomHeaderMapHeader() {
 // getAllForestAttacks returns Forest-specific vectors for the FOREST weight category.
 // These target Rust decoder differences and are published via GossipSub (nodeAny).
 func getAllForestAttacks() []namedAttack {
-	return []namedAttack{
-		{name: "forest/stack-deep-beacon", fn: stackForestDeepBeacon},
-		{name: "forest/stack-deep-alternating", fn: stackForestDeepAlternating},
-		{name: "forest/stack-deep-msg-params", fn: stackForestDeepMsgParams},
-		{name: "forest/dagcbor-indefinite-array-block", fn: dagcborIndefiniteArrayBlock},
-		{name: "forest/dagcbor-indefinite-array-msg", fn: dagcborIndefiniteArrayMsg},
-		{name: "forest/dagcbor-noncanonical-uint-block", fn: dagcborNonCanonicalUintBlock},
-		{name: "forest/dagcbor-noncanonical-uint-msg", fn: dagcborNonCanonicalUintMsg},
+	attacks := []namedAttack{
+		{name: "blocks/forest-block-with-deep-nested-beacon", fn: stackForestDeepBeacon},
+		{name: "blocks/forest-block-with-deep-nested-alternating", fn: stackForestDeepAlternating},
+		{name: "msgs/forest-signed-message-with-deep-nested-params", fn: stackForestDeepMsgParams},
+		{name: "blocks/forest-block-with-indefinite-length-array", fn: dagcborIndefiniteArrayBlock},
+		{name: "msgs/forest-signed-message-with-indefinite-length-array", fn: dagcborIndefiniteArrayMsg},
+		{name: "blocks/forest-block-with-noncanonical-integer", fn: dagcborNonCanonicalUintBlock},
+		{name: "msgs/forest-signed-message-with-noncanonical-integer", fn: dagcborNonCanonicalUintMsg},
 	}
+	attacks = append(attacks, getAllFVMAddressAttacks()...)
+	return attacks
 }

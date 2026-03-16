@@ -17,17 +17,20 @@ import (
 // Removed noisy vectors (random-cbor-block, random-cbor-msg, malformed-signed-msg)
 // that produce random mutations rejected at CBOR decode with near-zero signal.
 func getAllGossipAttacks() []namedAttack {
-	return []namedAttack{
-		{name: "gossip/block-null-header", fn: func() { runGossipAttack(gossipNullHeaderBlock) }},
-		{name: "gossip/block-nil-ticket", fn: func() { runGossipAttack(gossipNilTicketBlock) }},
-		{name: "gossip/block-bad-address", fn: func() { runGossipAttack(gossipBadAddressBlock) }},
-		{name: "gossip/msg-bad-address", fn: func() { runGossipAttack(gossipBadAddressMsg) }},
-		{name: "gossip/msg-addr-roundtrip", fn: func() { runGossipAttack(gossipAddrRoundtripMsg) }},
-		{name: "gossip/block-addr-roundtrip", fn: func() { runGossipAttack(gossipAddrRoundtripBlock) }},
-		{name: "gossip/msg-addr-bitflip", fn: func() { runGossipAttack(gossipBitflipMsg) }},
-		{name: "gossip/block-addr-bitflip", fn: func() { runGossipAttack(gossipBitflipBlock) }},
-		{name: "gossip/msg-bigint-edge", fn: func() { runGossipAttack(gossipEdgeBigIntMsg) }},
+	attacks := []namedAttack{
+		{name: "blocks/all-block-with-null-header", fn: func() { runGossipAttack(gossipNullHeaderBlock) }},
+		{name: "blocks/all-block-with-nil-ticket", fn: func() { runGossipAttack(gossipNilTicketBlock) }},
+		{name: "blocks/all-block-with-invalid-miner-address", fn: func() { runGossipAttack(gossipBadAddressBlock) }},
+		{name: "msgs/all-signed-message-with-invalid-address", fn: func() { runGossipAttack(gossipBadAddressMsg) }},
+		{name: "msgs/all-signed-message-with-decode-encode-mismatch-address", fn: func() { runGossipAttack(gossipAddrRoundtripMsg) }},
+		{name: "blocks/all-block-with-decode-encode-mismatch-address", fn: func() { runGossipAttack(gossipAddrRoundtripBlock) }},
+		{name: "msgs/all-signed-message-with-bitflipped-address", fn: func() { runGossipAttack(gossipBitflipMsg) }},
+		{name: "blocks/all-block-with-bitflipped-address", fn: func() { runGossipAttack(gossipBitflipBlock) }},
+		{name: "msgs/all-signed-message-with-malformed-bigint", fn: func() { runGossipAttack(gossipEdgeBigIntMsg) }},
 	}
+	attacks = append(attacks, getAllRoundTripAttacks()...)
+	attacks = append(attacks, getAllMpoolAttacks()...)
+	return attacks
 }
 
 // gossipPayload describes what to publish and on which topic.

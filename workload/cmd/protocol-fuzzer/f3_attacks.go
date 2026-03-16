@@ -246,36 +246,45 @@ func getAllF3Attacks() []namedAttack {
 		// DISABLED: known bug — crashes node via nil-pointer panic at pmsg/partial_msg.go:404
 		// {name: "f3/partial-nil-gmessage", fn: f3PartialNilGMessage},
 		// {name: "f3/partial-nil-gmessage-nonzero-key", fn: f3PartialNilGMessageNonzeroKey},
-		{name: "f3/partial-nil-both", fn: f3PartialNilBoth},
-		{name: "f3/partial-truncated", fn: f3PartialTruncated},
+		{name: "f3-granite/all-partial-message-with-nil-gmessage-and-nil-key", fn: f3PartialNilBoth},
+		{name: "f3-granite/all-partial-message-truncated-to-one-field", fn: f3PartialTruncated},
 
 		// GMessage field fuzzing (wrapped in PartialGMessage)
-		{name: "f3/gpbft-zero-value-message", fn: f3ZeroFields},
-		{name: "f3/gpbft-uint64-overflow", fn: f3MaxUint64},
-		{name: "f3/gpbft-invalid-phase", fn: f3InvalidPhase},
-		{name: "f3/gpbft-empty-ecchain", fn: f3EmptyChain},
-		{name: "f3/gpbft-oversized-ecchain", fn: f3HugeChain},
-		{name: "f3/gpbft-truncated-bls-sig", fn: f3TruncatedSig},
-		{name: "f3/gpbft-oversized-bls-sig", fn: f3OversizedSig},
-		{name: "f3/gpbft-nil-fields", fn: f3NilFields},
-		{name: "f3/gpbft-signer-bitfield-oom", fn: f3BitfieldBomb},
-		{name: "f3/gpbft-signer-overflow-index", fn: f3SignerOverflowIndex},
-		{name: "f3/gpbft-signer-max-index", fn: f3SignerMaxIndex},
-		{name: "f3/gpbft-signer-multi-overflow", fn: f3SignerMultiOverflow},
-		{name: "f3/gpbft-bitflip-mutation", fn: f3RandomMutation},
-		{name: "f3/gpbft-epoch-overflow", fn: f3EpochOverflow},
-		{name: "f3/gpbft-malformed-cbor", fn: f3MalformedCBOR},
+		{name: "f3-granite/all-gpbft-message-with-all-zero-fields", fn: f3ZeroFields},
+		{name: "f3-granite/all-gpbft-message-with-max-uint64-fields", fn: f3MaxUint64},
+		{name: "f3-granite/all-gpbft-message-with-invalid-phase-value", fn: f3InvalidPhase},
+		{name: "f3-granite/all-gpbft-message-with-empty-ecchain", fn: f3EmptyChain},
+		{name: "f3-granite/all-gpbft-message-with-oversized-ecchain", fn: f3HugeChain},
+		{name: "f3-granite/all-gpbft-message-with-truncated-bls-signature", fn: f3TruncatedSig},
+		{name: "f3-granite/all-gpbft-message-with-oversized-bls-signature", fn: f3OversizedSig},
+		{name: "f3-granite/all-gpbft-message-with-random-nil-fields", fn: f3NilFields},
+		{name: "f3-granite/all-gpbft-justification-with-huge-signer-bitfield", fn: f3BitfieldBomb},
+		{name: "f3-granite/all-gpbft-justification-with-overflow-signer-index", fn: f3SignerOverflowIndex},
+		{name: "f3-granite/all-gpbft-justification-with-max-signer-index", fn: f3SignerMaxIndex},
+		{name: "f3-granite/all-gpbft-justification-with-multiple-overflow-signers", fn: f3SignerMultiOverflow},
+		{name: "f3-granite/all-gpbft-message-with-random-bitflips", fn: f3RandomMutation},
+		{name: "f3-granite/all-gpbft-message-with-max-epoch", fn: f3EpochOverflow},
+		{name: "f3-granite/all-gpbft-message-with-malformed-cbor", fn: f3MalformedCBOR},
 
 		// Granite validation rule violations
-		{name: "f3/granite-quality-wrong-round", fn: f3GraniteQualityWrongRound},
-		{name: "f3/granite-converge-round-zero", fn: f3GraniteConvergeRoundZero},
-		{name: "f3/granite-decide-wrong-round", fn: f3GraniteDecideWrongRound},
-		{name: "f3/granite-internal-phases", fn: f3GraniteInternalPhases},
-		{name: "f3/granite-missing-justification", fn: f3GraniteMissingJustification},
-		{name: "f3/granite-wrong-justification", fn: f3GraniteWrongJustification},
-		{name: "f3/granite-bottom-value", fn: f3GraniteBottomValue},
-		{name: "f3/granite-extra-fields", fn: f3GraniteExtraFields},
-		{name: "f3/granite-converge-wrong-ticket-len", fn: f3GraniteConvergeWrongTicketLen},
+		{name: "f3-granite/all-quality-phase-with-nonzero-round", fn: f3GraniteQualityWrongRound},
+		{name: "f3-granite/all-converge-phase-with-zero-round", fn: f3GraniteConvergeRoundZero},
+		{name: "f3-granite/all-decide-phase-with-nonzero-round", fn: f3GraniteDecideWrongRound},
+		{name: "f3-granite/all-message-with-internal-only-phase", fn: f3GraniteInternalPhases},
+		{name: "f3-granite/all-message-missing-required-justification", fn: f3GraniteMissingJustification},
+		{name: "f3-granite/all-message-with-wrong-instance-justification", fn: f3GraniteWrongJustification},
+		{name: "f3-granite/all-message-with-empty-chain-for-non-bottom-phase", fn: f3GraniteBottomValue},
+		{name: "f3-granite/all-gpbft-message-with-extra-cbor-fields", fn: f3GraniteExtraFields},
+		{name: "f3-granite/all-converge-message-with-wrong-ticket-length", fn: f3GraniteConvergeWrongTicketLen},
+
+		// F3 justification & phase transition attacks
+		{name: "f3-granite/all-commit-nonbottom-without-justification", fn: f3CommitNonbottomNilJust},
+		{name: "f3-granite/all-prepare-round-gt0-without-justification", fn: f3PrepareR1NilJust},
+		{name: "f3-granite/all-message-with-wrong-phase-justification", fn: f3JustPhaseMismatchMatrix},
+		{name: "f3-granite/all-message-with-justification-chain-mismatch", fn: f3JustChainDivergence},
+		{name: "f3-granite/all-decide-with-converge-phase-justification", fn: f3DecideConvergeJust},
+		{name: "f3-granite/all-duplicate-message-with-noncanonical-cbor", fn: f3ValidatorCacheProbe},
+		{name: "f3-granite/all-justification-with-max-instance-and-round", fn: f3JustInstanceOverflow},
 	}
 }
 
@@ -697,6 +706,123 @@ func f3GraniteConvergeWrongTicketLen() {
 	publishF3Partial(gmsg, nil)
 }
 
+// ---------------------------------------------------------------------------
+// F3 justification & phase transition attacks
+// ---------------------------------------------------------------------------
+
+// COMMIT with non-zero Value but nil justification
+func f3CommitNonbottomNilJust() {
+	vote := buildVoteCBOR(f3VoteOpts{phase: phaseCOMMIT, round: 0, chainLength: 1})
+	gmsg := buildGMessageCBOR(f3MessageOpts{vote: vote}) // no justification
+	publishF3Partial(gmsg, nil)
+}
+
+// PREPARE round>0 without justification
+func f3PrepareR1NilJust() {
+	vote := buildVoteCBOR(f3VoteOpts{phase: phasePREPARE, round: 1 + uint64(rngIntn(10)), chainLength: 1})
+	gmsg := buildGMessageCBOR(f3MessageOpts{vote: vote})
+	publishF3Partial(gmsg, nil)
+}
+
+// For each phase needing justification, provide justification with every wrong phase
+func f3JustPhaseMismatchMatrix() {
+	type combo struct {
+		votePhase uint8
+		voteRound uint64
+		justPhase uint8
+	}
+	combos := []combo{
+		{phaseCONVERGE, 1, phaseQUALITY},
+		{phaseCONVERGE, 1, phaseCOMMIT},
+		{phaseCONVERGE, 1, phaseDECIDE},
+		{phaseCOMMIT, 0, phaseQUALITY},
+		{phaseCOMMIT, 0, phaseCONVERGE},
+		{phaseDECIDE, 0, phasePREPARE},
+		{phaseDECIDE, 0, phaseCONVERGE},
+		{phasePREPARE, 2, phaseQUALITY},
+	}
+	pick := combos[rngIntn(len(combos))]
+	vote := buildVoteCBOR(f3VoteOpts{phase: pick.votePhase, round: pick.voteRound, chainLength: 1})
+	justification := buildJustificationCBOR(f3JustificationOpts{
+		phase:       pick.justPhase,
+		chainLength: 1,
+	})
+	gmsg := buildGMessageCBOR(f3MessageOpts{
+		vote:             vote,
+		justification:    justification,
+		hasJustification: true,
+	})
+	log.Printf("[f3] justification-phase-mismatch: vote=%d just=%d", pick.votePhase, pick.justPhase)
+	publishF3Partial(gmsg, nil)
+}
+
+// Justification ECChain differs from Vote ECChain
+func f3JustChainDivergence() {
+	vote := buildVoteCBOR(f3VoteOpts{phase: phaseCOMMIT, round: 0, chainLength: 2})
+	justification := buildJustificationCBOR(f3JustificationOpts{
+		phase:       phasePREPARE,
+		chainLength: 3, // different chain length
+	})
+	gmsg := buildGMessageCBOR(f3MessageOpts{
+		vote:             vote,
+		justification:    justification,
+		hasJustification: true,
+	})
+	publishF3Partial(gmsg, nil)
+}
+
+// DECIDE with CONVERGE justification (should need COMMIT)
+func f3DecideConvergeJust() {
+	vote := buildVoteCBOR(f3VoteOpts{phase: phaseDECIDE, round: 0, chainLength: 1})
+	justification := buildJustificationCBOR(f3JustificationOpts{
+		phase:       phaseCONVERGE,
+		round:       1,
+		chainLength: 1,
+	})
+	gmsg := buildGMessageCBOR(f3MessageOpts{
+		vote:             vote,
+		justification:    justification,
+		hasJustification: true,
+	})
+	publishF3Partial(gmsg, nil)
+}
+
+// Two messages with same content but different CBOR encoding to probe validator cache
+func f3ValidatorCacheProbe() {
+	// First: canonical encoding
+	vote1 := buildVoteCBOR(f3VoteOpts{phase: phasePREPARE, instance: 42, round: 0, chainLength: 1})
+	gmsg1 := buildGMessageCBOR(f3MessageOpts{sender: 1, vote: vote1})
+	publishF3Partial(gmsg1, nil)
+
+	// Second: same logical content but instance encoded non-canonically (9 bytes instead of 1)
+	vote2 := cborArray(
+		cborNonCanonicalUint64(42), // instance non-canonical
+		cborUint64(0),
+		cborUint64(phasePREPARE),
+		buildSupplementalDataCBOR(),
+		buildECChainCBOR(1),
+	)
+	gmsg2 := buildGMessageCBOR(f3MessageOpts{sender: 1, vote: vote2})
+	publishF3Partial(gmsg2, nil)
+}
+
+// Justification with Instance=MaxUint64 and Round=MaxUint64
+func f3JustInstanceOverflow() {
+	vote := buildVoteCBOR(f3VoteOpts{phase: phaseCOMMIT, round: 0, chainLength: 1})
+	justification := buildJustificationCBOR(f3JustificationOpts{
+		instance:    math.MaxUint64,
+		round:       math.MaxUint64,
+		phase:       phasePREPARE,
+		chainLength: 1,
+	})
+	gmsg := buildGMessageCBOR(f3MessageOpts{
+		vote:             vote,
+		justification:    justification,
+		hasJustification: true,
+	})
+	publishF3Partial(gmsg, nil)
+}
+
 // ===========================================================================
 // F3 ChainExchange PubSub Vectors
 //
@@ -707,18 +833,18 @@ func f3GraniteConvergeWrongTicketLen() {
 
 func getAllF3ChainExAttacks() []namedAttack {
 	return []namedAttack{
-		{name: "f3/chainex-nil-chain", fn: f3ChainExNilChain},
-		{name: "f3/chainex-empty-chain", fn: f3ChainExEmptyChain},
-		{name: "f3/chainex-nil-tipset-entry", fn: f3ChainExNilTipsetEntry},
-		{name: "f3/chainex-empty-tipset-key", fn: f3ChainExEmptyTipsetKey},
-		{name: "f3/chainex-oversized-tipset-key", fn: f3ChainExOversizedTipsetKey},
-		{name: "f3/chainex-undefined-cid", fn: f3ChainExUndefinedCID},
-		{name: "f3/chainex-decreasing-epochs", fn: f3ChainExDecreasingEpochs},
-		{name: "f3/chainex-negative-epoch", fn: f3ChainExNegativeEpoch},
-		{name: "f3/chainex-huge-chain", fn: f3ChainExHugeChain},
-		{name: "f3/chainex-timestamp-overflow", fn: f3ChainExTimestampOverflow},
-		{name: "f3/chainex-future-instance", fn: f3ChainExFutureInstance},
-		{name: "f3/chainex-malformed-cbor", fn: f3ChainExMalformedCBOR},
+		{name: "f3-chainex/all-message-with-nil-chain", fn: f3ChainExNilChain},
+		{name: "f3-chainex/all-message-with-empty-chain", fn: f3ChainExEmptyChain},
+		{name: "f3-chainex/all-chain-with-nil-tipset-entry", fn: f3ChainExNilTipsetEntry},
+		{name: "f3-chainex/all-tipset-with-empty-key", fn: f3ChainExEmptyTipsetKey},
+		{name: "f3-chainex/all-tipset-with-oversized-key", fn: f3ChainExOversizedTipsetKey},
+		{name: "f3-chainex/all-tipset-with-undefined-cid", fn: f3ChainExUndefinedCID},
+		{name: "f3-chainex/all-chain-with-decreasing-epochs", fn: f3ChainExDecreasingEpochs},
+		{name: "f3-chainex/all-tipset-with-negative-epoch", fn: f3ChainExNegativeEpoch},
+		{name: "f3-chainex/all-chain-exceeding-max-length", fn: f3ChainExHugeChain},
+		{name: "f3-chainex/all-message-with-overflow-timestamp", fn: f3ChainExTimestampOverflow},
+		{name: "f3-chainex/all-message-with-max-instance", fn: f3ChainExFutureInstance},
+		{name: "f3-chainex/all-message-with-malformed-cbor", fn: f3ChainExMalformedCBOR},
 	}
 }
 
@@ -862,12 +988,12 @@ var certExchangeProtocol = protocol.ID(fmt.Sprintf("/f3/certexch/get/1/%s", "2k"
 
 func getAllF3CertExAttacks() []namedAttack {
 	return []namedAttack{
-		{name: "f3/certex-max-limit", fn: f3CertExMaxLimit},
-		{name: "f3/certex-overflow-sum", fn: f3CertExOverflowSum},
-		{name: "f3/certex-power-table-nonexist", fn: f3CertExPowerTableNonexist},
-		{name: "f3/certex-malformed-request", fn: f3CertExMalformedRequest},
-		{name: "f3/certex-zero-fields", fn: f3CertExZeroFields},
-		{name: "f3/certex-rapid-reconnect", fn: f3CertExRapidReconnect},
+		{name: "f3-certex/all-request-with-max-limit", fn: f3CertExMaxLimit},
+		{name: "f3-certex/all-request-with-overflowing-instance-plus-limit", fn: f3CertExOverflowSum},
+		{name: "f3-certex/all-request-for-nonexistent-power-table", fn: f3CertExPowerTableNonexist},
+		{name: "f3-certex/all-request-with-malformed-cbor", fn: f3CertExMalformedRequest},
+		{name: "f3-certex/all-request-with-all-zero-fields", fn: f3CertExZeroFields},
+		{name: "f3-certex/all-rapid-reconnect-requests", fn: f3CertExRapidReconnect},
 	}
 }
 
