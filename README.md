@@ -280,6 +280,116 @@ CONFIG_TAG=latest
 
 
 
+## Scaling Nodes
+
+The network topology is dynamically scalable. Three variables in `docker-compose.yaml` control the counts:
+
+| Variable | Controls | Default |
+|---|---|---|
+| `NUM_LOTUS_CLIENTS` | Total Lotus full nodes (including those paired with miners) | 2 |
+| `NUM_LOTUS_MINERS` | Genesis miners + miner processes (must be <= `NUM_LOTUS_CLIENTS`) | 2 |
+| `NUM_FOREST_CLIENTS` | Forest full nodes | 1 |
+
+The start scripts use bash indirect expansion to resolve per-node variables dynamically — for example, `LOTUS_${N}_DATA_DIR` resolves to the value of `LOTUS_0_DATA_DIR`, `LOTUS_1_DATA_DIR`, etc. Peer connection loops iterate the count variables, so no script changes are needed when scaling.
+
+### Adding a Lotus Full Node (no miner)
+
+Example: adding `lotus2` as a pure full node that validates, syncs, and serves RPC but doesn't produce blocks.
+
+**1. `.env`** — Add per-node variables:
+```env
+# Lotus 2 (full node, no miner)
+LOTUS_2_DATA_DIR=/lotus2
+LOTUS_2_PATH=${LOTUS_2_DATA_DIR}/lotus2-net
+LOTUS_2_API_LISTENADDRESS=/dns/lotus2/tcp/${LOTUS_RPC_PORT}/http
+LOTUS_2_LIBP2P_LISTENADDRESSES=/ip4/lotus2/tcp/${LOTUS_P2P_PORT}
+```
+
+**2. `docker-compose.yaml`** — Bump count and add service:
+```yaml
+# In filecoin_service template:
+- NUM_LOTUS_CLIENTS=3    # was 2
+# Add volume:
+- ./data/lotus2:${LOTUS_2_DATA_DIR}
+
+# Add service:
+lotus2:
+  <<: [ *filecoin_service, *needs_lotus0_healthy ]
+  image: lotus:${LOTUS_2_TAG:-${LOTUS_TAG:-latest}}
+  container_name: lotus2
+  entrypoint: [ "./scripts/start-lotus.sh", "2" ]
+  healthcheck:
+    <<: *healthcheck_settings
+    test: curl --fail http://lotus2:1234/health/livez
+
+# Update workload:
+- STRESS_NODES=lotus0,lotus1,lotus2,forest0
+# Add workload volume:
+- ./data/lotus2:/root/devgen/lotus2
+```
+
+No miner variables or miner service needed. `NUM_LOTUS_MINERS` stays unchanged.
+
+### Adding a Lotus Miner
+
+Miners are paired 1:1 with Lotus nodes — miner N connects to lotus node N. To add miner 2, you must first have lotus2.
+
+**1. `.env`** — Add miner variables (actor address follows `t01NNN` pattern):
+```env
+LOTUS_MINER_2_ACTOR_ADDRESS=t01002
+LOTUS_MINER_2_PATH=${LOTUS_2_DATA_DIR}/lotus-miner2-net
+LOTUS_MINER_2_API_LISTENADDRESS=/dns/lotus-miner2/tcp/${LOTUS_MINER_RPC_PORT}/http
+```
+
+**2. `docker-compose.yaml`** — Bump miner count, add dependency template and service:
+```yaml
+# In filecoin_service template:
+- NUM_LOTUS_MINERS=3     # was 2
+
+# Add dependency template:
+needs_lotus2_healthy: &needs_lotus2_healthy
+  depends_on:
+    lotus2:
+      condition: service_healthy
+
+# Add service:
+lotus-miner2:
+  <<: [ *filecoin_service, *needs_lotus2_healthy ]
+  image: lotus:${LOTUS_MINER_2_TAG:-${LOTUS_TAG:-latest}}
+  container_name: lotus-miner2
+  entrypoint: [ "./scripts/start-lotus-miner.sh", "2" ]
+```
+
+`setup-genesis.sh` will automatically pre-seal sectors for the new miner (it iterates `NUM_LOTUS_MINERS`).
+
+### Adding a Forest Node
+
+**1. `.env`** — Add per-node variables:
+```env
+FOREST_1_DATA_DIR=/forest1
+FOREST_1_F3_SIDECAR_RPC_ENDPOINT=forest1:${F3_RPC_PORT}
+```
+
+**2. `docker-compose.yaml`** — Bump count and add service:
+```yaml
+# In filecoin_service template:
+- NUM_FOREST_CLIENTS=2   # was 1
+# Add volume:
+- ./data/forest1:${FOREST_1_DATA_DIR}
+
+# Add service:
+forest1:
+  <<: [ *filecoin_service, *needs_lotus0_healthy ]
+  image: forest:latest
+  container_name: forest1
+  entrypoint: [ "./scripts/start-forest.sh", "1" ]
+
+# Update workload:
+- STRESS_NODES=lotus0,lotus1,forest0,forest1
+# Add workload volume:
+- ./data/forest1:/root/devgen/forest1
+```
+
 ## Documentation
 
 - [Antithesis Documentation](https://antithesis.com/docs/)

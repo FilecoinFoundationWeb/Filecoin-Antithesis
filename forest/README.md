@@ -1,6 +1,6 @@
 # Forest Package
 
-This package builds and configures the Forest Filecoin node, a Rust-based implementation used for cross-implementation testing.
+This package builds and configures the Forest Filecoin node, a Rust-based implementation used for cross-implementation testing in the Antithesis environment.
 
 ## Overview
 
@@ -22,33 +22,40 @@ docker build -t forest:latest -f forest/Dockerfile forest
 
 ## Configuration
 
+### Forest Config Template (`forest_config.toml.tpl`)
+- Keystore encryption: disabled (testing)
+- Data directory: set via `$FOREST_DATA_DIR`
+- Kademlia: disabled (controlled peer environment)
+- Target peers: computed from `$NUM_LOTUS_CLIENTS + $NUM_FOREST_CLIENTS - 1`
+- Chain type: devnet
+
 ### Node Configuration
-Node details are in `workload/resources/config.json`:
+Node details are defined in `workload/resources/config.json`:
 ```json
 {
   "name": "Forest0",
   "rpcurl": "http://forest0:3456/rpc/v1",
-  "authtokenpath": "/root/devgen/forest0/forest0-jwt"
+  "authtokenpath": "/forest0/forest0-jwt"
 }
 ```
-
-### Forest Config Template (`forest_config.toml.tpl`)
-- Keystore encryption: disabled (testing)
-- Data directory: `/forest_data`
-- Kademlia: disabled
-- Target peers: 2
-- Chain type: devnet
 
 ## Start Script (`scripts/start-forest.sh`)
 
 The startup script:
-1. Generates JWT token for API authentication
-2. Imports genesis from Lotus
-3. Connects to Lotus peers
-4. Exports artifacts to shared volume:
-   - `/root/devgen/forest0/forest0-jwt`
-   - `/root/devgen/forest0/forest0-ipv4addr`
-   - `/root/devgen/forest0/forest0-p2pid`
+1. Fetches Drand chain info and formats it for Forest
+2. Generates config from template
+3. Initializes Forest with genesis
+4. Starts Forest daemon
+5. Exports artifacts to data directory
+6. Imports genesis miner keys for F3 signing
+7. Connects to Lotus and other Forest peers
+
+## Artifacts Exported
+
+Each Forest node exports to its data directory:
+- `forest{N}-jwt` — API authentication token
+- `forest{N}-ipv4addr` — Container IP address
+- `forest{N}-p2pid` — P2P peer ID
 
 ## API Support
 
@@ -59,25 +66,16 @@ The startup script:
 - Wallet operations (create, list, balance)
 
 ### Not Supported
-- `ChainValidateIndex` (chain backfill check)
+- `ChainValidateIndex` (chain backfill check) — use `FilterLotusNodes()` for backfill checks
 - Some miner-specific operations
 
 ## Docker Compose
 
-Forest is defined in `config/docker-compose.yml`:
+Defined in `docker-compose.yaml` (repo root):
 - Port 3456: RPC API
 - Depends on: lotus0, lotus1
-- Volume: `./data/forest0:/forest_data`
 
-## Artifacts Exported
+## Dependencies
 
-After startup, Forest exports these files to the shared volume:
-- `forest0-jwt` — API authentication token
-- `forest0-ipv4addr` — Container IP address
-- `forest0-p2pid` — P2P peer ID
-
-## Limitations for Testing
-
-1. **Wallet Funding**: Forest wallets must be funded from Lotus (Forest doesn't mine)
-2. **Chain Backfill**: Use `FilterLotusNodes()` not `FilterV1Nodes()` for backfill checks
-3. **Some RPC Methods**: Not all Lotus methods are implemented
+- **drand0**: Randomness beacon (must be running before Forest starts)
+- **Lotus nodes**: Genesis file and peer connectivity

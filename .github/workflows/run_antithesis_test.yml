@@ -157,7 +157,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
           description: "Scheduled Filecoin Continuous Test: 12 hr nightly run - Implementors Team"
           additional_parameters: |-
