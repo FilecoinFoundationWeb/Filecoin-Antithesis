@@ -86,10 +86,10 @@ var _ = multihash.SHA2_256
 
 func getAllHelloAttacks() []namedAttack {
 	return []namedAttack{
-		{name: "hello/malformed-cbor", fn: helloMalformedCBOR},
-		{name: "hello/nil-tipset-cids", fn: helloNilTipsetCIDs},
-		{name: "hello/huge-tipset-array", fn: helloHugeTipsetArray},
-		{name: "hello/overflow-weight", fn: helloOverflowWeight},
+		{name: "hello/all-message-with-malformed-cbor", fn: helloMalformedCBOR},
+		{name: "hello/all-message-with-empty-tipset-cids", fn: helloNilTipsetCIDs},
+		{name: "hello/all-message-with-thousands-of-tipset-cids", fn: helloHugeTipsetArray},
+		{name: "hello/all-message-with-malformed-weight", fn: helloOverflowWeight},
 	}
 }
 
