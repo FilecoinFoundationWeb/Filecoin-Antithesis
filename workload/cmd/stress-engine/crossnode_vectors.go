@@ -516,7 +516,7 @@ func DoGasExhaustionEdge() {
 	for _, msgCid := range allCids {
 		var receipts []receiptSummary
 		for _, name := range nodeKeys {
-			r, err := nodes[name].StateSearchMsg(ctx, types.EmptyTSK, msgCid, 200, true)
+			r, err := nodes[name].StateSearchMsg(ctx, types.EmptyTSK, msgCid, 200, false)
 			if err != nil || r == nil {
 				continue
 			}
