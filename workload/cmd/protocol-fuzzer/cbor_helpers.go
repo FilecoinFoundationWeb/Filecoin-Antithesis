@@ -473,6 +473,55 @@ func cborMapWithFakeLength(claimedLen uint64, entries ...[]byte) []byte {
 	return buf.Bytes()
 }
 
+// ---------------------------------------------------------------------------
+// Forest-targeted CBOR construction helpers
+// ---------------------------------------------------------------------------
+
+// cborIndefiniteArray builds an indefinite-length CBOR array: 0x9F + elements + 0xFF.
+// DAG-CBOR forbids indefinite-length encoding. If a decoder doesn't check this,
+// it may enter unexpected states or produce divergent results.
+func cborIndefiniteArray(elements ...[]byte) []byte {
+	var buf bytes.Buffer
+	buf.WriteByte(0x9F) // indefinite-length array
+	for _, e := range elements {
+		buf.Write(e)
+	}
+	buf.WriteByte(0xFF) // break code
+	return buf.Bytes()
+}
+
+// cborNonCanonicalUint64 always encodes v using the 8-byte uint64 format (9 bytes total),
+// regardless of value. DAG-CBOR requires minimal encoding (e.g., 0 → 1 byte, not 9).
+func cborNonCanonicalUint64(v uint64) []byte {
+	// Major type 0, additional info 27 (8-byte uint64 follows)
+	buf := []byte{0x1B, 0, 0, 0, 0, 0, 0, 0, 0}
+	for i := 8; i >= 1; i-- {
+		buf[i] = byte(v & 0xFF)
+		v >>= 8
+	}
+	return buf
+}
+
+// cborMap builds a definite-length CBOR map. entries is flat key/value pairs:
+// cborMap(key1, val1, key2, val2, ...). Length = len(entries)/2.
+func cborMap(entries ...[]byte) []byte {
+	var buf bytes.Buffer
+	cbg.WriteMajorTypeHeader(&buf, cbg.MajMap, uint64(len(entries)/2))
+	for _, e := range entries {
+		buf.Write(e)
+	}
+	return buf.Bytes()
+}
+
+// cborTextWithFakeLength writes a CBOR text string header claiming claimedLen
+// bytes with no actual data following. Triggers make([]byte, claimedLen) on
+// the text-string decode path (separate from byte-string).
+func cborTextWithFakeLength(claimedLen uint64) []byte {
+	var buf bytes.Buffer
+	cbg.WriteMajorTypeHeader(&buf, cbg.MajTextString, claimedLen)
+	return buf.Bytes()
+}
+
 // buildRLEPlusBitfieldCBOR creates a CBOR-encoded RLE+ bitfield with the given
 // bit positions set. This produces the exact wire format expected by
 // Justification.Signers (bitfield.BitField): CBOR byte string containing RLE+ data.
