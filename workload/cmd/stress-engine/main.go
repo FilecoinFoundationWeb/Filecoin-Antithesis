@@ -272,6 +272,8 @@ func buildDeck() {
 		{"DoStorageSpam", "STRESS_WEIGHT_STORAGE_SPAM", DoStorageSpam, 0},
 		// Network chaos / reorg vectors
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
+		// Miner slashing vectors
+		{"DoConsensusFault", "STRESS_WEIGHT_CONSENSUS_FAULT", DoConsensusFault, 0},
 		// Cross-node divergence vectors
 		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
 		{"DoMessageOrderingAttack", "STRESS_WEIGHT_MSG_ORDERING", DoMessageOrderingAttack, 1},
