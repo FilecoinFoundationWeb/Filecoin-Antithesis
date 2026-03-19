@@ -165,9 +165,10 @@ services:
       # FIL transfers
       - STRESS_WEIGHT_TRANSFER=2 # creates state changes during forks for reconciliation
       # Nonce/ordering chaos
-      - STRESS_WEIGHT_MSG_ORDERING=1 # tests interdependent cross-node message replacement/mempool ordering
-      - STRESS_WEIGHT_NONCE_BOMBARD=1 # tests N+x gap handling & out-of-order execution across nodes
-      - STRESS_WEIGHT_ADVERSARIAL=5 # double-spends exploit forks — core safety test
+      - STRESS_WEIGHT_MSG_ORDERING=2 # tests interdependent cross-node message replacement/mempool ordering
+      - STRESS_WEIGHT_NONCE_BOMBARD=2 # tests N+x gap handling & out-of-order execution across nodes
+      - STRESS_WEIGHT_ADVERSARIAL=3 # cross-node double-spends, invalid signatures rejected
+      - STRESS_WEIGHT_ADVERSARY_NODE=2 # adversary node invalid-block-spammer + consensus verification
       # Gas pressure
       - STRESS_WEIGHT_GAS_EXHAUST=1 # tests high-gas call competing with small msgs across nodes
       - STRESS_WEIGHT_GAS_WAR=1 # mempool replacement/greedy selection
@@ -258,6 +259,8 @@ services:
     image: lotus-adversary:${LOTUS_ADVERSARY_0_TAG:-${LOTUS_ADVERSARY_TAG:-latest}}
     container_name: lotus-adversary0
     entrypoint: [ "./scripts/start-lotus-adversary.sh", "0" ]
+    environment:
+      - LOTUS_ADVERSARY_ENABLEADVERSARYAPI=true
     healthcheck:
       <<: *healthcheck_settings
       test: curl --fail http://lotus-adversary0:1234/health/livez

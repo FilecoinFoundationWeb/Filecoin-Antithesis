@@ -277,6 +277,8 @@ func buildDeck() {
 		{"DoPowerAwareSlash", "STRESS_WEIGHT_POWER_SLASH", DoPowerAwareSlash, 0},
 		// Deliberate F3 quorum stall (opt-in, destructive)
 		{"DoQuorumBoundaryTest", "STRESS_WEIGHT_QUORUM_STALL", DoQuorumBoundaryTest, 0},
+		// Adversary node attack vectors
+		{"DoAdversaryNodeAttack", "STRESS_WEIGHT_ADVERSARY_NODE", DoAdversaryNodeAttack, 0},
 		// Cross-node divergence vectors
 		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
 		{"DoMessageOrderingAttack", "STRESS_WEIGHT_MSG_ORDERING", DoMessageOrderingAttack, 1},
