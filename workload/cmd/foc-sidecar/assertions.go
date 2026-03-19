@@ -79,12 +79,13 @@ func checkFilecoinPaySolvency(ctx context.Context, node api.FullNode, cfg *foc.C
 		return
 	}
 
+	// Sum only funds (not funds + lockup). The lockupCurrent field is a
+	// subset of funds — it represents the locked portion, not additional
+	// balance. Adding both double-counts and causes false solvency violations.
 	totalOwed := new(big.Int)
 	for _, payer := range payers {
 		funds := foc.ReadAccountFunds(ctx, node, cfg.FilPayAddr, cfg.USDFCAddr, payer)
-		lockup := foc.ReadAccountLockup(ctx, node, cfg.FilPayAddr, cfg.USDFCAddr, payer)
 		totalOwed.Add(totalOwed, funds)
-		totalOwed.Add(totalOwed, lockup)
 	}
 
 	solvent := filPayBalance.Cmp(totalOwed) >= 0

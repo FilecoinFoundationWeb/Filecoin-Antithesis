@@ -125,6 +125,125 @@ func sendEthTxCore(ctx context.Context, node api.FullNode, privKey []byte, toAdd
 	return txHash, true
 }
 
+// SendEthTxConfirmedWithValue signs, submits, and waits for an EVM transaction
+// that includes a FIL value transfer. Used to create f4 actors by sending a
+// small amount of FIL to an ETH address.
+func SendEthTxConfirmedWithValue(ctx context.Context, node api.FullNode, privKey []byte, toAddr []byte, value filbig.Int, tag string) bool {
+	txHash, ok := sendEthTxCoreWithValue(ctx, node, privKey, toAddr, nil, value, tag)
+	if !ok {
+		return false
+	}
+
+	deadline := time.Now().Add(receiptPollTimeout)
+	for time.Now().Before(deadline) {
+		receipt, err := node.EthGetTransactionReceipt(ctx, txHash)
+		if err != nil || receipt == nil {
+			time.Sleep(receiptPollInterval)
+			continue
+		}
+
+		log.Printf("[%s] tx %s receipt: status=%d gasUsed=%d blockNum=%v", tag, txHash, receipt.Status, receipt.GasUsed, receipt.BlockNumber)
+		if receipt.Status == 0 {
+			log.Printf("[%s] tx %s REVERTED gasUsed=%d", tag, txHash, receipt.GasUsed)
+			return false
+		}
+		return true
+	}
+
+	log.Printf("[%s] tx %s receipt timeout after %v — invalidating nonce cache", tag, txHash, receiptPollTimeout)
+	if senderAddr, err := DeriveFilAddr(privKey); err == nil {
+		EthNoncesMu.Lock()
+		delete(EthNonces, senderAddr)
+		EthNoncesMu.Unlock()
+	}
+	return false
+}
+
+// sendEthTxCoreWithValue is like sendEthTxCore but allows a non-zero msg.value.
+func sendEthTxCoreWithValue(ctx context.Context, node api.FullNode, privKey []byte, toAddr []byte, calldata []byte, value filbig.Int, tag string) (ethtypes.EthHash, bool) {
+	var zero ethtypes.EthHash
+
+	if len(privKey) != 32 {
+		log.Printf("[%s] invalid private key length %d", tag, len(privKey))
+		return zero, false
+	}
+
+	senderAddr, err := DeriveFilAddr(privKey)
+	if err != nil {
+		log.Printf("[%s] DeriveFilAddr failed: %v", tag, err)
+		return zero, false
+	}
+
+	EthNoncesMu.Lock()
+	nonce, known := EthNonces[senderAddr]
+	if !known {
+		n, err := node.MpoolGetNonce(ctx, senderAddr)
+		if err != nil {
+			EthNoncesMu.Unlock()
+			log.Printf("[%s] MpoolGetNonce failed: %v", tag, err)
+			return zero, false
+		}
+		nonce = n
+	}
+	EthNonces[senderAddr] = nonce + 1
+	EthNoncesMu.Unlock()
+
+	toEth, err := ethtypes.CastEthAddress(toAddr)
+	if err != nil {
+		log.Printf("[%s] CastEthAddress failed: %v", tag, err)
+		return zero, false
+	}
+
+	tx := ethtypes.Eth1559TxArgs{
+		ChainID:              31415926,
+		Nonce:                int(nonce),
+		To:                   &toEth,
+		Value:                value,
+		MaxFeePerGas:         types.NanoFil,
+		MaxPriorityFeePerGas: filbig.NewInt(100),
+		GasLimit:             30_000_000,
+		Input:                calldata,
+		V:                    filbig.Zero(),
+		R:                    filbig.Zero(),
+		S:                    filbig.Zero(),
+	}
+
+	preimage, err := tx.ToRlpUnsignedMsg()
+	if err != nil {
+		log.Printf("[%s] ToRlpUnsignedMsg failed: %v", tag, err)
+		return zero, false
+	}
+
+	sig, err := sigs.Sign(crypto.SigTypeDelegated, privKey, preimage)
+	if err != nil {
+		log.Printf("[%s] sigs.Sign failed: %v", tag, err)
+		return zero, false
+	}
+
+	if err := tx.InitialiseSignature(*sig); err != nil {
+		log.Printf("[%s] InitialiseSignature failed: %v", tag, err)
+		return zero, false
+	}
+
+	signed, err := tx.ToRlpSignedMsg()
+	if err != nil {
+		log.Printf("[%s] ToRlpSignedMsg failed: %v", tag, err)
+		return zero, false
+	}
+
+	txHash, err := node.EthSendRawTransaction(ctx, signed)
+	if err != nil {
+		log.Printf("[%s] EthSendRawTransaction failed: %v", tag, err)
+		EthNoncesMu.Lock()
+		delete(EthNonces, senderAddr)
+		EthNoncesMu.Unlock()
+		return zero, false
+	}
+
+	log.Printf("[%s] tx submitted: from=%s nonce=%d to=%x value=%s txHash=%s", tag, senderAddr, nonce, toAddr, value, txHash)
+	return txHash, true
+}
+
 // SendEthTx signs and submits an EIP-1559 EVM transaction via EthSendRawTransaction.
 // Returns true if the transaction was accepted by the mempool.
 func SendEthTx(ctx context.Context, node api.FullNode, privKey []byte, toAddr []byte, calldata []byte, tag string) bool {
