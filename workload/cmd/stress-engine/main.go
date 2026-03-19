@@ -272,7 +272,7 @@ func buildDeck() {
 		{"DoStorageSpam", "STRESS_WEIGHT_STORAGE_SPAM", DoStorageSpam, 0},
 		// Network chaos / reorg vectors
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
-		// Miner slashing vectors
+		// Miner slashing (consensus fault, fires once per run)
 		{"DoConsensusFault", "STRESS_WEIGHT_CONSENSUS_FAULT", DoConsensusFault, 0},
 		// Cross-node divergence vectors
 		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
@@ -345,6 +345,7 @@ func main() {
 	initNonces()
 	initContractBytecodes()
 	focCfg = foc.ParseEnvironment()
+	initConsensusFault()
 	buildDeck()
 
 	lifecycle.SetupComplete(map[string]any{

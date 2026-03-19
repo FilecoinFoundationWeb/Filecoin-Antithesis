@@ -113,8 +113,7 @@ services:
       - STRESS_WEIGHT_STATE_ROOT=6 # cross-node state root match
       - STRESS_WEIGHT_STATE_AUDIT=5 # full state tree audit
       - STRESS_WEIGHT_REORG=2 # checks cluster converges correctly after partitioned periods
-      - STRESS_WEIGHT_CONSENSUS_FAULT=1 # slash a miner via fabricated block equivocation (once per run)
-      - STRESS_CONSENSUS_FAULT_TARGET=random # weakest | strongest | random
+      - STRESS_WEIGHT_CONSENSUS_FAULT=5 # slash a random miner via fabricated equivocation (fires once per run)
       - FUZZER_ENABLED=1 # protocol fuzzer
       #
       # --- Non-FOC stress vectors ---
