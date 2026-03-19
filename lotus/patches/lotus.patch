@@ -66,26 +66,6 @@
  		return
  	}
  	go func() {
---- a/build/buildconstants/f3manifest_2k.json
-+++ b/build/buildconstants/f3manifest_2k.json
-@@ -2,7 +2,7 @@
-   "Pause": false,
-   "ProtocolVersion": 7,
-   "InitialInstance": 0,
--  "BootstrapEpoch": 1000,
-+  "BootstrapEpoch": 5,
-   "NetworkName": "2k",
-   "ExplicitPower": null,
-   "IgnoreECPower": false,
-@@ -22,7 +22,7 @@
-   },
-   "EC": {
-     "Period": 4000000000,
--    "Finality": 900,
-+    "Finality": 2,
-     "DelayMultiplier": 2,
-     "BaseDecisionBackoffTable": [1.3, 1.69, 2.2, 2.86, 3.71, 4.83, 6.27, 7.5],
-     "HeadLookback": 4,
 diff --git a/cmd/lotus-seed/genesis.go b/cmd/lotus-seed/genesis.go
 index 12d03b2bc..d423285cf 100644
 --- a/cmd/lotus-seed/genesis.go
@@ -235,3 +215,59 @@ index 337eb21a6..a3f1a847a 100644
  			log.Info("libp2p resource manager is disabled")
  			return &network.NullResourceManager{}, nil
  		}
+diff --git a/build/buildconstants/f3manifest_2k.json b/build/buildconstants/f3manifest_2k.json
+index de90dea1c..eb51df1e8 100644
+--- a/build/buildconstants/f3manifest_2k.json
++++ b/build/buildconstants/f3manifest_2k.json
+@@ -2,7 +2,7 @@
+   "Pause": false,
+   "ProtocolVersion": 7,
+   "InitialInstance": 0,
+-  "BootstrapEpoch": 1000,
++  "BootstrapEpoch": 5,
+   "NetworkName": "2k",
+   "ExplicitPower": null,
+   "IgnoreECPower": false,
+@@ -21,10 +21,19 @@
+     "RebroadcastBackoffMax": 60000000000
+   },
+   "EC": {
+-    "Period": 4000000000,
+-    "Finality": 900,
++    "Period": 6000000000,
++    "Finality": 2,
+     "DelayMultiplier": 2,
+-    "BaseDecisionBackoffTable": [1.3, 1.69, 2.2, 2.86, 3.71, 4.83, 6.27, 7.5],
++    "BaseDecisionBackoffTable": [
++      1.3,
++      1.69,
++      2.2,
++      2.86,
++      3.71,
++      4.83,
++      6.27,
++      7.5
++    ],
+     "HeadLookback": 4,
+     "Finalize": true
+   },
+@@ -58,4 +67,4 @@
+     "MaxBufferedMessagesPerInstance": 25000,
+     "MaxCachedValidatedMessagesPerInstance": 25000
+   }
+-}
++}
+diff --git a/build/buildconstants/params_2k.go b/build/buildconstants/params_2k.go
+index f8fec1a28..0b91a0e58 100644
+--- a/build/buildconstants/params_2k.go
++++ b/build/buildconstants/params_2k.go
+@@ -191,7 +191,7 @@ func init() {
+ 
+ }
+ 
+-const BlockDelaySecs = uint64(4)
++const BlockDelaySecs = uint64(6)
+ 
+ const PropagationDelaySecs = uint64(1)
+ 
+

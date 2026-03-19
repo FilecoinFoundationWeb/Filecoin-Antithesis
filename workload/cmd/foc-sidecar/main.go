@@ -63,7 +63,7 @@ func main() {
 		}
 
 		if finalizedHeight <= lastPolledBlock {
-			time.Sleep(4 * time.Second)
+			time.Sleep(6 * time.Second)
 			continue
 		}
 
@@ -109,7 +109,7 @@ func main() {
 			log.Println("[foc-sidecar] setup complete, polling active")
 		}
 
-		time.Sleep(4 * time.Second)
+		time.Sleep(6 * time.Second)
 	}
 }
 

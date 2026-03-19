@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultCurioURL    = "http://curio:80"
-	pollInterval       = 4 * time.Second
+	pollInterval       = 6 * time.Second
 	pollTimeout        = 5 * time.Minute
 	httpRequestTimeout = 5 * time.Minute
 )

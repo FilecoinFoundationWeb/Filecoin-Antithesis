@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	receiptPollInterval = 4 * time.Second
+	receiptPollInterval = 6 * time.Second
 	receiptPollTimeout  = 2 * time.Minute
 )
 

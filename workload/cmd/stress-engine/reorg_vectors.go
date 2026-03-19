@@ -34,7 +34,7 @@ const (
 	reorgEpochTimeout      = 30 * time.Second   // max wait for epoch advance
 	reorgPostHealPause     = 2 * time.Second    // brief pause after reconnect
 	reorgReconnectPause    = 3 * time.Second    // wait after emergency reconnect
-	reorgFallbackBlock     = 6 * time.Second    // fallback per-block sleep
+	reorgFallbackBlock     = 9 * time.Second    // fallback per-block sleep
 )
 
 func DoReorgChaos() {
