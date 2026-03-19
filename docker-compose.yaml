@@ -258,9 +258,19 @@ services:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
     image: lotus-adversary:${LOTUS_ADVERSARY_0_TAG:-${LOTUS_ADVERSARY_TAG:-latest}}
     container_name: lotus-adversary0
-    entrypoint: [ "./scripts/start-lotus-adversary.sh", "0" ]
+    entrypoint: [ "/opt/start-lotus-adversary.sh", "0" ]
     environment:
       - LOTUS_ADVERSARY_ENABLEADVERSARYAPI=true
+    volumes:
+      # duplicated from filecoin_service anchor (YAML merge replaces, not appends)
+      - ./data/lotus0:${LOTUS_0_DATA_DIR}
+      - ./data/lotus1:${LOTUS_1_DATA_DIR}
+      - ./data/lotus-adversary0:${LOTUS_ADVERSARY_0_DATA_DIR}
+      - ./data/forest0:${FOREST_0_DATA_DIR}
+      - ./shared/configs:${SHARED_CONFIGS}
+      - ./data/curio:/var/lib/curio:rw
+      # mount startup script (not baked into the external lotus-adversary image)
+      - ./lotus/scripts/start-lotus-adversary.sh:/opt/start-lotus-adversary.sh
     healthcheck:
       <<: *healthcheck_settings
       test: curl --fail http://lotus-adversary0:1234/health/livez
