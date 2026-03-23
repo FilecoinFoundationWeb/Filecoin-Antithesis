@@ -20,14 +20,15 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN git clone https://github.com/chainsafe/forest /forest
 
 WORKDIR /forest
+
+RUN git checkout ${GIT_COMMIT}
+
 COPY ./patches/forest.patch ./forest.patch
 RUN git apply forest.patch
 # After Go installation and before Rust build
 WORKDIR /forest/f3-sidecar
 RUN go mod tidy
 WORKDIR /forest
-
-RUN git checkout ${GIT_COMMIT}
 COPY ./forest_config.toml.tpl .
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}" 
