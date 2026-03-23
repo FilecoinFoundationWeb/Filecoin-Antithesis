@@ -80,8 +80,9 @@
 @@ -22,7 +22,7 @@
    },
    "EC": {
-     "Period": 4000000000,
+-    "Period": 4000000000,
 -    "Finality": 900,
++    "Period": 6000000000,
 +    "Finality": 2,
      "DelayMultiplier": 2,
      "BaseDecisionBackoffTable": [1.3, 1.69, 2.2, 2.86, 3.71, 4.83, 6.27, 7.5],
@@ -235,3 +236,32 @@ index 337eb21a6..a3f1a847a 100644
  			log.Info("libp2p resource manager is disabled")
  			return &network.NullResourceManager{}, nil
  		}
+diff --git a/node/impl/full/chain.go b/node/impl/full/chain.go
+index 3c634c664..b0bd4a06a 100644
+--- a/node/impl/full/chain.go
++++ b/node/impl/full/chain.go
+@@ -36,7 +36,6 @@ import (
+ 
+ 	"github.com/filecoin-project/lotus/api"
+ 	"github.com/filecoin-project/lotus/blockstore"
+-	"github.com/filecoin-project/lotus/chain/actors/policy"
+ 	"github.com/filecoin-project/lotus/chain/lf3"
+ 	"github.com/filecoin-project/lotus/chain/stmgr"
+ 	"github.com/filecoin-project/lotus/chain/store"
+@@ -257,7 +256,7 @@ func (m *ChainModule) ChainGetTipSetAfterHeight(ctx context.Context, h abi.Chain
+ 
+ func (m *ChainModule) ChainGetFinalizedTipSet(ctx context.Context) (*types.TipSet, error) {
+ 	head := m.Chain.GetHeaviestTipSet()
+-	ecFinalityHeight := head.Height() - policy.ChainFinality
++	ecFinalityHeight := head.Height() - 10
+ 
+ 	// Try F3-based finality first.
+ 	if ts := m.tryF3Finality(ctx, ecFinalityHeight); ts != nil {
+diff --git a/build/buildconstants/params_2k.go b/build/buildconstants/params_2k.go
+--- a/build/buildconstants/params_2k.go
++++ b/build/buildconstants/params_2k.go
+@@ -194,3 +194,3 @@
+ 
+-const BlockDelaySecs = uint64(4)
++const BlockDelaySecs = uint64(6)
+

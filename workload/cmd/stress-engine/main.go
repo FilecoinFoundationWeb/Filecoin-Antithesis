@@ -252,6 +252,7 @@ func buildDeck() {
 		{"DoHeadComparison", "STRESS_WEIGHT_HEAD_COMPARISON", DoHeadComparison, 3},
 		{"DoStateRootComparison", "STRESS_WEIGHT_STATE_ROOT", DoStateRootComparison, 4},
 		{"DoStateAudit", "STRESS_WEIGHT_STATE_AUDIT", DoStateAudit, 5},
+		{"DoF3FinalityMonitor", "STRESS_WEIGHT_F3_MONITOR", DoF3FinalityMonitor, 2},
 	}
 
 	// Non-FOC stress vectors — skipped when FOC profile is active (covered by filecoin run)
@@ -272,8 +273,10 @@ func buildDeck() {
 		{"DoStorageSpam", "STRESS_WEIGHT_STORAGE_SPAM", DoStorageSpam, 0},
 		// Network chaos / reorg vectors
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
-		// Miner slashing (consensus fault, fires once per run)
-		{"DoConsensusFault", "STRESS_WEIGHT_CONSENSUS_FAULT", DoConsensusFault, 0},
+		// Power-aware miner slashing (replaces DoConsensusFault)
+		{"DoPowerAwareSlash", "STRESS_WEIGHT_POWER_SLASH", DoPowerAwareSlash, 0},
+		// Deliberate F3 quorum stall (opt-in, destructive)
+		{"DoQuorumBoundaryTest", "STRESS_WEIGHT_QUORUM_STALL", DoQuorumBoundaryTest, 0},
 		// Cross-node divergence vectors
 		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
 		{"DoMessageOrderingAttack", "STRESS_WEIGHT_MSG_ORDERING", DoMessageOrderingAttack, 1},
@@ -345,7 +348,6 @@ func main() {
 	initNonces()
 	initContractBytecodes()
 	focCfg = foc.ParseEnvironment()
-	initConsensusFault()
 	buildDeck()
 
 	lifecycle.SetupComplete(map[string]any{

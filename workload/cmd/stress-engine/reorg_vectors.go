@@ -10,7 +10,7 @@ import (
 )
 
 // ===========================================================================
-// Vector 11: DoReorgChaos (Consensus Integrity — Reorg Simulation)
+// DoReorgChaos (Consensus Integrity — Reorg Simulation)
 //
 // Induces rapid, shallow forks by repeatedly isolating a node from the
 // network, letting the main partition mine 1-3 blocks, then reconnecting.
@@ -19,11 +19,13 @@ import (
 //   - SplitStore (hot/cold storage) canonical head tracking
 //   - State tree rollback and re-application
 //   - Gossip protocol recovery after partition heal
+//   - F3 quorum behavior under power-aware partitions
+//
+// Victim selection is power-aware when F3 power table is available:
+// targets the biggest or smallest miner's node to test F3 quorum edges.
+// Falls back to random victim when power table is unavailable.
 //
 // Pattern: Split → Mine 1-3 blocks → Heal → repeat N times → Verify
-//
-// Security value: Tests database transactionality. Bugs here lead to
-// "State Divergence" — the most severe consensus failure class.
 // ===========================================================================
 
 const (
@@ -34,22 +36,57 @@ const (
 	reorgEpochTimeout      = 30 * time.Second   // max wait for epoch advance
 	reorgPostHealPause     = 2 * time.Second    // brief pause after reconnect
 	reorgReconnectPause    = 3 * time.Second    // wait after emergency reconnect
-	reorgFallbackBlock     = 6 * time.Second    // fallback per-block sleep
+	reorgFallbackBlock     = 9 * time.Second    // fallback per-block sleep
 )
+
+// pickReorgVictim selects a victim node for partition. When the F3 power table
+// is available, it biases toward the biggest or smallest miner's node (50/50).
+// Falls back to uniform random selection otherwise.
+func pickReorgVictim() (victimName string, powerPct float64) {
+	lotusNode, _ := pickLotusNode()
+	if lotusNode != nil {
+		table := getF3PowerTable(lotusNode)
+		if len(table) >= 2 {
+			var target minerPowerInfo
+			if rngIntn(2) == 0 {
+				target = table[0] // biggest
+			} else {
+				target = table[len(table)-1] // smallest
+			}
+			name := minerToNodeName(target.addr)
+			if name != "" {
+				return name, target.pct
+			}
+		}
+	}
+	return rngChoice(nodeKeys), 0
+}
 
 func DoReorgChaos() {
 	if len(nodeKeys) < 2 {
 		return
 	}
 
-	// Pick a victim node to isolate
-	victimName := rngChoice(nodeKeys)
+	// Pick a victim node — power-aware when possible
+	victimName, victimPowerPct := pickReorgVictim()
 	victim := nodes[victimName]
 
 	// Random number of rapid split-heal cycles: 1-10
 	numCycles := rngIntn(reorgMaxCyclesPerCall) + 1
 
-	log.Printf("[reorg-chaos] starting %d rapid partition cycles, victim=%s", numCycles, victimName)
+	if victimPowerPct > 0 {
+		log.Printf("[reorg-chaos] starting %d rapid partition cycles, victim=%s (%.1f%% power)", numCycles, victimName, victimPowerPct)
+	} else {
+		log.Printf("[reorg-chaos] starting %d rapid partition cycles, victim=%s", numCycles, victimName)
+	}
+
+	// Snapshot F3 instance before partition cycles
+	lotusNode, _ := pickLotusNode()
+	var preF3Inst uint64
+	var f3ok bool
+	if lotusNode != nil {
+		preF3Inst, f3ok = getF3Instance(lotusNode)
+	}
 
 	// Collect known node addresses for reliable reconnection
 	knownPeers := collectNodeAddrInfos(victimName)
@@ -132,6 +169,24 @@ func DoReorgChaos() {
 
 	if converged {
 		verifyPostReorgState(victimName, successfulCycles)
+	}
+
+	// Check F3 progress after reorg cycles
+	if f3ok && lotusNode != nil {
+		advanced, postF3Inst := checkF3Advancing(lotusNode, preF3Inst, 2*time.Minute)
+
+		assert.Sometimes(advanced, "F3 advances after reorg cycles", map[string]any{
+			"victim":        victimName,
+			"power_pct":     victimPowerPct,
+			"cycles":        successfulCycles,
+			"pre_instance":  preF3Inst,
+			"post_instance": postF3Inst,
+			"converged":     converged,
+		})
+
+		if advanced {
+			debugLog("[reorg-chaos] F3 advanced %d→%d after %d cycles", preF3Inst, postF3Inst, successfulCycles)
+		}
 	}
 }
 
