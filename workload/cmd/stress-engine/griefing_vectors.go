@@ -75,6 +75,15 @@ type griefRuntime struct {
 	InitFunds *big.Int // FPV1 funds snapshot after deposit
 	DSCreated int
 	LastFunds *big.Int
+
+	// Extended state for additional probes
+	LastOnChainDSID int       // most recent on-chain dataset ID
+	LastClientDSID  *big.Int  // most recent clientDataSetId (for EIP-712)
+	TermPending     bool      // terminateService called, waiting for delete
+	DeletedCount    int
+	SettledCount    int
+	WithdrawCount   int
+	UploadSessions  int
 }
 
 func griefSnap() griefRuntime {
@@ -84,10 +93,10 @@ func griefSnap() griefRuntime {
 }
 
 // ---------------------------------------------------------------------------
-// DoPDPPaymentAccounting — single vector, two phases
+// DoPDPGriefingProbe — single vector, two phases
 // ---------------------------------------------------------------------------
 
-func DoPDPPaymentAccounting() {
+func DoPDPGriefingProbe() {
 	if focCfg == nil || focCfg.ClientKey == nil {
 		return
 	}
@@ -120,7 +129,7 @@ func DoPDPPaymentAccounting() {
 	case griefOperatorOK:
 		doGriefArm()
 	case griefReady:
-		doGriefProbe()
+		doGriefDispatch()
 	}
 }
 
@@ -306,12 +315,32 @@ func doGriefArm() {
 }
 
 // ---------------------------------------------------------------------------
-// Steady State — Payment Accounting Probe
+// Steady State — Probe Dispatcher
 // ---------------------------------------------------------------------------
 
-// doGriefProbe creates an empty dataset via Curio HTTP and verifies that the
-// client's USDFC balance in FPV1 decreases (payment rails extract fees correctly).
-func doGriefProbe() {
+func doGriefDispatch() {
+	type probe struct {
+		name string
+		fn   func()
+	}
+	probes := []probe{
+		{"EmptyDatasetFee", probeEmptyDatasetFee},
+		{"InsolvencyCreation", probeInsolvencyCreation},
+		{"CrossPayerReplay", probeCrossPayerReplay},
+		{"BurstCreation", probeBurstCreation},
+	}
+	pick := probes[rngIntn(len(probes))]
+	log.Printf("[pdp-griefing] dispatching: %s", pick.name)
+	pick.fn()
+}
+
+// ---------------------------------------------------------------------------
+// Probe 1: Empty Dataset Fee Extraction
+// ---------------------------------------------------------------------------
+
+// probeEmptyDatasetFee creates an empty dataset via Curio HTTP and verifies
+// that the client's USDFC balance in FPV1 decreases (fee extraction working).
+func probeEmptyDatasetFee() {
 	if !foc.PingCurio(ctx) {
 		log.Printf("[sybil-fee-grief] curio not reachable, skipping")
 		return
@@ -390,13 +419,14 @@ func doGriefProbe() {
 	griefMu.Lock()
 	griefRT.DSCreated++
 	griefRT.LastFunds = fundsAfter
+	griefRT.LastOnChainDSID = onChainID
+	griefRT.LastClientDSID = clientDataSetId
 	created := griefRT.DSCreated
 	griefMu.Unlock()
 
-	log.Printf("[sybil-fee-grief] dataset created: onChainID=%d fundsBefore=%s fundsAfter=%s delta=%s decreased=%v total=%d",
+	log.Printf("[pdp-griefing] dataset created: onChainID=%d fundsBefore=%s fundsAfter=%s delta=%s decreased=%v total=%d",
 		onChainID, fundsBefore, fundsAfter, delta, fundsDecreased, created)
 
-	// 7. Observational: log SP balance
 	logGriefSPBalance()
 }
 
@@ -419,6 +449,294 @@ func logGriefSPBalance() {
 }
 
 // ---------------------------------------------------------------------------
+// Attack A3: Insolvency Creation
+// ---------------------------------------------------------------------------
+
+// probeInsolvencyCreation drains the secondary client's available USDFC, then
+// tries to create a dataset. If creation succeeds with zero available funds,
+// the SP gets a dataset with no payment guarantee — critical economic bug.
+func probeInsolvencyCreation() {
+	if !foc.PingCurio(ctx) {
+		return
+	}
+	if focCfg.SPKey == nil || focCfg.SPEthAddr == nil {
+		focCfg.ReloadSPKey()
+		if focCfg.SPKey == nil {
+			return
+		}
+	}
+
+	s := griefSnap()
+	node := focNode()
+
+	// 1. Read current state
+	funds := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
+	lockup := foc.ReadAccountLockup(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
+	if funds == nil || lockup == nil {
+		return
+	}
+
+	available := new(big.Int).Sub(funds, lockup)
+	if available.Sign() <= 0 {
+		// Already insolvent — try to create
+		log.Printf("[pdp-griefing] client already insolvent (funds=%s lockup=%s), attempting create", funds, lockup)
+	} else {
+		// 2. Drain all available funds
+		calldata := foc.BuildCalldata(foc.SigWithdraw,
+			foc.EncodeAddress(focCfg.USDFCAddr),
+			foc.EncodeBigInt(available),
+		)
+
+		log.Printf("[pdp-griefing] draining client: withdrawing %s available USDFC", available)
+		ok := foc.SendEthTxConfirmed(ctx, node, s.ClientKey, focCfg.FilPayAddr, calldata, "pdp-griefing-drain")
+		if !ok {
+			log.Printf("[pdp-griefing] withdrawal failed, skipping insolvency test")
+			return
+		}
+
+		// Confirm drained
+		funds = foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
+		lockup = foc.ReadAccountLockup(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
+		available = new(big.Int).Sub(funds, lockup)
+		log.Printf("[pdp-griefing] post-drain: funds=%s lockup=%s available=%s", funds, lockup, available)
+	}
+
+	// 3. Attempt dataset creation while insolvent
+	clientDataSetId := new(big.Int).SetUint64(random.GetRandom())
+	metadataKeys := []string{"source"}
+	metadataValues := []string{"antithesis-stress"}
+
+	sig, err := foc.SignEIP712CreateDataSet(
+		s.ClientKey, focCfg.FWSSAddr,
+		clientDataSetId, focCfg.SPEthAddr,
+		metadataKeys, metadataValues,
+	)
+	if err != nil {
+		log.Printf("[pdp-griefing] EIP-712 signing failed: %v", err)
+		return
+	}
+
+	extraData := encodeCreateDataSetExtra(s.ClientEth, clientDataSetId, metadataKeys, metadataValues, sig)
+	recordKeeper := "0x" + hex.EncodeToString(focCfg.FWSSAddr)
+
+	log.Printf("[pdp-griefing] attempting dataset creation while insolvent (available=%s)", available)
+	txHash, err := foc.CreateDataSetHTTP(ctx, recordKeeper, hex.EncodeToString(extraData))
+
+	if err != nil {
+		// HTTP-level rejection — Curio refused to submit the tx
+		log.Printf("[pdp-griefing] insolvent create rejected at HTTP: %v", err)
+		assert.Sometimes(true, "insolvent client dataset creation rejected", map[string]any{
+			"available": available.String(),
+			"error":     err.Error(),
+		})
+	} else {
+		// Curio accepted — check if it actually landed on-chain
+		onChainID, waitErr := foc.WaitForDataSetCreation(ctx, txHash)
+		if waitErr != nil {
+			// On-chain revert — correct behavior
+			log.Printf("[pdp-griefing] insolvent create reverted on-chain: %v", waitErr)
+			assert.Sometimes(true, "insolvent client dataset creation rejected", map[string]any{
+				"available": available.String(),
+			})
+		} else {
+			// CRITICAL: dataset created with insolvent client
+			log.Printf("[pdp-griefing] CRITICAL: insolvent client created dataset! onChainID=%d available=%s", onChainID, available)
+			assert.Sometimes(false, "insolvent client dataset creation rejected", map[string]any{
+				"available":  available.String(),
+				"onChainID":  onChainID,
+				"fundsDrain": "client had zero available but creation succeeded",
+			})
+		}
+	}
+
+	// 4. Re-fund the secondary client for future probes
+	refundAmount := big.NewInt(griefUSDFCDeposit)
+	refundCalldata := foc.BuildCalldata(foc.SigTransfer,
+		foc.EncodeAddress(s.ClientEth),
+		foc.EncodeBigInt(refundAmount),
+	)
+	foc.SendEthTxConfirmed(ctx, node, focCfg.ClientKey, focCfg.USDFCAddr, refundCalldata, "pdp-griefing-refund")
+
+	// Re-deposit into FPV1
+	depositCalldata := foc.BuildCalldata(foc.SigDeposit,
+		foc.EncodeAddress(focCfg.USDFCAddr),
+		foc.EncodeAddress(s.ClientEth),
+		foc.EncodeBigInt(refundAmount),
+	)
+	foc.SendEthTxConfirmed(ctx, node, s.ClientKey, focCfg.FilPayAddr, depositCalldata, "pdp-griefing-redeposit")
+
+	log.Printf("[pdp-griefing] secondary client re-funded for future probes")
+}
+
+// ---------------------------------------------------------------------------
+// Attack C2: Cross-Payer Signature Replay
+// ---------------------------------------------------------------------------
+
+// probeCrossPayerReplay signs a CreateDataSet EIP-712 message with the
+// secondary client key but puts the PRIMARY client's address as the payer
+// in the extraData. If the contract doesn't verify signer==payer, the primary
+// client gets charged without consenting.
+func probeCrossPayerReplay() {
+	if !foc.PingCurio(ctx) {
+		return
+	}
+	if focCfg.SPKey == nil || focCfg.SPEthAddr == nil {
+		focCfg.ReloadSPKey()
+		if focCfg.SPKey == nil {
+			return
+		}
+	}
+
+	s := griefSnap()
+	node := focNode()
+
+	// Read primary client's funds BEFORE
+	primaryFundsBefore := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, focCfg.ClientEthAddr)
+
+	// Sign with SECONDARY client key (the attacker)
+	clientDataSetId := new(big.Int).SetUint64(random.GetRandom())
+	metadataKeys := []string{"source"}
+	metadataValues := []string{"antithesis-stress"}
+
+	sig, err := foc.SignEIP712CreateDataSet(
+		s.ClientKey, focCfg.FWSSAddr, // signed by attacker
+		clientDataSetId, focCfg.SPEthAddr,
+		metadataKeys, metadataValues,
+	)
+	if err != nil {
+		log.Printf("[pdp-griefing] EIP-712 signing failed: %v", err)
+		return
+	}
+
+	// Build extraData with PRIMARY client as payer (not the signer!)
+	extraData := encodeCreateDataSetExtra(focCfg.ClientEthAddr, clientDataSetId, metadataKeys, metadataValues, sig)
+	recordKeeper := "0x" + hex.EncodeToString(focCfg.FWSSAddr)
+
+	log.Printf("[pdp-griefing] attempting cross-payer replay: signer=secondary payer=primary")
+	txHash, err := foc.CreateDataSetHTTP(ctx, recordKeeper, hex.EncodeToString(extraData))
+
+	if err != nil {
+		// Rejected at HTTP level
+		log.Printf("[pdp-griefing] cross-payer replay rejected at HTTP: %v", err)
+		assert.Sometimes(true, "cross-payer signature replay rejected", nil)
+		return
+	}
+
+	// Check if it landed on-chain
+	onChainID, waitErr := foc.WaitForDataSetCreation(ctx, txHash)
+	if waitErr != nil {
+		// On-chain revert — correct, signature didn't match payer
+		log.Printf("[pdp-griefing] cross-payer replay reverted on-chain: %v", waitErr)
+		assert.Sometimes(true, "cross-payer signature replay rejected", nil)
+		return
+	}
+
+	// CRITICAL: creation succeeded — check if primary client was charged
+	primaryFundsAfter := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, focCfg.ClientEthAddr)
+	primaryCharged := primaryFundsAfter.Cmp(primaryFundsBefore) < 0
+
+	if primaryCharged {
+		log.Printf("[pdp-griefing] CRITICAL: cross-payer replay succeeded! Primary client charged without signing. onChainID=%d", onChainID)
+		assert.Sometimes(false, "cross-payer signature replay rejected", map[string]any{
+			"onChainID":          onChainID,
+			"primaryFundsBefore": primaryFundsBefore.String(),
+			"primaryFundsAfter":  primaryFundsAfter.String(),
+		})
+	} else {
+		// Creation succeeded but primary wasn't charged — maybe secondary was?
+		log.Printf("[pdp-griefing] cross-payer replay: tx succeeded but primary not charged (onChainID=%d)", onChainID)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Attack D1: Burst Dataset Creation
+// ---------------------------------------------------------------------------
+
+// probeBurstCreation fires multiple dataset creation requests in rapid
+// succession without waiting for confirmation. Tests whether Curio rate-limits
+// and whether fees are correctly charged under load.
+func probeBurstCreation() {
+	if !foc.PingCurio(ctx) {
+		return
+	}
+	if focCfg.SPKey == nil || focCfg.SPEthAddr == nil {
+		focCfg.ReloadSPKey()
+		if focCfg.SPKey == nil {
+			return
+		}
+	}
+
+	s := griefSnap()
+	node := focNode()
+
+	// Check we have funds for the burst
+	fundsBefore := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
+	if fundsBefore == nil || fundsBefore.Sign() == 0 {
+		return
+	}
+
+	burstSize := 3 + rngIntn(3) // 3-5 requests
+	accepted := 0
+	recordKeeper := "0x" + hex.EncodeToString(focCfg.FWSSAddr)
+
+	log.Printf("[pdp-griefing] starting burst creation: %d requests", burstSize)
+
+	for i := 0; i < burstSize; i++ {
+		clientDataSetId := new(big.Int).SetUint64(random.GetRandom())
+		metadataKeys := []string{"source"}
+		metadataValues := []string{"antithesis-stress"}
+
+		sig, err := foc.SignEIP712CreateDataSet(
+			s.ClientKey, focCfg.FWSSAddr,
+			clientDataSetId, focCfg.SPEthAddr,
+			metadataKeys, metadataValues,
+		)
+		if err != nil {
+			continue
+		}
+
+		extraData := encodeCreateDataSetExtra(s.ClientEth, clientDataSetId, metadataKeys, metadataValues, sig)
+
+		// Fire without waiting for confirmation
+		_, err = foc.CreateDataSetHTTP(ctx, recordKeeper, hex.EncodeToString(extraData))
+		if err != nil {
+			log.Printf("[pdp-griefing] burst request %d/%d rejected: %v", i+1, burstSize, err)
+		} else {
+			accepted++
+		}
+	}
+
+	// Check funds after burst
+	fundsAfter := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
+	delta := new(big.Int).Sub(fundsBefore, fundsAfter)
+
+	log.Printf("[pdp-griefing] burst complete: accepted=%d/%d fundsBefore=%s fundsAfter=%s delta=%s",
+		accepted, burstSize, fundsBefore, fundsAfter, delta)
+
+	// If all requests accepted with no rate limiting, log it
+	if accepted == burstSize {
+		assert.Sometimes(true, "burst dataset creation accepted without rate limiting", map[string]any{
+			"burstSize": burstSize,
+			"accepted":  accepted,
+		})
+	}
+
+	// Check fees were charged for accepted requests
+	if accepted > 0 && delta.Sign() > 0 {
+		assert.Sometimes(true, "burst creation charges fees correctly", map[string]any{
+			"accepted":    accepted,
+			"totalDelta":  delta.String(),
+			"fundsBefore": fundsBefore.String(),
+		})
+	}
+
+	griefMu.Lock()
+	griefRT.DSCreated += accepted
+	griefRT.LastFunds = fundsAfter
+	griefMu.Unlock()
+}
+
+// ---------------------------------------------------------------------------
 // Progress
 // ---------------------------------------------------------------------------
 
@@ -427,6 +745,6 @@ func logGriefProgress() {
 	if s.ClientEth == nil {
 		return
 	}
-	log.Printf("[sybil-fee-grief] state=%s datasetsCreated=%d initFunds=%v lastFunds=%v",
+	log.Printf("[pdp-griefing] state=%s ds_created=%d initFunds=%v lastFunds=%v",
 		s.State, s.DSCreated, s.InitFunds, s.LastFunds)
 }

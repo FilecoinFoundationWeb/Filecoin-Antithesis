@@ -308,8 +308,8 @@ func buildDeck() {
 			// Destructive — weight 0 by default (opt-in)
 			weightedAction{"DoFOCDeletePiece", "STRESS_WEIGHT_FOC_DELETE_PIECE", DoFOCDeletePiece, 0},
 			weightedAction{"DoFOCDeleteDataSet", "STRESS_WEIGHT_FOC_DELETE_DS", DoFOCDeleteDataSet, 0},
-			// PDP payment accounting (fee extraction verification)
-			weightedAction{"DoPDPPaymentAccounting", "STRESS_WEIGHT_PDP_ACCOUNTING", DoPDPPaymentAccounting, 2},
+			// PDP griefing and economic assertion probes
+			weightedAction{"DoPDPGriefingProbe", "STRESS_WEIGHT_PDP_GRIEFING", DoPDPGriefingProbe, 2},
 			// Cross-node receipt consistency (catches consensus divergence on EVM txs)
 			weightedAction{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 1},
 		)
