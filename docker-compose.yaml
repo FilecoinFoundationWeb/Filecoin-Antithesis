@@ -134,44 +134,43 @@ services:
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
       - STRESS_WAIT_HEIGHT=10
       # --- Consensus / health-check vectors (always active in both profiles) ---
-      # --- F3 testing mode: only F3 vectors + reorg + basic health checks ---
-      - STRESS_WEIGHT_TIPSET_CONSENSUS=3 # keep: verifies correctness
-      - STRESS_WEIGHT_HEIGHT_PROGRESSION=2 # keep: verifies liveness
-      - STRESS_WEIGHT_PEER_COUNT=0
-      - STRESS_WEIGHT_HEAD_COMPARISON=3 # keep: verifies correctness
-      - STRESS_WEIGHT_STATE_ROOT=3 # keep: verifies correctness
-      - STRESS_WEIGHT_STATE_AUDIT=0
-      - STRESS_WEIGHT_REORG=5 # high: power-aware reorg testing
-      - STRESS_WEIGHT_POWER_SLASH=5 # high: power-aware slashing
-      - STRESS_WEIGHT_F3_MONITOR=5 # high: F3 health monitoring
+      - STRESS_WEIGHT_TIPSET_CONSENSUS=5 # cross-node tipset agreement
+      - STRESS_WEIGHT_HEIGHT_PROGRESSION=3 # chain height advances
+      - STRESS_WEIGHT_PEER_COUNT=2 # node peer connectivity
+      - STRESS_WEIGHT_HEAD_COMPARISON=5 # cross-node chain head match
+      - STRESS_WEIGHT_STATE_ROOT=6 # cross-node state root match
+      - STRESS_WEIGHT_STATE_AUDIT=5 # full state tree audit
+      - STRESS_WEIGHT_REORG=2 # power-aware reorg testing
+      - STRESS_WEIGHT_POWER_SLASH=3 # power-aware miner slashing (quorum-safe)
+      - STRESS_WEIGHT_F3_MONITOR=2 # passive F3 health monitor
       # - STRESS_WEIGHT_QUORUM_STALL=0  # deliberate F3 stall (opt-in, destructive)
       - FUZZER_ENABLED=1 # protocol fuzzer
       #
       # --- Non-FOC stress vectors ---
       #
       # EVM contract stress
-      - STRESS_WEIGHT_DEPLOY=0
-      - STRESS_WEIGHT_CONTRACT_CALL=0
-      - STRESS_WEIGHT_SELFDESTRUCT=0
-      - STRESS_WEIGHT_CONTRACT_RACE=0
-      - STRESS_WEIGHT_HEAVY_COMPUTE=0
-      - STRESS_WEIGHT_LOG_BLASTER=0
-      - STRESS_WEIGHT_MEMORY_BOMB=0
-      - STRESS_WEIGHT_STORAGE_SPAM=0
+      - STRESS_WEIGHT_DEPLOY=2 # tests Init actor & state tree growth via EAM.CreateExternal
+      - STRESS_WEIGHT_CONTRACT_CALL=2 # invokes deep recursion, delegatecall, external recursive calls
+      - STRESS_WEIGHT_SELFDESTRUCT=1 # tests actor destruction state consistency across nodes
+      - STRESS_WEIGHT_CONTRACT_RACE=3 # sends conflicting SimpleCoin sends with same nonce to diff nodes
+      - STRESS_WEIGHT_HEAVY_COMPUTE=2 # checks recomputed state root matches stored parent
+      - STRESS_WEIGHT_LOG_BLASTER=2 # stresses receipt storage, bloom filters, and event indexing
+      - STRESS_WEIGHT_MEMORY_BOMB=2 # stresses FVM memory accounting and allocator
+      - STRESS_WEIGHT_STORAGE_SPAM=2 # stresses state trie (HAMT), SplitStore, and snapshot size
       # FIL transfers
-      - STRESS_WEIGHT_TRANSFER=0
+      - STRESS_WEIGHT_TRANSFER=1 # tests liveness via random node FIL token transfers
       # Nonce/ordering chaos
-      - STRESS_WEIGHT_MSG_ORDERING=0
-      - STRESS_WEIGHT_NONCE_BOMBARD=0
-      - STRESS_WEIGHT_ADVERSARIAL=0
+      - STRESS_WEIGHT_MSG_ORDERING=2 # tests interdependent cross-node message replacement/mempool ordering
+      - STRESS_WEIGHT_NONCE_BOMBARD=2 # tests N+x gap handling & out-of-order execution across nodes
+      - STRESS_WEIGHT_ADVERSARIAL=3 # cross-node double-spends, invalid signatures rejected
       # Gas pressure
-      - STRESS_WEIGHT_GAS_EXHAUST=0
-      - STRESS_WEIGHT_GAS_WAR=0
-      - STRESS_WEIGHT_MAX_BLOCK_GAS=0
+      - STRESS_WEIGHT_GAS_EXHAUST=1 # tests high-gas call competing with small msgs across nodes
+      - STRESS_WEIGHT_GAS_WAR=1 # mempool replacement/greedy selection
+      - STRESS_WEIGHT_MAX_BLOCK_GAS=1 # maxes out block gas with tight keccak256 loop
       # Cross-node consistency
-      - STRESS_WEIGHT_RECEIPT_AUDIT=0
-      - STRESS_WEIGHT_ACTOR_MIGRATION=0
-      - STRESS_WEIGHT_ACTOR_LIFECYCLE=0
+      - STRESS_WEIGHT_RECEIPT_AUDIT=3 # asserts ALL receipt fields match across EVERY node
+      - STRESS_WEIGHT_ACTOR_MIGRATION=2 # burst-creates & deletes actors, asserts HAMT tree matches
+      - STRESS_WEIGHT_ACTOR_LIFECYCLE=2 # tests full actor lifecycle
       # --- FOC (Filecoin On-Chain Cloud) vectors ---
       # All FOC vectors require the `foc` compose profile to be active.
       # The lifecycle state machine must reach "Ready" before steady-state
