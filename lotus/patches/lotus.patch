@@ -253,7 +253,7 @@ index 3c634c664..b0bd4a06a 100644
  func (m *ChainModule) ChainGetFinalizedTipSet(ctx context.Context) (*types.TipSet, error) {
  	head := m.Chain.GetHeaviestTipSet()
 -	ecFinalityHeight := head.Height() - policy.ChainFinality
-+	ecFinalityHeight := head.Height() - 10
++	ecFinalityHeight := head.Height() - 20
  
  	// Try F3-based finality first.
  	if ts := m.tryF3Finality(ctx, ecFinalityHeight); ts != nil {
