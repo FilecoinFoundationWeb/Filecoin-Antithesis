@@ -15,6 +15,17 @@ for ((i=0; i<NUM_LOTUS_MINERS; i++)); do
   lotus-seed --sector-dir="$sector_dir" pre-seal --sector-size "$SECTOR_SIZE" --num-sectors "$num_sectors" --miner-addr "$miner_id"
 done
 
+# pre-seal adversary miners — actor addresses follow immediately after regular miners
+IFS=',' read -ra _adversary_sector_counts <<< "${ADVERSARY_SECTORS_PER_MINER:-}"
+
+for ((i=0; i<NUM_LOTUS_ADVERSARIES; i++)); do
+  miner_id=$(printf "t01%03d" "$((NUM_LOTUS_MINERS + i))")
+  sector_dir="${SHARED_CONFIGS}/.genesis-sector-adversary-${i}"
+  num_sectors="${_adversary_sector_counts[$i]:-2}"
+  echo "Pre-sealing adversary miner $miner_id into $sector_dir (${num_sectors} sectors)"
+  lotus-seed --sector-dir="$sector_dir" pre-seal --sector-size "$SECTOR_SIZE" --num-sectors "$num_sectors" --miner-addr "$miner_id"
+done
+
 # create initial genesis template
 lotus-seed genesis new --network-name="$NETWORK_NAME" ${SHARED_CONFIGS}/localnet.json
 
@@ -50,10 +61,14 @@ for ((i=0; i<NUM_LOTUS_MINERS; i++)); do
   miner_id=$(printf "t01%03d" "$i")
   manifest_files+=("${SHARED_CONFIGS}/.genesis-sector-${i}/pre-seal-${miner_id}.json")
 done
+for ((i=0; i<NUM_LOTUS_ADVERSARIES; i++)); do
+  miner_id=$(printf "t01%03d" "$((NUM_LOTUS_MINERS + i))")
+  manifest_files+=("${SHARED_CONFIGS}/.genesis-sector-adversary-${i}/pre-seal-${miner_id}.json")
+done
 
 echo "Aggregating manifests..."
 lotus-seed aggregate-manifests "${manifest_files[@]}" > ${SHARED_CONFIGS}/manifest.json
 
 lotus-seed genesis add-miner "${SHARED_CONFIGS}/localnet.json" "${SHARED_CONFIGS}/manifest.json"
 
-echo "Genesis setup complete for $NUM_LOTUS_MINERS miner(s)."
+echo "Genesis setup complete for $NUM_LOTUS_MINERS miner(s) and $NUM_LOTUS_ADVERSARIES adversary miner(s)."
