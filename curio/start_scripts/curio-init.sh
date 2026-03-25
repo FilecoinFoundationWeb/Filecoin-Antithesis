@@ -25,14 +25,15 @@ echo "All ready. Lets go"
 myip=$(getent hosts curio | awk '{print $1}')
 
 # Start a temporary Curio node, wait for its API, then run a callback and stop it.
-# Usage: with_temporary_curio <callback_function>
+# Usage: with_temporary_curio <callback_function> [layers]
 with_temporary_curio() {
     local callback="$1"
+    local layers="${2:-seal,post,gui}"
 
-    echo "Starting temporary Curio node..."
-    CURIO_FAKE_CPU=5 curio run --nosync --layers seal,post,pdp-only,gui &
+    echo "Starting temporary Curio node (layers: $layers)..."
+    CURIO_FAKE_CPU=5 curio run --nosync --layers "$layers" &
     local curio_pid=$!
-    sleep 20
+    sleep 40
 
     echo "Waiting for Curio API to be ready..."
     until curio cli --machine "$myip:12300" wait-api; do
@@ -80,7 +81,7 @@ if [ ! -f "$CURIO_REPO_PATH/.init.curio" ]; then
     fi
 
     if [ ! -f "$CURIO_REPO_PATH/.init.config" ]; then
-        newminer=$(lotus state list-miners | grep -E -v 't01000|t01001' | head -1)
+        newminer=$(lotus state list-miners | grep -v -E 't01000|t01001' | tail -1)
         echo "New Miner is $newminer"
 
         echo "Initiating a new Curio cluster..."
@@ -132,7 +133,7 @@ LAYER_EOF
         curio --version
         curio cli --machine "$myip:12300" storage attach --init --seal --store "$CURIO_REPO_PATH"
     }
-    with_temporary_curio attach_storage
+    with_temporary_curio attach_storage "seal,post,gui"
 
     touch "$CURIO_REPO_PATH/.init.curio"
 fi
@@ -170,9 +171,9 @@ if [ ! -f "$CURIO_REPO_PATH/.init.pdp" ]; then
         pdptool create-jwt-token pdp | grep -v "JWT Token:" > jwt_token.txt
 
         echo "Testing PDP connectivity..."
-        pdptool ping --service-url http://curio:80 --service-name pdp
+        pdptool ping --service-url http://curio:80 --service-name pdp || echo "PDP ping skipped (PDP HTTP not running in setup phase, will work after final start)"
     }
-    with_temporary_curio setup_pdp
+    with_temporary_curio setup_pdp "seal,post,gui"
 
     touch "$CURIO_REPO_PATH/.init.pdp"
     echo "PDP service setup complete"

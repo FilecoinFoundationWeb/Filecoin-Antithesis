@@ -24,7 +24,7 @@ import (
 // available USDFC in FilecoinPayV1 should decrease (fee extraction working).
 // ===========================================================================
 
-const griefUSDFCDeposit = 60000000000000000 // 0.06 USDFC (18 decimals)
+const griefUSDFCDeposit = 500000000000000000 // 0.5 USDFC (18 decimals) — must exceed minimumLockup + sybilFee (~0.12 USDFC)
 
 // ---------------------------------------------------------------------------
 // State
@@ -197,10 +197,10 @@ func doGriefCreateActor() {
 
 	log.Printf("[pdp-accounting] state=Funded → creating f4 actor via EVM transfer")
 
-	// Send 0.001 FIL from FOC client to secondary client's ETH address.
-	// This creates the f4 actor as a side effect of the EVM value transfer.
-	oneMilliFIL := filbig.NewInt(1_000_000_000_000_000) // 0.001 FIL
-	ok := foc.SendEthTxConfirmedWithValue(ctx, node, focCfg.ClientKey, s.ClientEth, oneMilliFIL, "pdp-acct-f4")
+	// Send 1 FIL from FOC client to secondary client's ETH address.
+	// This creates the f4 actor and funds it for gas on subsequent EVM transactions.
+	gasFund := filbig.NewInt(1_000_000_000_000_000_000) // 1 FIL
+	ok := foc.SendEthTxConfirmedWithValue(ctx, node, focCfg.ClientKey, s.ClientEth, gasFund, "pdp-acct-f4")
 	if !ok {
 		log.Printf("[pdp-accounting] f4 actor creation failed, will retry")
 		return

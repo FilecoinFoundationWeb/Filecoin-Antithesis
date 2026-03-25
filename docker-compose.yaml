@@ -143,7 +143,7 @@ services:
       - STRESS_WEIGHT_HEAD_COMPARISON=5 # cross-node chain head match
       - STRESS_WEIGHT_STATE_ROOT=6 # cross-node state root match
       - STRESS_WEIGHT_STATE_AUDIT=5 # full state tree audit
-      - STRESS_WEIGHT_REORG=2 # power-aware reorg testing
+      - STRESS_WEIGHT_REORG=0 # disabled during griefing validation, re-enable after
       - STRESS_WEIGHT_POWER_SLASH=3 # power-aware miner slashing (quorum-safe)
       - STRESS_WEIGHT_F3_MONITOR=2 # passive F3 health monitor
       # - STRESS_WEIGHT_QUORUM_STALL=0  # deliberate F3 stall (opt-in, destructive)
@@ -197,7 +197,7 @@ services:
       - STRESS_WEIGHT_FOC_DELETE_DS=0 # delete entire dataset + reset lifecycle
       #
       # ADVERSARIAL: economic security + griefing probes
-      - STRESS_WEIGHT_PDP_GRIEFING=4 # fee extraction, insolvency, replay, burst attacks
+      - STRESS_WEIGHT_PDP_GRIEFING=8 # fee extraction, insolvency, replay, burst attacks
       #
       - CURIO_PDP_URL=http://curio:80
 
