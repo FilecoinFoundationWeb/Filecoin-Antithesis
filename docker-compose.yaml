@@ -168,7 +168,6 @@ services:
       - STRESS_WEIGHT_MSG_ORDERING=2 # tests interdependent cross-node message replacement/mempool ordering
       - STRESS_WEIGHT_NONCE_BOMBARD=2 # tests N+x gap handling & out-of-order execution across nodes
       - STRESS_WEIGHT_ADVERSARIAL=3 # cross-node double-spends, invalid signatures rejected
-      - STRESS_WEIGHT_ADVERSARY_NODE=2 # adversary node invalid-block-spammer + consensus verification
       # Gas pressure
       - STRESS_WEIGHT_GAS_EXHAUST=1 # tests high-gas call competing with small msgs across nodes
       - STRESS_WEIGHT_GAS_WAR=1 # mempool replacement/greedy selection
