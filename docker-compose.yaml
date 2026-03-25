@@ -107,6 +107,7 @@ services:
     healthcheck:
       <<: *healthcheck_settings
       test: curl --fail http://lotus2:1234/health/livez
+    profiles: [ full ]
 
   lotus3:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
@@ -116,12 +117,14 @@ services:
     healthcheck:
       <<: *healthcheck_settings
       test: curl --fail http://lotus3:1234/health/livez
+    profiles: [ full ]
 
   forest0:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
     image: forest:latest
     container_name: forest0
     entrypoint: [ "./scripts/start-forest.sh", "0" ]
+    profiles: [ full ]
 
   workload:
     <<: [ *filecoin_service ]
@@ -193,6 +196,9 @@ services:
       - STRESS_WEIGHT_FOC_DELETE_PIECE=1 # schedule piece deletion from proofset
       - STRESS_WEIGHT_FOC_DELETE_DS=0 # delete entire dataset + reset lifecycle
       #
+      # ADVERSARIAL: economic security + griefing probes
+      - STRESS_WEIGHT_PDP_GRIEFING=4 # fee extraction, insolvency, replay, burst attacks
+      #
       - CURIO_PDP_URL=http://curio:80
 
       - STRESS_DEBUG=1
@@ -235,12 +241,14 @@ services:
     image: lotus:${LOTUS_MINER_2_TAG:-${LOTUS_TAG:-latest}}
     container_name: lotus-miner2
     entrypoint: [ "./scripts/start-lotus-miner.sh", "2" ]
+    profiles: [ full ]
 
   lotus-miner3:
     <<: [ *filecoin_service, *needs_lotus3_healthy ]
     image: lotus:${LOTUS_MINER_3_TAG:-${LOTUS_TAG:-latest}}
     container_name: lotus-miner3
     entrypoint: [ "./scripts/start-lotus-miner.sh", "3" ]
+    profiles: [ full ]
 
   # ===========================================================================
   # foc profile: Filecoin On-Chain Cloud services (filwizard + yugabyte + curio)
