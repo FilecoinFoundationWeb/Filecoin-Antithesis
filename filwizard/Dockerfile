@@ -44,6 +44,11 @@ RUN filwizard contract clone-config \
     --config /opt/filwizard/config/filecoin-synapse.json \
     --workspace /opt/filwizard/workspace
 
+# Patch: PDPVerifier v3.2.0 constructor needs 4 args, upstream deploy script passes 1
+COPY patches/fix-pdp-deploy.sh /tmp/fix-pdp-deploy.sh
+RUN chmod +x /tmp/fix-pdp-deploy.sh && \
+    /tmp/fix-pdp-deploy.sh /opt/filwizard/workspace/filecoinwarmstorage/service_contracts/tools/warm-storage-deploy-all.sh && \
+    rm /tmp/fix-pdp-deploy.sh
 
 # Copy scripts
 COPY scripts/register-service-provider.js /opt/filwizard/scripts/register-service-provider.js
