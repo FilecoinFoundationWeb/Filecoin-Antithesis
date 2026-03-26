@@ -6,7 +6,9 @@
 drand_tag = $(shell git ls-remote --tags https://github.com/drand/drand.git | grep -E 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1 | sed 's/.*refs\/tags\///')
 lotus_tag = $(shell git ls-remote https://github.com/filecoin-project/lotus.git HEAD | cut -f1)
 curio_tag = $(shell git ls-remote https://github.com/filecoin-project/curio.git refs/heads/pdpv0 | cut -f1)
-forest_commit = $(shell git ls-remote https://github.com/ChainSafe/forest.git HEAD | cut -f1)
+# Pinned commit — must match the commit that forest/patches/forest.patch was built against.
+# If you update this, regenerate the patch against the new commit.
+forest_commit = c2c6d230d905ab7baa8d040b95a0bbce21e97363
 
 # Docker configuration
 builder = docker

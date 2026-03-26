@@ -1,6 +1,7 @@
 FROM docker.io/rust:1.81-bookworm AS builder
 
-# Pin forest to a specific branch
+# Pinned commit — must match the commit that patches/forest.patch was built against.
+# If you update this, regenerate the patch against the new commit.
 ARG GIT_COMMIT="c2c6d230d905ab7baa8d040b95a0bbce21e97363"
 ARG LOCAL_BUILD=1
 # Step 1: Install dependencies
