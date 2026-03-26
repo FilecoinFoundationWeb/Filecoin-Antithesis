@@ -97,6 +97,10 @@ for (( i=0; i<$NUM_LOTUS_CLIENTS; i++ )); do
     addr_file="${OTHER_LOTUS_DATA_DIR}/lotus${i}-ipv4addr"
 
     echo "Connecting to lotus$i at $addr_file"
+    if [[ ! -e "$addr_file" ]]; then
+        echo "Skipping lotus$i (addr file not found — node may not be running in this profile)"
+        continue
+    fi
     connect_with_retries "$addr_file"
 done
 
@@ -111,6 +115,10 @@ for (( i=0; i<$NUM_LOTUS_ADVERSARIES; i++ )); do
     addr_file="${OTHER_ADVERSARY_DATA_DIR}/lotus-adversary${i}-ipv4addr"
 
     echo "Connecting to lotus-adversary$i at $addr_file"
+    if [[ ! -e "$addr_file" ]]; then
+        echo "Skipping lotus-adversary$i (addr file not found — node may not be running in this profile)"
+        continue
+    fi
     connect_with_retries "$addr_file"
 done
 
@@ -121,6 +129,10 @@ for (( i=0; i<$NUM_FOREST_CLIENTS; i++ )); do
     addr_file="${FOREST_DATA_DIR}/forest${i}-ipv4addr"
 
     echo "Connecting to forest$i at $addr_file"
+    if [[ ! -e "$addr_file" ]]; then
+        echo "Skipping forest$i (addr file not found — node may not be running in this profile)"
+        continue
+    fi
     connect_with_retries "$addr_file"
 done
 
