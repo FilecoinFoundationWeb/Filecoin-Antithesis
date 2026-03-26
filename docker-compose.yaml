@@ -152,6 +152,7 @@ services:
       - STRESS_WEIGHT_REORG=8 # power-aware reorg testing — main fork inducer
       - STRESS_WEIGHT_POWER_SLASH=4 # power-aware miner slashing (quorum-safe)
       - STRESS_WEIGHT_F3_MONITOR=2 # passive F3 health monitor
+      - STRESS_WEIGHT_F3_EC_CONSISTENCY=4 # F3 cert must match EC canonical chain (core F3 vs EC demonstration)
       # - STRESS_WEIGHT_QUORUM_STALL=0  # deliberate F3 stall (opt-in, destructive)
       - FUZZER_ENABLED=1 # protocol fuzzer
       #

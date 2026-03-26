@@ -253,6 +253,7 @@ func buildDeck() {
 		{"DoStateRootComparison", "STRESS_WEIGHT_STATE_ROOT", DoStateRootComparison, 4},
 		{"DoStateAudit", "STRESS_WEIGHT_STATE_AUDIT", DoStateAudit, 5},
 		{"DoF3FinalityMonitor", "STRESS_WEIGHT_F3_MONITOR", DoF3FinalityMonitor, 2},
+		{"DoF3ECConsistency", "STRESS_WEIGHT_F3_EC_CONSISTENCY", DoF3ECConsistency, 4},
 	}
 
 	// Non-FOC stress vectors — skipped when FOC profile is active (covered by filecoin run)
