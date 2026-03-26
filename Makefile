@@ -18,8 +18,8 @@ BUILD_CMD = docker build
 TARGET_ARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 DOCKER_PLATFORM = linux/$(TARGET_ARCH)
 
-# Build mode: "local" uses local images, "remote" uses Antithesis registry
-BUILD_MODE ?= local
+# Build mode: empty (default) uses local images, "remote" uses Antithesis registry
+BUILD_MODE ?=
 
 # ==========================================
 # Show version info
