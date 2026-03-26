@@ -47,8 +47,8 @@ RUN install -m 0755 lotus lotus-miner lotus-seed lotus-shed /usr/local/bin/
 RUN go build -o lotus-health ./cmd/lotus-health
 RUN go build -o lotus-bench ./cmd/lotus-bench
 
-# download parameters needed for proving sectors
-RUN ./lotus fetch-params 2048
+# download parameters needed for proving sectors (retry on transient connection failures)
+RUN i=0; until ./lotus fetch-params 2048; do i=$((i+1)); [ $i -ge 5 ] && exit 1; echo "fetch-params failed, retry $i/5..."; sleep 15; done
 
 # copy toml config
 COPY lotus-config.toml.template config.toml.template
