@@ -356,6 +356,10 @@ func main() {
 		"deck":    len(deck),
 	})
 
+	// Start background fork monitor — runs independently of the deck so it
+	// can observe forks while DoReorgChaos partitions are active.
+	startForkMonitor()
+
 	log.Println("[engine] entering main loop")
 
 	// Track action execution counts for periodic summary
