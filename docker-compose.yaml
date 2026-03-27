@@ -265,6 +265,7 @@ services:
     entrypoint: [ "/opt/start-lotus-adversary.sh", "0" ]
     environment:
       - LOTUS_ADVERSARY_ENABLED=true
+      - LOTUS_ADVERSARY_MINER_ADDRESS=t01004
     volumes:
       # duplicated from filecoin_service anchor (YAML merge replaces, not appends)
       - ./data/lotus0:${LOTUS_0_DATA_DIR}
