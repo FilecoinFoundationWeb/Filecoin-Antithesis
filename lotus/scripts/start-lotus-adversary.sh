@@ -76,6 +76,18 @@ for sys in "${F3_SYSTEMS[@]}"; do
 done
 lotus log set-level "${F3_FLAGS[@]}" error 2>/dev/null || true
 
+# Import the adversary miner's worker key so the equivocation attack can re-sign blocks.
+# Without this, WalletSign fails with "key not found" for the worker address.
+if [ -n "${LOTUS_ADVERSARY_MINER_ADDRESS}" ]; then
+    key_file="${SHARED_CONFIGS}/.genesis-sector-adversary-${no}/pre-seal-${LOTUS_ADVERSARY_MINER_ADDRESS}.key"
+    if [ -f "$key_file" ]; then
+        echo "lotus-adversary${no}: importing worker key from $key_file"
+        lotus wallet import "$key_file" || echo "lotus-adversary${no}: wallet import failed (key may already exist)"
+    else
+        echo "lotus-adversary${no}: WARNING — worker key file not found: $key_file"
+    fi
+fi
+
 lotus net listen | grep -v "127.0.0.1" | grep -v "::1" | head -n 1 > ${LOTUS_DATA_DIR}/lotus-adversary${no}-ipv4addr
 lotus net id > ${LOTUS_DATA_DIR}/lotus-adversary${no}-p2pID
 if [ "$INIT_MODE" = "true" ] || [ ! -f "${LOTUS_DATA_DIR}/lotus-adversary${no}-jwt" ]; then
