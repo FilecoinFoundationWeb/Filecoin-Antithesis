@@ -80,6 +80,14 @@ fi
 lotus --version
 lotus wait-api
 
+# Suppress noisy F3 bootstrap polling ("waiting for bootstrap epoch" every ~20ms)
+F3_SYSTEMS=(f3 f3/internal/caching f3/certexchange f3/manifest-provider f3/ohshitstore f3/gpbft f3/wal f3/blssig)
+F3_FLAGS=()
+for sys in "${F3_SYSTEMS[@]}"; do
+    F3_FLAGS+=("--system" "$sys")
+done
+lotus log set-level "${F3_FLAGS[@]}" error 2>/dev/null || true
+
 lotus net listen | grep -v "127.0.0.1" | grep -v "::1" | head -n 1 > "${LOTUS_DATA_DIR}/lotus${node_number}-ipv4addr"
 lotus net id > "${LOTUS_DATA_DIR}/lotus${node_number}-p2pID"
 if [ "$INIT_MODE" = "true" ] || [ ! -f "${LOTUS_DATA_DIR}/lotus${node_number}-jwt" ]; then
