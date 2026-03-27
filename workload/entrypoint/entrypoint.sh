@@ -38,7 +38,40 @@ while true; do
     sleep 5
 done
 
-# ── 4. Wait for filwizard if running (FOC profile, auto-detected via DNS) ──
+# ── 4. Wait for all miners to have produced at least one block ──
+log_info "Discovering registered miners via StateListMiners..."
+while true; do
+    MINER_ADDRS=$(curl -sf -m 5 -X POST -H "Content-Type: application/json" \
+        --data '{"jsonrpc":"2.0","method":"Filecoin.StateListMiners","params":[null],"id":1}' \
+        "$RPC_URL" 2>/dev/null | jq -rc '.result // empty' 2>/dev/null)
+    if [ -n "$MINER_ADDRS" ] && [ "$MINER_ADDRS" != "null" ] && [ "$MINER_ADDRS" != "[]" ]; then
+        break
+    fi
+    sleep 3
+done
+MINER_COUNT=$(echo "$MINER_ADDRS" | jq 'length')
+log_info "Found ${MINER_COUNT} miners on-chain: $(echo "$MINER_ADDRS" | jq -r 'join(", ")')"
+
+# Wait for each miner daemon's RPC to respond (requires LOTUS_API_LISTENADDRESS fix)
+MINER_RPC_PORT="${LOTUS_MINER_RPC_PORT:-2345}"
+for i in $(seq 0 $((MINER_COUNT - 1))); do
+    miner="lotus-miner${i}"
+    MINER_URL="http://${miner}:${MINER_RPC_PORT}/rpc/v0"
+    log_info "Waiting for ${miner} API..."
+    while true; do
+        ver=$(curl -sf -m 5 -X POST -H "Content-Type: application/json" \
+            --data '{"jsonrpc":"2.0","method":"Filecoin.Version","params":[],"id":1}' \
+            "$MINER_URL" 2>/dev/null | jq -r '.result.Version // empty' 2>/dev/null)
+        if [ -n "$ver" ]; then
+            log_info "${miner} ready (version=${ver})"
+            break
+        fi
+        sleep 3
+    done
+done
+log_info "All ${MINER_COUNT} miners confirmed reachable."
+
+# ── 5. Wait for filwizard if running (FOC profile, auto-detected via DNS) ──
 ENV_FILE="/shared/environment.env"
 FILWIZARD_READY="/shared/filwizard_ready"
 if getent hosts filwizard &>/dev/null; then
@@ -60,11 +93,11 @@ else
     log_info "Non-FOC profile."
 fi
 
-# ── 5. Signal setup complete to Antithesis ──
+# ── 6. Signal setup complete to Antithesis ──
 log_info "All prerequisites met, signaling setup complete to Antithesis..."
 /opt/antithesis/setup-complete
 
-# ── 6. Launch FOC sidecar if in FOC profile ──
+# ── 7. Launch FOC sidecar if in FOC profile ──
 if getent hosts filwizard &>/dev/null; then
     log_info "Starting FOC sidecar..."
     /opt/antithesis/foc-sidecar &
@@ -72,7 +105,7 @@ if getent hosts filwizard &>/dev/null; then
     log_info "FOC sidecar started (PID=$SIDECAR_PID)"
 fi
 
-# ── 7. Launch stress engine ──
+# ── 8. Launch stress engine ──
 log_info "Launching stress engine..."
 /opt/antithesis/stress-engine &
 STRESS_PID=$!

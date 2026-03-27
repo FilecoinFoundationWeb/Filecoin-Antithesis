@@ -11,6 +11,9 @@ export LOTUS_PATH="${!lotus_path}"
 lotus_miner_path="LOTUS_MINER_${node_number}_PATH"
 export LOTUS_MINER_PATH="${!lotus_miner_path}"
 
+lotus_miner_api="LOTUS_MINER_${node_number}_API_LISTENADDRESS"
+export LOTUS_API_LISTENADDRESS="${!lotus_miner_api}"
+
 export LOTUS_F3_BOOTSTRAP_EPOCH=21
 export DRAND_CHAIN_INFO=chain_info
 export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
