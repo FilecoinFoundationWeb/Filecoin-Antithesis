@@ -92,7 +92,7 @@ RUN make sptool
 RUN install -C curio /usr/local/bin/curio
 RUN install -C pdptool /usr/local/bin/pdptool
 RUN install -C sptool /usr/local/bin/sptool
-RUN curio fetch-params 2048
+COPY --from=lotus-builder /var/tmp/filecoin-proof-parameters /var/tmp/filecoin-proof-parameters
 COPY ./start_scripts/curio-init.sh /curio/curio-init.sh
 RUN chmod +x /curio/curio-init.sh
 ENTRYPOINT ["/curio/curio-init.sh"]

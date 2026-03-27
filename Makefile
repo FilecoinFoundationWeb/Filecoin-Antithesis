@@ -80,7 +80,7 @@ build-curio:
 	@echo "Building curio for $(TARGET_ARCH)..."
 	@echo "  Git commit: $(curio_tag)"
 	@echo "  Build mode: $(BUILD_MODE)"
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(curio_tag) --build-arg=LOTUS_TAG=$(lotus_tag) --build-arg=BUILD_MODE=$(BUILD_MODE) -t curio:latest -f curio/Dockerfile curio
+	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(curio_tag) --build-arg=LOTUS_TAG=$(if $(BUILD_MODE),$(lotus_tag),latest) --build-arg=BUILD_MODE=$(BUILD_MODE) -t curio:latest -f curio/Dockerfile curio
 
 .PHONY: build-workload
 build-workload:

@@ -3,6 +3,30 @@
 SECTOR_SIZE="${SECTOR_SIZE:-2KiB}"
 NETWORK_NAME="${NETWORK_NAME:-2k}"
 
+# Clean stale data from previous runs so miners re-init with the new genesis.
+# Without this, miner repos from a prior run keep old sector proofs that don't
+# match the freshly-generated genesis state, causing "faulty sectors" errors.
+echo "Cleaning stale genesis artifacts and miner repos..."
+rm -rf "${SHARED_CONFIGS}"/.genesis-sector-*
+rm -f  "${SHARED_CONFIGS}/manifest.json" "${SHARED_CONFIGS}/localnet.json" "${SHARED_CONFIGS}/devgen.car"
+
+for ((i=0; i<NUM_LOTUS_MINERS; i++)); do
+    _mp_var="LOTUS_MINER_${i}_PATH"
+    _mp="${!_mp_var}"
+    if [ -n "$_mp" ] && [ -d "$_mp" ]; then
+        echo "  removing stale miner repo: $_mp"
+        rm -rf "$_mp"
+    fi
+done
+for ((i=0; i<${NUM_LOTUS_ADVERSARIES:-0}; i++)); do
+    _mp_var="LOTUS_ADVERSARY_MINER_${i}_PATH"
+    _mp="${!_mp_var}"
+    if [ -n "$_mp" ] && [ -d "$_mp" ]; then
+        echo "  removing stale adversary miner repo: $_mp"
+        rm -rf "$_mp"
+    fi
+done
+
 # pre-seal each miner with configurable sector counts
 # SECTORS_PER_MINER is a comma-separated list (e.g. "4,2"), defaults to 2 per miner
 IFS=',' read -ra _sector_counts <<< "${SECTORS_PER_MINER:-}"

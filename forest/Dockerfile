@@ -1,3 +1,5 @@
+ARG LOTUS_TAG=latest
+FROM lotus:${LOTUS_TAG} AS params-source
 FROM docker.io/rust:1.81-bookworm AS builder
 
 # Pinned commit — must match the commit that patches/forest.patch was built against.
@@ -57,9 +59,9 @@ RUN cargo build --release --bin forest-cli && \
 
 WORKDIR /forest
 
-# Step 6: Set up environment variables and fetch necessary parameters
+# Step 6: Set up environment variables and copy pre-fetched proof parameters from lotus
 ENV FIL_PROOFS_PARAMETER_CACHE="/var/tmp/filecoin-proof-parameters"
-RUN forest-tool fetch-params --keys
+COPY --from=params-source /var/tmp/filecoin-proof-parameters /var/tmp/filecoin-proof-parameters
 
 # Step 7: Cache actor bundle
 ENV FOREST_ACTOR_BUNDLE_PATH="/var/tmp/forest_actor_bundle.car.zst"

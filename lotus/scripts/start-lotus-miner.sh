@@ -28,11 +28,28 @@ else
     else
         lotus-miner init --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${node_number} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
     fi
+
+    if [ $? -ne 0 ]; then
+        echo "ERROR: lotus-miner${node_number} init failed, exiting"
+        exit 1
+    fi
 fi
 echo "lotus-miner${node_number}: setup complete"
 
-# Reduce log noise: set all subsystems to error first, then selectively raise to warn.
-# The full list is generated from `lotus-miner log list`.
+# Start miner in background, then configure log levels once API is up
+lotus-miner run --nosync &
+MINER_PID=$!
+
+# Wait for miner API to become available before setting log levels
+echo "lotus-miner${node_number}: waiting for miner API..."
+for i in $(seq 1 30); do
+    if lotus-miner auth api-info --perm admin >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+
+# Reduce log noise: set all subsystems to warn, then suppress F3 polling
 LOG_SYSTEMS=(
     panic-reporter incrt bitswap-client table pubsub test-logger routedhost
     f3/internal/caching engine badgerbs chainstore genesis messagesigner sqlite
@@ -63,6 +80,14 @@ for sys in "${LOG_SYSTEMS[@]}"; do
     SYSTEM_FLAGS+=("--system" "$sys")
 done
 
-lotus-miner log set-level "${SYSTEM_FLAGS[@]}" error
-lotus-miner log set-level "${SYSTEM_FLAGS[@]}" warn
-lotus-miner run --nosync
+lotus-miner log set-level "${SYSTEM_FLAGS[@]}" warn 2>/dev/null || true
+
+# Suppress noisy F3 bootstrap polling ("waiting for bootstrap epoch" every ~20ms)
+F3_SYSTEMS=(f3 f3/internal/caching f3/certexchange f3/manifest-provider f3/ohshitstore f3/gpbft f3/wal f3/blssig)
+F3_FLAGS=()
+for sys in "${F3_SYSTEMS[@]}"; do
+    F3_FLAGS+=("--system" "$sys")
+done
+lotus-miner log set-level "${F3_FLAGS[@]}" error 2>/dev/null || true
+
+wait $MINER_PID

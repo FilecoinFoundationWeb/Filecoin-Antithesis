@@ -22,6 +22,11 @@ export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
 if [ ! -f "${LOTUS_DATA_DIR}/config.toml" ]; then
     INIT_MODE=true
+    # Clean stale repo from previous run so we start fresh
+    if [ -d "${LOTUS_PATH}" ]; then
+        echo "lotus${node_number}: Cleaning stale repo ${LOTUS_PATH}"
+        rm -rf "${LOTUS_PATH}"
+    fi
 else
     INIT_MODE=false
 fi
@@ -77,7 +82,7 @@ lotus wait-api
 
 lotus net listen | grep -v "127.0.0.1" | grep -v "::1" | head -n 1 > "${LOTUS_DATA_DIR}/lotus${node_number}-ipv4addr"
 lotus net id > "${LOTUS_DATA_DIR}/lotus${node_number}-p2pID"
-if [ ! -f "${LOTUS_DATA_DIR}/lotus${node_number}-jwt" ]; then
+if [ "$INIT_MODE" = "true" ] || [ ! -f "${LOTUS_DATA_DIR}/lotus${node_number}-jwt" ]; then
     lotus auth create-token --perm admin > "${LOTUS_DATA_DIR}/lotus${node_number}-jwt"
 fi
 
