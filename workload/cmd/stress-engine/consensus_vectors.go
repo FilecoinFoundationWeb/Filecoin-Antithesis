@@ -215,8 +215,9 @@ func DoTipsetConsensus() {
 
 	consensusReached := len(tipsetKeys) == 1
 
-	// Sometimes, not Always: with shallow EC finality (head-20), transient
-	// forks are expected. Nodes should agree *eventually* (liveness), but
+	// Sometimes, not Always: the check height is a random point within the
+	// finalized window (which can be near the tip), where transient forks
+	// are expected. Nodes should agree *eventually* (liveness), but
 	// point-in-time disagreement during active forks is normal.
 	assert.Sometimes(consensusReached, "All nodes agree on the same finalized tipset", map[string]any{
 		"height":         checkHeight,
@@ -277,6 +278,9 @@ func DoHeightProgression() {
 	spread := maxH - minH
 	acceptable := spread <= 10
 
+	// Sometimes: during active partitions one side stops getting blocks,
+	// so a large spread is expected. The fork monitor already catches
+	// persistent divergence.
 	assert.Sometimes(acceptable, "Node chain heights are within acceptable range", map[string]any{
 		"heights": heights,
 		"spread":  spread,
@@ -284,7 +288,6 @@ func DoHeightProgression() {
 		"max":     maxH,
 		"nodes":   nodeKeys,
 	})
-
 }
 
 // doPeerCount checks that all nodes have peers.
@@ -413,22 +416,41 @@ func DoStateRootComparison() {
 
 	statesMatch := len(stateRoots) == 1
 
-	// Sometimes: with shallow EC finality, nodes on different fork branches
-	// will have different state roots at the same height. This is expected
-	// during transient forks and should resolve after convergence.
-	assert.Sometimes(statesMatch, "Chain state is consistent across all nodes", map[string]any{
+	details := map[string]any{
 		"height":        checkHeight,
 		"finalized_at":  finalizedHeight,
 		"state_roots":   stateRoots,
 		"unique_states": len(stateRoots),
 		"nodes_checked": len(nodeKeys),
 		"nodes":         nodeKeys,
-	})
+	}
 
 	if statesMatch {
+		assert.Always(true, "Chain state is consistent across all nodes", details)
 		debugLog("  [chain-monitor] OK: all %d nodes agree at height %d (finalized=%d)", len(nodeKeys), checkHeight, finalizedHeight)
 	} else {
-		log.Printf("  [chain-monitor] DIVERGENCE at height %d: %v", checkHeight, stateRoots)
+		log.Printf("  [chain-monitor] DIVERGENCE at height %d, stabilizing to verify: %v", checkHeight, stateRoots)
+
+		resolved := stabilizeAndRecheck(func() bool {
+			retryRoots := make(map[string][]string)
+			for _, name := range nodeKeys {
+				finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
+				if err != nil {
+					return false
+				}
+				ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, finTs.Key())
+				if err != nil {
+					return false
+				}
+				root := ts.ParentState().String()
+				retryRoots[root] = append(retryRoots[root], name)
+			}
+			return len(retryRoots) == 1
+		})
+
+		details["stabilized"] = true
+		details["resolved_after_stabilization"] = resolved
+		assert.Always(resolved, "Chain state is consistent across all nodes", details)
 	}
 }
 
@@ -473,19 +495,43 @@ func DoStateAudit() {
 
 	rootsMatch := len(stateRoots) == 1
 
-	// Sometimes: cross-node state root comparison during shallow EC finality
-	// will see divergence when nodes are on different fork branches.
-	assert.Sometimes(rootsMatch, "State root is consistent after FVM execution", map[string]any{
+	auditDetails := map[string]any{
 		"height":        checkHeight,
 		"finalized_at":  finalizedHeight,
 		"unique_states": len(stateRoots),
 		"state_roots":   stateRoots,
 		"nodes":         nodeKeys,
-	})
+	}
 
-	if !rootsMatch {
-		log.Printf("[chain-monitor] STATE ROOT DIVERGENCE at height %d: %v", checkHeight, stateRoots)
-		return
+	if rootsMatch {
+		assert.Always(true, "State root is consistent after FVM execution", auditDetails)
+	} else {
+		log.Printf("[chain-monitor] STATE ROOT DIVERGENCE at height %d, stabilizing to verify: %v", checkHeight, stateRoots)
+
+		resolved := stabilizeAndRecheck(func() bool {
+			retryRoots := make(map[string][]string)
+			for _, name := range nodeKeys {
+				finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
+				if err != nil {
+					return false
+				}
+				ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, finTs.Key())
+				if err != nil {
+					return false
+				}
+				root := ts.ParentState().String()
+				retryRoots[root] = append(retryRoots[root], name)
+			}
+			return len(retryRoots) == 1
+		})
+
+		auditDetails["stabilized"] = true
+		auditDetails["resolved_after_stabilization"] = resolved
+		assert.Always(resolved, "State root is consistent after FVM execution", auditDetails)
+
+		if !resolved {
+			return
+		}
 	}
 
 	// Phase 2: Message-Receipt correspondence check

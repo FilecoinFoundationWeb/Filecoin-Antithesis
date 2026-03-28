@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"strconv"
 	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
@@ -26,6 +28,62 @@ func debugLog(format string, args ...any) {
 	if debugLogging {
 		log.Printf(format, args...)
 	}
+}
+
+// ===========================================================================
+// Fault injection control
+//
+// Antithesis injects a stop-faults binary into every container via the
+// ANTITHESIS_STOP_FAULTS env var. Calling it pauses ALL fault types across
+// ALL containers for the requested duration, then auto-resumes.
+//
+// We use this in consensus vectors: when a check fails, we stop faults,
+// wait for the network to stabilize, and re-run the check. If it still
+// fails after stabilization, the failure is real and we fire assert.Always.
+// ===========================================================================
+
+const (
+	// stopFaultsDuration is how long (virtual seconds) to pause fault
+	// injection when we detect a potential consensus disagreement.
+	// Both this and time.Sleep run in virtual time inside Antithesis.
+	// Keep this short — it pauses faults globally across all containers.
+	stopFaultsDuration = 30
+
+	// stabilizeWait is how long to sleep after stopping faults before
+	// re-checking. 10 virtual seconds gives nodes time to reconnect
+	// and sync, leaving 20s headroom in the fault pause window.
+	stabilizeWait = 10 * time.Second
+)
+
+// stopFaults pauses all fault injection for the given duration in seconds.
+// Returns true if the command succeeded, false if ANTITHESIS_STOP_FAULTS
+// is not set (e.g. running outside Antithesis) or the command fails.
+func stopFaults(durationSecs int) bool {
+	bin := os.Getenv("ANTITHESIS_STOP_FAULTS")
+	if bin == "" {
+		debugLog("[stop-faults] ANTITHESIS_STOP_FAULTS not set, skipping")
+		return false
+	}
+
+	log.Printf("[stop-faults] pausing fault injection for %d seconds", durationSecs)
+	cmd := exec.Command(bin, strconv.Itoa(durationSecs))
+	if err := cmd.Run(); err != nil {
+		log.Printf("[stop-faults] command failed: %v", err)
+		return false
+	}
+	return true
+}
+
+// stabilizeAndRecheck stops fault injection, waits for the network to
+// stabilize, then calls recheckFn to see if the condition now holds.
+// Returns the result of recheckFn. If stopping faults fails (e.g. outside
+// Antithesis), still calls recheckFn after a short wait as a best-effort
+// retry.
+func stabilizeAndRecheck(recheckFn func() bool) bool {
+	stopFaults(stopFaultsDuration)
+	log.Printf("[stabilize] waiting %v for nodes to sync...", stabilizeWait)
+	time.Sleep(stabilizeWait)
+	return recheckFn()
 }
 
 // ===========================================================================
