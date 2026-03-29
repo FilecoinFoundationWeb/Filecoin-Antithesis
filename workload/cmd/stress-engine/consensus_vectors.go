@@ -730,14 +730,16 @@ func verifyForks(minHead abi.ChainEpoch) {
 			continue
 		}
 
-		// Re-query all nodes at the fork height
+		// Re-query all nodes at the fork height, anchored to each node's
+		// finalized tipset (matching detectForks). Using ChainHead would
+		// false-positive when heads diverge above finalization.
 		nodeTipsets := make(map[string]string)
 		for _, name := range nodeKeys {
-			head, err := nodes[name].ChainHead(ctx)
+			finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
 			if err != nil {
 				continue
 			}
-			ts, err := nodes[name].ChainGetTipSetByHeight(ctx, tf.height, head.Key())
+			ts, err := nodes[name].ChainGetTipSetByHeight(ctx, tf.height, finTs.Key())
 			if err != nil {
 				continue
 			}
