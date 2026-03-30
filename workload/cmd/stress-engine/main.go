@@ -257,17 +257,17 @@ func buildDeck() {
 
 	// Non-FOC stress vectors — skipped when FOC profile is active
 	stress := []weightedAction{
-		// Consensus chaos — fork induction + verification
-		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
+		// Power table manipulation
 		{"DoPowerAwareSlash", "STRESS_WEIGHT_POWER_SLASH", DoPowerAwareSlash, 0},
-		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 0},
 		// N-split attack vectors (EC/F3 threshold testing)
-		{"DoNetworkBisection", "STRESS_WEIGHT_BISECTION", DoNetworkBisection, 2},
+		{"DoNetworkBisection", "STRESS_WEIGHT_BISECTION", DoNetworkBisection, 3},
 		{"DoNetworkHeal", "STRESS_WEIGHT_HEAL", DoNetworkHeal, 2},
-		{"DoDoubleSpendDuringFork", "STRESS_WEIGHT_DSPEND_FORK", DoDoubleSpendDuringFork, 3},
-		{"DoDoubleSpendVerify", "STRESS_WEIGHT_DSPEND_VERIFY", DoDoubleSpendVerify, 2},
+		{"DoAdversarialDuringFork", "STRESS_WEIGHT_ADVERSARIAL_FORK", DoAdversarialDuringFork, 4},
+		{"DoAdversarialVerify", "STRESS_WEIGHT_ADVERSARIAL_VERIFY", DoAdversarialVerify, 2},
 		// Background chain activity (creates state changes for forks to reconcile)
 		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 1},
+		{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 1},
+		{"DoNonceRace", "STRESS_WEIGHT_NONCE_RACE", doNonceRace, 1},
 		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 1},
 		// Cross-node consistency
 		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},

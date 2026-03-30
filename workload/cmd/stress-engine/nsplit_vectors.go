@@ -2,15 +2,17 @@ package main
 
 import (
 	"log"
+	"math/big"
 	"sync"
+	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
+	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // ===========================================================================
@@ -30,6 +32,12 @@ const (
 
 	// nsplitMaxPending limits memory for tracked double-spends.
 	nsplitMaxPending = 50
+
+	// nsplitHoldMin/Max control how long a bisection holds the partition.
+	// Random duration around the finality window (head-20) ensures forks
+	// form at depths where finalized tipset checks actually see disagreement.
+	nsplitHoldMin = 10 // epochs
+	nsplitHoldMax = 30 // epochs
 
 	// EC security threshold — adversary above this can break EC (Wang 2023, m=5)
 	ecThresholdPct = 20.0
@@ -58,10 +66,9 @@ var (
 // DoNetworkBisection — Create Partition Topologies
 // ===========================================================================
 
-// DoNetworkBisection picks a random partition strategy and executes ONE
-// partition step. It does not heal — that's DoNetworkHeal's job.
-// Over many deck iterations, this creates varied network topologies
-// that Antithesis explores.
+// DoNetworkBisection picks a random partition strategy, creates the topology,
+// and holds it for a random number of epochs (10-30) so forks form at
+// finalized depths. Then returns — DoNetworkHeal reconnects when picked.
 func DoNetworkBisection() {
 	if len(nodeKeys) < 2 {
 		return
@@ -76,6 +83,15 @@ func DoNetworkBisection() {
 	default:
 		doFullIsolation()
 	}
+
+	// Hold the partition for a random number of epochs so competing chains
+	// grow past the finality boundary (head-20). Without this hold, the next
+	// deck action (possibly DoNetworkHeal) would fire immediately and the
+	// partition would be too brief for forks to form.
+	holdEpochs := nsplitHoldMin + rngIntn(nsplitHoldMax-nsplitHoldMin+1)
+	log.Printf("[nsplit] holding partition for %d epochs...", holdEpochs)
+	waitForEpochsOnAny(holdEpochs)
+	log.Printf("[nsplit] partition hold complete")
 }
 
 // doStarSplit picks a hub node (power-aware) and disconnects all non-hub
@@ -272,19 +288,22 @@ func DoNetworkHeal() {
 }
 
 // ===========================================================================
-// DoDoubleSpendDuringFork — Opportunistic Double-Spend Injection
+// DoAdversarialDuringFork — Opportunistic Attacks During Active Forks
 // ===========================================================================
 
-// DoDoubleSpendDuringFork checks if a fork currently exists (nodes disagree
-// on finalized tipset) and if so, injects conflicting transactions to the
-// disagreeing nodes. This is opportunistic — it only fires when conditions
-// are right.
-func DoDoubleSpendDuringFork() {
+// DoAdversarialDuringFork checks if a fork currently exists (nodes disagree
+// on finalized tipset) and if so, picks a random attack strategy:
+//   - Double-spend: same nonce, different recipients, different forks
+//   - Fee-snipe: low-fee tx on fork A, high-fee replacement on fork B
+//   - Balance drain: send full balance to different recipients on different forks
+//
+// All attacks are tracked for post-convergence verification by DoAdversarialVerify.
+func DoAdversarialDuringFork() {
 	if len(nodeKeys) < 2 {
 		return
 	}
 
-	// Quick fork check: compare finalized tipsets from two random nodes
+	// Quick fork check
 	nameA, nameB, nodeA, nodeB := pickTwoDistinctNodes()
 	if nodeA == nil {
 		return
@@ -296,16 +315,29 @@ func DoDoubleSpendDuringFork() {
 		return
 	}
 
-	// No fork — nodes agree
 	if finA.Key() == finB.Key() {
-		return
+		return // no fork
 	}
 
-	// Fork detected! Nodes disagree on finalized tipset.
-	log.Printf("[nsplit] fork detected between %s (height=%d) and %s (height=%d) — injecting double-spend",
-		nameA, finA.Height(), nameB, finB.Height())
+	// Fork detected — pick attack strategy
+	attack := rngIntn(3)
+	attackNames := []string{"double-spend", "fee-snipe", "balance-drain"}
+	log.Printf("[nsplit] fork detected (%s h=%d vs %s h=%d) — attack: %s",
+		nameA, finA.Height(), nameB, finB.Height(), attackNames[attack])
 
-	// Pick a wallet and create conflicting transactions
+	switch attack {
+	case 0:
+		doForkDoubleSpend(nameA, nameB, nodeA, nodeB)
+	case 1:
+		doForkFeeSniping(nameA, nameB, nodeA, nodeB)
+	case 2:
+		doForkBalanceDrain(nameA, nameB, nodeA, nodeB, finA)
+	}
+}
+
+// doForkDoubleSpend sends conflicting transactions (same nonce, different
+// recipients) to nodes on different fork branches.
+func doForkDoubleSpend(nameA, nameB string, nodeA, nodeB api.FullNode) {
 	fromAddr, fromKI := pickWallet()
 	toAddrA, _ := pickWallet()
 	toAddrB, _ := pickWallet()
@@ -315,35 +347,107 @@ func DoDoubleSpendDuringFork() {
 
 	currentNonce := nonces[fromAddr]
 
-	// Tx A → nodeA, Tx B → nodeB (same nonce, different recipients)
 	msgA := baseMsg(fromAddr, toAddrA, abi.NewTokenAmount(1))
 	cidA, okA := pushMsgManualNonce(nodeA, msgA, fromKI, currentNonce, "nsplit-dspend-A")
 
 	msgB := baseMsg(fromAddr, toAddrB, abi.NewTokenAmount(1))
 	cidB, okB := pushMsgManualNonce(nodeB, msgB, fromKI, currentNonce, "nsplit-dspend-B")
 
-	// Consume the nonce regardless
 	nonces[fromAddr]++
 
 	if !okA || !okB {
-		debugLog("[nsplit] double-spend push failed: okA=%v okB=%v", okA, okB)
 		return
 	}
 
-	// Get current chain head for timing
-	head, err := nodeA.ChainHead(ctx)
+	trackPendingAttack(fromAddr, currentNonce, cidA, cidB, nameA, nameB, nodeA, "double-spend")
+}
+
+// doForkFeeSniping sends a low-fee tx to one fork and a high-fee replacement
+// (same nonce) to the other. Tests fee economics across reorgs.
+func doForkFeeSniping(nameA, nameB string, nodeA, nodeB api.FullNode) {
+	fromAddr, fromKI := pickWallet()
+	toAddr, _ := pickWallet()
+	if fromAddr == toAddr {
+		return
+	}
+
+	currentNonce := nonces[fromAddr]
+
+	// Low-fee to fork A
+	msgLow := baseMsg(fromAddr, toAddr, abi.NewTokenAmount(1))
+	msgLow.GasPremium = abi.NewTokenAmount(100)
+	msgLow.GasFeeCap = abi.NewTokenAmount(100_000)
+	cidLow, okLow := pushMsgManualNonce(nodeA, msgLow, fromKI, currentNonce, "nsplit-feesnipe-low")
+
+	// High-fee to fork B (same nonce, same recipient)
+	msgHigh := baseMsg(fromAddr, toAddr, abi.NewTokenAmount(1))
+	msgHigh.GasPremium = abi.NewTokenAmount(50_000)
+	msgHigh.GasFeeCap = abi.NewTokenAmount(200_000)
+	cidHigh, okHigh := pushMsgManualNonce(nodeB, msgHigh, fromKI, currentNonce, "nsplit-feesnipe-high")
+
+	nonces[fromAddr]++
+
+	if !okLow || !okHigh {
+		return
+	}
+
+	trackPendingAttack(fromAddr, currentNonce, cidLow, cidHigh, nameA, nameB, nodeA, "fee-snipe")
+}
+
+// doForkBalanceDrain sends the full wallet balance to different recipients
+// on different fork branches. Tests balance accounting across deep reorgs.
+func doForkBalanceDrain(nameA, nameB string, nodeA, nodeB api.FullNode, finA *types.TipSet) {
+	fromAddr, fromKI := pickWallet()
+	toAddrA, _ := pickWallet()
+	toAddrB, _ := pickWallet()
+	if fromAddr == toAddrA || fromAddr == toAddrB || toAddrA == toAddrB {
+		return
+	}
+
+	// Query actual balance
+	actor, err := nodeA.StateGetActor(ctx, fromAddr, finA.Key())
+	if err != nil || actor == nil {
+		return
+	}
+
+	// Reserve 1 FIL for gas
+	gasBudget := abi.NewTokenAmount(1_000_000_000_000_000_000)
+	if actor.Balance.LessThanEqual(gasBudget) {
+		return
+	}
+	drainAmount := abi.TokenAmount{Int: new(big.Int).Sub(actor.Balance.Int, gasBudget.Int)}
+
+	currentNonce := nonces[fromAddr]
+
+	msgA := baseMsg(fromAddr, toAddrA, drainAmount)
+	cidA, okA := pushMsgManualNonce(nodeA, msgA, fromKI, currentNonce, "nsplit-drain-A")
+
+	msgB := baseMsg(fromAddr, toAddrB, drainAmount)
+	cidB, okB := pushMsgManualNonce(nodeB, msgB, fromKI, currentNonce, "nsplit-drain-B")
+
+	nonces[fromAddr]++
+
+	if !okA || !okB {
+		return
+	}
+
+	trackPendingAttack(fromAddr, currentNonce, cidA, cidB, nameA, nameB, nodeA, "balance-drain")
+}
+
+// trackPendingAttack records a conflicting tx pair for later verification.
+func trackPendingAttack(fromAddr address.Address, nonce uint64, cidA, cidB cid.Cid, nameA, nameB string, refNode api.FullNode, attackType string) {
+	head, err := refNode.ChainHead(ctx)
 	if err != nil {
 		return
 	}
 
-	// Track for later verification
 	pendingDoubleSpendsMu.Lock()
 	if len(pendingDoubleSpends) >= nsplitMaxPending {
-		pendingDoubleSpends = pendingDoubleSpends[1:] // evict oldest
+		pendingDoubleSpends = pendingDoubleSpends[1:]
 	}
 	pendingDoubleSpends = append(pendingDoubleSpends, pendingDoubleSpend{
 		fromAddr:   fromAddr,
-		nonce:      currentNonce,
+		nonce:      nonce,
 		cidA:       cidA,
 		cidB:       cidB,
 		nodeA:      nameA,
@@ -352,25 +456,26 @@ func DoDoubleSpendDuringFork() {
 	})
 	pendingDoubleSpendsMu.Unlock()
 
-	log.Printf("[nsplit] double-spend injected: from=%s nonce=%d cidA=%s→%s cidB=%s→%s",
-		fromAddr, currentNonce, cidStr(cidA), nameA, cidStr(cidB), nameB)
+	log.Printf("[nsplit] %s injected: from=%s nonce=%d cidA=%s→%s cidB=%s→%s",
+		attackType, fromAddr, nonce, cidStr(cidA), nameA, cidStr(cidB), nameB)
 
-	assert.Sometimes(true, "Double-spend injected during active fork", map[string]any{
+	assert.Sometimes(true, "Adversarial attack injected during fork", map[string]any{
+		"attack": attackType,
 		"from":   fromAddr.String(),
-		"nonce":  currentNonce,
+		"nonce":  nonce,
 		"node_a": nameA,
 		"node_b": nameB,
 	})
 }
 
 // ===========================================================================
-// DoDoubleSpendVerify — Post-Convergence Safety Check
+// DoAdversarialVerify — Post-Convergence Safety Check
 // ===========================================================================
 
-// DoDoubleSpendVerify checks pending double-spend records. For records where
+// DoAdversarialVerify checks pending attack records. For records where
 // enough epochs have passed since injection, it verifies that at most one
 // of the conflicting transactions was included on-chain.
-func DoDoubleSpendVerify() {
+func DoAdversarialVerify() {
 	pendingDoubleSpendsMu.Lock()
 	defer pendingDoubleSpendsMu.Unlock()
 
@@ -455,7 +560,42 @@ func DoDoubleSpendVerify() {
 // Helpers
 // ===========================================================================
 
-// collectNodeAddrInfosAll returns addresses for ALL nodes (no exclusion).
-func collectNodeAddrInfosAll() []peer.AddrInfo {
-	return collectNodeAddrInfos("")
+// waitForEpochsOnAny waits for N epochs to advance on any reachable node.
+// Falls back to time-based wait if no node responds.
+func waitForEpochsOnAny(n int) {
+	// Find any node that responds
+	var watchName string
+	var startHeight abi.ChainEpoch
+	for _, name := range nodeKeys {
+		head, err := nodes[name].ChainHead(ctx)
+		if err == nil {
+			watchName = name
+			startHeight = head.Height()
+			break
+		}
+	}
+	if watchName == "" {
+		// No node reachable — fall back to time
+		time.Sleep(time.Duration(n) * 10 * time.Second)
+		return
+	}
+
+	targetHeight := startHeight + abi.ChainEpoch(n)
+	timeout := time.After(time.Duration(n) * 60 * time.Second) // generous timeout
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timeout:
+			log.Printf("[nsplit] epoch wait timed out (watching=%s, target=%d)", watchName, targetHeight)
+			return
+		default:
+			head, err := nodes[watchName].ChainHead(ctx)
+			if err == nil && head.Height() >= targetHeight {
+				return
+			}
+			time.Sleep(3 * time.Second)
+		}
+	}
 }

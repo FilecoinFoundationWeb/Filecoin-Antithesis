@@ -148,17 +148,17 @@ services:
       #
       # --- Non-FOC stress vectors (consensus-focused) ---
       #
-      # Consensus chaos — fork induction + verification
-      - STRESS_WEIGHT_REORG=0 # off for nsplit testing
+      # Power table manipulation
       - STRESS_WEIGHT_POWER_SLASH=4 # power-aware miner slashing (quorum-safe)
-      - STRESS_WEIGHT_ADVERSARIAL=5 # double-spends, invalid sigs, nonce races
       # N-split attack vectors (EC/F3 threshold testing)
       - STRESS_WEIGHT_BISECTION=3 # creates partition topologies (star, bilateral, isolation)
       - STRESS_WEIGHT_HEAL=2 # reconnects all nodes to full mesh
-      - STRESS_WEIGHT_DSPEND_FORK=3 # opportunistic double-spend during detected forks
-      - STRESS_WEIGHT_DSPEND_VERIFY=2 # verifies pending double-spends resolved safely
+      - STRESS_WEIGHT_ADVERSARIAL_FORK=4 # double-spend, fee-snipe, balance-drain during forks
+      - STRESS_WEIGHT_ADVERSARIAL_VERIFY=2 # post-convergence safety verification
       # Background chain activity
-      - STRESS_WEIGHT_TRANSFER=2 # creates state changes for forks to reconcile
+      - STRESS_WEIGHT_TRANSFER=2 # FIL transfers (state changes for forks to reconcile)
+      - STRESS_WEIGHT_GAS_WAR=1 # mempool replacement across forks
+      - STRESS_WEIGHT_NONCE_RACE=1 # gas-premium race across different nodes
       - STRESS_WEIGHT_HEAVY_COMPUTE=1 # intra-node state recomputation verification
       # Cross-node consistency
       - STRESS_WEIGHT_RECEIPT_AUDIT=4 # asserts receipt fields match across every node
