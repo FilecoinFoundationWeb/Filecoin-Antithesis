@@ -315,6 +315,21 @@ func DoAdversarialDuringFork() {
 		return
 	}
 
+	// Skip unsynced nodes — a node at height 0 hasn't started, not a real fork
+	if finA.Height() < f3MinEpoch || finB.Height() < f3MinEpoch {
+		return
+	}
+
+	// Skip if nodes are just at different sync heights, not a real fork.
+	// A real fork = similar height, different tipset keys.
+	heightDiff := finA.Height() - finB.Height()
+	if heightDiff < 0 {
+		heightDiff = -heightDiff
+	}
+	if heightDiff > 20 {
+		return
+	}
+
 	if finA.Key() == finB.Key() {
 		return // no fork
 	}
