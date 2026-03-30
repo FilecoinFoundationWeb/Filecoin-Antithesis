@@ -543,19 +543,27 @@ func DoQuorumBoundaryTest() {
 // ===========================================================================
 
 func DoF3FinalityMonitor() {
-	// Pick a lotus node (forest may not support F3 API)
-	lotusNode, _ := pickLotusNode()
-	if lotusNode == nil {
+	// Query ALL lotus nodes and take the MAX instance. This avoids false
+	// regressions from querying a partitioned/lagging node — the highest
+	// instance across any node is the true F3 progress watermark.
+	var inst uint64
+	var found bool
+	for _, name := range nodeKeys {
+		if nodeType(name) != "lotus" {
+			continue
+		}
+		nodeInst, ok := getF3Instance(nodes[name])
+		if ok && nodeInst > inst {
+			inst = nodeInst
+			found = true
+		}
+	}
+	if !found {
 		return
 	}
 
 	f3LastCheckMu.Lock()
 	defer f3LastCheckMu.Unlock()
-
-	inst, ok := getF3Instance(lotusNode)
-	if !ok {
-		return
-	}
 
 	// Phase 1: record baseline and return
 	if f3LastCheckAt.IsZero() {
