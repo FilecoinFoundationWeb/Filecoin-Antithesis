@@ -255,36 +255,22 @@ func buildDeck() {
 		{"DoF3FinalityMonitor", "STRESS_WEIGHT_F3_MONITOR", DoF3FinalityMonitor, 2},
 	}
 
-	// Non-FOC stress vectors — skipped when FOC profile is active (covered by filecoin run)
+	// Non-FOC stress vectors — skipped when FOC profile is active
 	stress := []weightedAction{
-		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 0},
-		{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 0},
-		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 0},
-		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 0},
-		// FVM/EVM contract stress vectors
-		{"DoDeployContracts", "STRESS_WEIGHT_DEPLOY", DoDeployContracts, 2},
-		{"DoContractCall", "STRESS_WEIGHT_CONTRACT_CALL", DoContractCall, 3},
-		{"DoSelfDestructCycle", "STRESS_WEIGHT_SELFDESTRUCT", DoSelfDestructCycle, 1},
-		{"DoConflictingContractCalls", "STRESS_WEIGHT_CONTRACT_RACE", DoConflictingContractCalls, 2},
-		// Resource stress vectors
-		{"DoMaxBlockGas", "STRESS_WEIGHT_MAX_BLOCK_GAS", DoMaxBlockGas, 0},
-		{"DoLogBlaster", "STRESS_WEIGHT_LOG_BLASTER", DoLogBlaster, 0},
-		{"DoMemoryBomb", "STRESS_WEIGHT_MEMORY_BOMB", DoMemoryBomb, 0},
-		{"DoStorageSpam", "STRESS_WEIGHT_STORAGE_SPAM", DoStorageSpam, 0},
-		// Network chaos / reorg vectors
+		// Consensus chaos — fork induction + verification
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
-		// Power-aware miner slashing (replaces DoConsensusFault)
 		{"DoPowerAwareSlash", "STRESS_WEIGHT_POWER_SLASH", DoPowerAwareSlash, 0},
-		// Deliberate F3 quorum stall (opt-in, destructive)
-		{"DoQuorumBoundaryTest", "STRESS_WEIGHT_QUORUM_STALL", DoQuorumBoundaryTest, 0},
-		// Cross-node divergence vectors
+		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 0},
+		// N-split attack vectors (EC/F3 threshold testing)
+		{"DoNetworkBisection", "STRESS_WEIGHT_BISECTION", DoNetworkBisection, 2},
+		{"DoNetworkHeal", "STRESS_WEIGHT_HEAL", DoNetworkHeal, 2},
+		{"DoDoubleSpendDuringFork", "STRESS_WEIGHT_DSPEND_FORK", DoDoubleSpendDuringFork, 3},
+		{"DoDoubleSpendVerify", "STRESS_WEIGHT_DSPEND_VERIFY", DoDoubleSpendVerify, 2},
+		// Background chain activity (creates state changes for forks to reconcile)
+		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 1},
+		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 1},
+		// Cross-node consistency
 		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
-		{"DoMessageOrderingAttack", "STRESS_WEIGHT_MSG_ORDERING", DoMessageOrderingAttack, 1},
-		{"DoNonceBombard", "STRESS_WEIGHT_NONCE_BOMBARD", DoNonceBombard, 1},
-		{"DoGasExhaustionEdge", "STRESS_WEIGHT_GAS_EXHAUST", DoGasExhaustionEdge, 1},
-		// State tree consistency vectors
-		{"DoActorMigrationStress", "STRESS_WEIGHT_ACTOR_MIGRATION", DoActorMigrationStress, 1},
-		{"DoActorLifecycleStress", "STRESS_WEIGHT_ACTOR_LIFECYCLE", DoActorLifecycleStress, 1},
 	}
 
 	// Build actions list: consensus always, stress only when FOC is not active

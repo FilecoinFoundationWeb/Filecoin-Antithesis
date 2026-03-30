@@ -143,37 +143,25 @@ services:
       - STRESS_WEIGHT_HEAD_COMPARISON=3 # cross-node chain head match (Sometimes)
       - STRESS_WEIGHT_STATE_ROOT=4 # cross-node state root match (Sometimes)
       - STRESS_WEIGHT_STATE_AUDIT=3 # full state tree audit
-      - STRESS_WEIGHT_REORG=8 # power-aware reorg testing — main fork inducer
-      - STRESS_WEIGHT_POWER_SLASH=4 # power-aware miner slashing (quorum-safe)
       - STRESS_WEIGHT_F3_MONITOR=2 # passive F3 health monitor
-      # - STRESS_WEIGHT_QUORUM_STALL=0  # deliberate F3 stall (opt-in, destructive)
-      - FUZZER_ENABLED=1 # protocol fuzzer
+      - FUZZER_ENABLED=0 # protocol fuzzer off for consensus threshold testing
       #
-      # --- Non-FOC stress vectors ---
+      # --- Non-FOC stress vectors (consensus-focused) ---
       #
-      # EVM contract stress
-      - STRESS_WEIGHT_DEPLOY=1 # tests Init actor & state tree growth via EAM.CreateExternal
-      - STRESS_WEIGHT_CONTRACT_CALL=1 # invokes deep recursion, delegatecall, external recursive calls
-      - STRESS_WEIGHT_SELFDESTRUCT=1 # tests actor destruction state consistency across nodes
-      - STRESS_WEIGHT_CONTRACT_RACE=4 # conflicting txs to diff nodes — state divergence signal during forks
-      - STRESS_WEIGHT_HEAVY_COMPUTE=1 # checks recomputed state root matches stored parent
-      - STRESS_WEIGHT_LOG_BLASTER=1 # stresses receipt storage, bloom filters, and event indexing
-      - STRESS_WEIGHT_MEMORY_BOMB=1 # stresses FVM memory accounting and allocator
-      - STRESS_WEIGHT_STORAGE_SPAM=1 # stresses state trie (HAMT), SplitStore, and snapshot size
-      # FIL transfers
-      - STRESS_WEIGHT_TRANSFER=2 # creates state changes during forks for reconciliation
-      # Nonce/ordering chaos
-      - STRESS_WEIGHT_MSG_ORDERING=1 # tests interdependent cross-node message replacement/mempool ordering
-      - STRESS_WEIGHT_NONCE_BOMBARD=1 # tests N+x gap handling & out-of-order execution across nodes
-      - STRESS_WEIGHT_ADVERSARIAL=5 # double-spends exploit forks — core safety test
-      # Gas pressure
-      - STRESS_WEIGHT_GAS_EXHAUST=1 # tests high-gas call competing with small msgs across nodes
-      - STRESS_WEIGHT_GAS_WAR=1 # mempool replacement/greedy selection
-      - STRESS_WEIGHT_MAX_BLOCK_GAS=1 # maxes out block gas with tight keccak256 loop
+      # Consensus chaos — fork induction + verification
+      - STRESS_WEIGHT_REORG=0 # off for nsplit testing
+      - STRESS_WEIGHT_POWER_SLASH=4 # power-aware miner slashing (quorum-safe)
+      - STRESS_WEIGHT_ADVERSARIAL=5 # double-spends, invalid sigs, nonce races
+      # N-split attack vectors (EC/F3 threshold testing)
+      - STRESS_WEIGHT_BISECTION=3 # creates partition topologies (star, bilateral, isolation)
+      - STRESS_WEIGHT_HEAL=2 # reconnects all nodes to full mesh
+      - STRESS_WEIGHT_DSPEND_FORK=3 # opportunistic double-spend during detected forks
+      - STRESS_WEIGHT_DSPEND_VERIFY=2 # verifies pending double-spends resolved safely
+      # Background chain activity
+      - STRESS_WEIGHT_TRANSFER=2 # creates state changes for forks to reconcile
+      - STRESS_WEIGHT_HEAVY_COMPUTE=1 # intra-node state recomputation verification
       # Cross-node consistency
-      - STRESS_WEIGHT_RECEIPT_AUDIT=4 # asserts ALL receipt fields match across EVERY node
-      - STRESS_WEIGHT_ACTOR_MIGRATION=1 # burst-creates & deletes actors, asserts HAMT tree matches
-      - STRESS_WEIGHT_ACTOR_LIFECYCLE=1 # tests full actor lifecycle
+      - STRESS_WEIGHT_RECEIPT_AUDIT=4 # asserts receipt fields match across every node
       # --- FOC (Filecoin On-Chain Cloud) vectors ---
       # All FOC vectors require the `foc` compose profile to be active.
       # The lifecycle state machine must reach "Ready" before steady-state
@@ -202,8 +190,7 @@ services:
       - CURIO_PDP_URL=http://curio:80
 
       - STRESS_DEBUG=1
-      # Protocol fuzzer config
-      - FUZZER_ENABLED=1
+      # Protocol fuzzer config (weights for when FUZZER_ENABLED=1)
       - FUZZER_RATE_MS=500
       - FUZZER_DEBUG=1
       - FUZZER_IDENTITY_POOL_SIZE=20
