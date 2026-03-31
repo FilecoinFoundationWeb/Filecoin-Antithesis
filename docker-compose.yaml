@@ -225,6 +225,22 @@ services:
       - ./data/forest0:/root/devgen/forest0
       - ./data/curio:/root/devgen/curio
 
+  hegel-workload:
+    <<: [ *filecoin_service ]
+    image: hegel-workload:latest
+    container_name: hegel-workload
+    environment:
+      - STRESS_NODES=lotus0,lotus1,lotus2,lotus3,forest0
+      - ANTITHESIS_OUTPUT_DIR=/tmp/antithesis
+      - HEGEL_BATCH_SIZE=100
+      - RUST_LOG=info
+    volumes:
+      - ./data/lotus0:/root/devgen/lotus0
+      - ./data/lotus1:/root/devgen/lotus1
+      - ./data/lotus2:/root/devgen/lotus2
+      - ./data/lotus3:/root/devgen/lotus3
+      - ./data/forest0:/root/devgen/forest0
+
   lotus-miner0:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
     image: lotus:${LOTUS_MINER_0_TAG:-${LOTUS_TAG:-latest}}
