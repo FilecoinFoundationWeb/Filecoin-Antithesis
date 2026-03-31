@@ -37,27 +37,35 @@ WORKDIR /forest
 COPY ./forest_config.toml.tpl .
 COPY libvoidstar.so /usr/local/lib/libvoidstar.so
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}" 
-# Build forest binaries + Rust instrumentation on main forest binary for code coverage
+# Build forest binaries + optional Rust instrumentation on main forest binary for code coverage
+# LOCAL_BUILD=1 (default): skip instrumentation for fast local builds
+# LOCAL_BUILD=0 (CI): enable Antithesis instrumentation with libvoidstar
 RUN cargo build --release --bin forest-cli && \
     cargo build --release --bin forest-tool && \
     cargo build --release --bin forest-wallet && \
     cp /forest/target/release/forest-cli /usr/local/cargo/bin/forest-cli && \
     cp /forest/target/release/forest-tool /usr/local/cargo/bin/forest-tool && \
     cp /forest/target/release/forest-wallet /usr/local/cargo/bin/forest-wallet && \
-    # Setup Antithesis instrumentation
-    export LD_LIBRARY_PATH=/usr/local/lib && \
-    export RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 \
-    -Cllvm-args=-sanitizer-coverage-trace-pc-guard -Clink-arg=-Wl,-z,undefs \
-    -Clink-args=-Wl,--build-id -L/usr/local/lib -lvoidstar" && \
-    cd /forest && \
-    sed -i 's/strip = true/strip = false/' Cargo.toml && \
-    cargo build --release --bin forest && \
-    cp /forest/target/release/forest /usr/local/cargo/bin/forest && \
-    cd / && \
-    mkdir -p /symbols && \
-    ln -s /usr/local/cargo/bin/forest /symbols/forest && \
-    ldd /symbols/forest | grep "libvoidstar" && \
-    nm /symbols/forest | grep "sanitizer_cov_trace_pc_guard";
+    if [ "$LOCAL_BUILD" = "0" ]; then \
+      echo "Building forest with Antithesis instrumentation..." && \
+      export LD_LIBRARY_PATH=/usr/local/lib && \
+      export RUSTFLAGS="-Ccodegen-units=1 -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=3 \
+      -Cllvm-args=-sanitizer-coverage-trace-pc-guard -Clink-arg=-Wl,-z,undefs \
+      -Clink-args=-Wl,--build-id -L/usr/local/lib -lvoidstar" && \
+      sed -i 's/strip = true/strip = false/' Cargo.toml && \
+      cargo build --release --bin forest && \
+      cp /forest/target/release/forest /usr/local/cargo/bin/forest && \
+      mkdir -p /symbols && \
+      ln -s /usr/local/cargo/bin/forest /symbols/forest && \
+      ldd /symbols/forest | grep "libvoidstar" && \
+      nm /symbols/forest | grep "sanitizer_cov_trace_pc_guard"; \
+    else \
+      echo "Building forest without instrumentation (local build)..." && \
+      cargo build --release --bin forest && \
+      cp /forest/target/release/forest /usr/local/cargo/bin/forest && \
+      mkdir -p /symbols && \
+      ln -s /usr/local/cargo/bin/forest /symbols/forest; \
+    fi
 
 WORKDIR /forest
 
