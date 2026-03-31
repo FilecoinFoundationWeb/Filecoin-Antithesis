@@ -2,6 +2,7 @@ mod cbor;
 mod discovery;
 mod generators;
 mod network;
+mod properties;
 
 use log::info;
 
