@@ -2,11 +2,12 @@
 # ==========================================
 -include versions.env
 
-# Git tags/commits for each image
-drand_tag = $(shell git ls-remote --tags https://github.com/drand/drand.git | grep -E 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1 | sed 's/.*refs\/tags\///')
-lotus_tag = $(shell git ls-remote https://github.com/filecoin-project/lotus.git HEAD | cut -f1)
-curio_tag = $(shell git ls-remote https://github.com/filecoin-project/curio.git refs/heads/pdpv0 | cut -f1)
-forest_commit = $(shell git ls-remote https://github.com/ChainSafe/forest.git HEAD | cut -f1)
+# Pinned versions — read from each Dockerfile so builds are reproducible.
+# To update: change the pinned value in the Dockerfile, then run `make check-versions`.
+drand_tag    = $(shell grep -oP 'ARG GIT_BRANCH="\K[^"]+' drand/Dockerfile)
+lotus_tag    = $(shell grep -oP 'ARG REF="\K[^"]+' lotus/Dockerfile)
+curio_tag    = $(shell grep -oP 'ARG GIT_COMMIT="\K[^"]+' curio/Dockerfile)
+forest_commit = $(shell grep -oP 'ARG GIT_COMMIT="\K[^"]+' forest/Dockerfile)
 
 # Docker configuration
 builder = docker
@@ -53,6 +54,36 @@ show-arch:
 	@echo "Docker platform: $(DOCKER_PLATFORM)"
 
 # ==========================================
+# Version drift check
+# ==========================================
+.PHONY: check-versions
+check-versions:
+	@echo "Checking pinned versions against upstream..."
+	@UP_DRAND=$$(git ls-remote --tags https://github.com/drand/drand.git \
+		| grep -E 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1 | sed 's/.*refs\/tags\///'); \
+	UP_LOTUS=$$(git ls-remote https://github.com/filecoin-project/lotus.git HEAD | cut -f1); \
+	UP_CURIO=$$(git ls-remote https://github.com/filecoin-project/curio.git refs/heads/pdpv0 | cut -f1); \
+	UP_FOREST=$$(git ls-remote https://github.com/ChainSafe/forest.git HEAD | cut -f1); \
+	WARN=0; \
+	if [ "$$UP_DRAND" != "$(drand_tag)" ]; then \
+		echo "  WARNING: drand pinned=$(drand_tag)  upstream=$$UP_DRAND"; WARN=1; \
+	else echo "  drand: up to date ($(drand_tag))"; fi; \
+	if [ "$$UP_LOTUS" != "$(lotus_tag)" ]; then \
+		echo "  WARNING: lotus pinned=$(lotus_tag)  upstream=$$UP_LOTUS"; WARN=1; \
+	else echo "  lotus: up to date ($(lotus_tag))"; fi; \
+	if [ "$$UP_CURIO" != "$(curio_tag)" ]; then \
+		echo "  WARNING: curio pinned=$(curio_tag)  upstream=$$UP_CURIO"; WARN=1; \
+	else echo "  curio: up to date ($(curio_tag))"; fi; \
+	if [ "$$UP_FOREST" != "$(forest_commit)" ]; then \
+		echo "  WARNING: forest pinned=$(forest_commit)  upstream=$$UP_FOREST"; WARN=1; \
+	else echo "  forest: up to date ($(forest_commit))"; fi; \
+	if [ "$$WARN" -eq 1 ]; then \
+		echo ""; \
+		echo "Some pinned versions are behind upstream."; \
+		echo "To update: change the pinned value in the relevant Dockerfile, re-test patches, and commit."; \
+	fi
+
+# ==========================================
 # Build individual images
 # ==========================================
 .PHONY: build-drand
@@ -65,7 +96,7 @@ build-drand:
 build-lotus:
 	@echo "Building lotus for $(TARGET_ARCH)..."
 	@echo "  Git commit: $(lotus_tag)"
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(lotus_tag) -t lotus:latest -f lotus/Dockerfile lotus
+	$(BUILD_CMD) --build-arg=REF=$(lotus_tag) -t lotus:latest -f lotus/Dockerfile lotus
 
 .PHONY: build-forest
 build-forest:
@@ -78,7 +109,7 @@ build-curio:
 	@echo "Building curio for $(TARGET_ARCH)..."
 	@echo "  Git commit: $(curio_tag)"
 	@echo "  Build mode: $(BUILD_MODE)"
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(curio_tag) --build-arg=LOTUS_TAG=$(lotus_tag) --build-arg=BUILD_MODE=$(BUILD_MODE) -t curio:latest -f curio/Dockerfile curio
+	$(BUILD_CMD) --build-arg=GIT_COMMIT=$(curio_tag) --build-arg=LOTUS_TAG=$(lotus_tag) --build-arg=BUILD_MODE=$(BUILD_MODE) -t curio:latest -f curio/Dockerfile curio
 
 .PHONY: build-workload
 build-workload:
@@ -201,6 +232,7 @@ help:
 	@echo ""
 	@echo "Info:"
 	@echo "  make show-versions    Show all image version tags"
+	@echo "  make check-versions   Check pinned versions against upstream"
 	@echo "  make show-arch        Show target architecture"
 	@echo ""
 	@echo "Current arch: $(TARGET_ARCH)"
