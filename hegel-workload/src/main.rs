@@ -1,5 +1,6 @@
 mod cbor;
 mod discovery;
+mod generators;
 mod network;
 
 use log::info;
