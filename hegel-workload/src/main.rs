@@ -1,4 +1,5 @@
 mod cbor;
+mod discovery;
 
 use log::info;
 
