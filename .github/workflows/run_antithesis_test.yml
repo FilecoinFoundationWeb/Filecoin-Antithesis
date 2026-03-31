@@ -2,7 +2,7 @@ name: Run Antithesis Test
 
 on: 
   schedule:
-    - cron: '0 1 * * *'  # 8 PM EST
+    - cron: '30 15 * * *'  # 9 PM IST / 3:30 PM UTC (report arrives ~9 AM IST after 12hr run)
   workflow_dispatch:
     inputs:
       endpoint:
@@ -144,7 +144,7 @@ jobs:
 
   scheduled_run_a:
     name: "Nightly @ 8 PM EST - Implementors Team"
-    if: github.event_name == 'schedule' && github.event.schedule == '0 1 * * *'
+    if: github.event_name == 'schedule' && github.event.schedule == '30 15 * * *'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -168,7 +168,7 @@ jobs:
       
   scheduled_run_b:
     name: "Nightly @ 8 PM EST - FOC Team"
-    if: github.event_name == 'schedule' && github.event.schedule == '0 1 * * *'
+    if: github.event_name == 'schedule' && github.event.schedule == '30 15 * * *'
     runs-on: ubuntu-latest
     permissions:
       contents: read
