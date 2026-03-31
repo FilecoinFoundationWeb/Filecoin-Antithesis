@@ -17,8 +17,8 @@ BUILD_CMD = docker build
 TARGET_ARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 DOCKER_PLATFORM = linux/$(TARGET_ARCH)
 
-# Build mode: "local" uses local images, "remote" uses Antithesis registry
-BUILD_MODE ?= local
+# Build mode: empty for local images, "remote" uses Antithesis registry
+BUILD_MODE ?=
 
 # ==========================================
 # Show version info
@@ -109,7 +109,7 @@ build-curio:
 	@echo "Building curio for $(TARGET_ARCH)..."
 	@echo "  Git commit: $(curio_tag)"
 	@echo "  Build mode: $(BUILD_MODE)"
-	$(BUILD_CMD) --build-arg=GIT_COMMIT=$(curio_tag) --build-arg=LOTUS_TAG=$(lotus_tag) --build-arg=BUILD_MODE=$(BUILD_MODE) -t curio:latest -f curio/Dockerfile curio
+	$(BUILD_CMD) --build-arg=GIT_COMMIT=$(curio_tag) --build-arg=LOTUS_TAG=latest --build-arg=BUILD_MODE=$(BUILD_MODE) -t curio:latest -f curio/Dockerfile curio
 
 .PHONY: build-workload
 build-workload:
