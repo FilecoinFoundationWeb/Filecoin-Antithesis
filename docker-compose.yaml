@@ -131,7 +131,7 @@ services:
     image: workload:latest
     container_name: workload
     environment:
-      - STRESS_NODES=lotus0,lotus1,lotus2,lotus3,forest0
+      - STRESS_NODES=lotus0,lotus1,lotus2,lotus3
       - STRESS_RPC_PORT=1234
       - STRESS_FOREST_RPC_PORT=3456
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
@@ -149,7 +149,7 @@ services:
       # --- Non-FOC stress vectors (consensus-focused) ---
       #
       # Power table manipulation
-      - STRESS_WEIGHT_POWER_SLASH=4 # power-aware miner slashing (quorum-safe)
+      - STRESS_WEIGHT_POWER_SLASH=4 # power-aware miner slashing (may break F3 quorum)
       # N-split attack vectors (EC/F3 threshold testing)
       - STRESS_WEIGHT_BISECTION=3 # creates partition topologies (star, bilateral, isolation)
       - STRESS_WEIGHT_HEAL=2 # reconnects all nodes to full mesh

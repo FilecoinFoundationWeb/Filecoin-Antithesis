@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/hex"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -110,21 +112,25 @@ func DoHeavyCompute() {
 const (
 	consensusWalkEpochs = 5
 	finalizedMinHeight  = 5  // skip checks until finalized tipset is past this
-	f3MinEpoch          = 10 // minimum chain head height on all nodes before F3 checks run
+	f3MinEpoch          = 21 // minimum chain head height before finality-dependent checks run (must exceed EC finality depth 20)
 )
 
-// allNodesPastEpoch returns true only if every node's chain head is at or above minEpoch.
+// allNodesPastEpoch returns true if the highest chain head across all nodes
+// is at or above minEpoch. Uses max height rather than requiring every node
+// past the threshold — during EC reorgs without F3, nodes may temporarily
+// reorg to shorter chains, but the network has matured if any node reached it.
 func allNodesPastEpoch(minEpoch abi.ChainEpoch) bool {
+	var maxHeight abi.ChainEpoch
 	for _, name := range nodeKeys {
 		head, err := nodes[name].ChainHead(ctx)
 		if err != nil {
-			return false
+			continue
 		}
-		if head.Height() < minEpoch {
-			return false
+		if head.Height() > maxHeight {
+			maxHeight = head.Height()
 		}
 	}
-	return true
+	return maxHeight >= minEpoch
 }
 
 // getFinalizedHeight returns the minimum finalized tipset height across nodes.
@@ -237,6 +243,9 @@ func DoTipsetConsensus() {
 // doHeightProgression checks that all nodes are advancing.
 // Ported from node-health.go CheckHeightProgression.
 func DoHeightProgression() {
+	if !allNodesPastEpoch(f3MinEpoch) {
+		return
+	}
 	heights := make(map[string]abi.ChainEpoch)
 	for _, name := range nodeKeys {
 		finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
@@ -785,4 +794,116 @@ func verifyForks(minHead abi.ChainEpoch) {
 	}
 
 	trackedForks = remaining
+}
+
+// ===========================================================================
+// DoF3FinalityAgreement — Cross-Node F3 Certificate Consistency
+//
+// Verifies that all nodes that finalized the same F3 instance agreed on the
+// SAME ECChain. Catches determinism bugs where validators reach the same
+// GPBFT round but finalize different state.
+
+// Safe to use assert.Always because:
+//   - During partitions where no side has >67% power, F3 produces no new
+//     certificates — there is nothing to disagree on.
+//   - During partitions where one side has >67% power, only that side
+//     produces certificates — the minority has no conflicting cert.
+//   - The only way two nodes both hold a certificate for instance N with
+//     different ECChain keys is a BFT-layer determinism bug.
+// ===========================================================================
+
+func DoF3FinalityAgreement() {
+	if len(nodeKeys) < 2 {
+		return
+	}
+	if !allNodesPastEpoch(f3MinEpoch) {
+		return
+	}
+
+	// Find the minimum F3 instance across all responsive lotus nodes.
+	// Every node at or past this instance must have a certificate for it.
+	var minInst uint64
+	respondedNodes := 0
+	for _, name := range nodeKeys {
+		if nodeType(name) != "lotus" {
+			continue
+		}
+		inst, ok := getF3Instance(nodes[name])
+		if !ok {
+			continue
+		}
+		respondedNodes++
+		if respondedNodes == 1 || inst < minInst {
+			minInst = inst
+		}
+	}
+	if respondedNodes < 2 || minInst < 2 {
+		return
+	}
+
+	// Pick a random already-finalized instance to audit (not the latest —
+	// check a settled one to avoid races with in-progress instances).
+	checkInst := uint64(rngIntn(int(minInst-1))) + 1
+
+	// Query each lotus node for the F3 certificate at this instance.
+	type nodeResult struct {
+		name     string
+		chainKey string // hex-encoded ECChain key digest
+		err      error
+	}
+
+	var results []nodeResult
+	for _, name := range nodeKeys {
+		if nodeType(name) != "lotus" {
+			continue
+		}
+		cert, err := nodes[name].F3GetCertificate(ctx, checkInst)
+		if err != nil {
+			results = append(results, nodeResult{name: name, err: err})
+			continue
+		}
+		if cert == nil || cert.ECChain.IsZero() {
+			results = append(results, nodeResult{name: name, err: fmt.Errorf("nil cert or zero chain")})
+			continue
+		}
+		key := cert.ECChain.Key()
+		results = append(results, nodeResult{name: name, chainKey: hex.EncodeToString(key[:])})
+	}
+
+	// Group by finalized ECChain key
+	chainKeys := map[string][]string{} // chain key hex -> node names
+	var errors int
+	for _, r := range results {
+		if r.err != nil {
+			errors++
+			continue
+		}
+		chainKeys[r.chainKey] = append(chainKeys[r.chainKey], r.name)
+	}
+
+	responded := len(results) - errors
+	if responded < 2 {
+		return
+	}
+
+	agreed := len(chainKeys) == 1
+
+	assert.Always(agreed, "F3 finality agreement: all nodes finalized same chain for instance", map[string]any{
+		"instance":        checkInst,
+		"unique_chains":   len(chainKeys),
+		"chain_map":       chainKeys,
+		"nodes_responded": responded,
+		"nodes_errored":   errors,
+	})
+
+	if !agreed {
+		log.Printf("[f3-agreement] FINALITY DISAGREEMENT at instance %d: %v", checkInst, chainKeys)
+	} else {
+		debugLog("[f3-agreement] instance %d: all %d nodes agree", checkInst, responded)
+	}
+
+	assert.Sometimes(agreed, "F3 finality agreement check ran successfully", map[string]any{
+		"instance":        checkInst,
+		"nodes_responded": responded,
+	})
 }
