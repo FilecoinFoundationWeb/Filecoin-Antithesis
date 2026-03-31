@@ -87,13 +87,24 @@ pub async fn run_network(
         }
     }
 
+    // Drive swarm events during mesh formation wait
     info!("waiting 5s for GossipSub mesh formation...");
-    let mesh_wait = tokio::time::sleep(Duration::from_secs(5));
-    tokio::pin!(mesh_wait);
+    let mesh_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < mesh_deadline {
+        tokio::select! {
+            _ = tokio::time::sleep_until(mesh_deadline) => { break; }
+            event = swarm.select_next_some() => {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event {
+                    info!("connected to {} during mesh formation", peer_id);
+                }
+            }
+        }
+    }
+    info!("mesh formation complete, entering event loop");
 
+    // Main event loop
     loop {
         tokio::select! {
-            _ = &mut mesh_wait => {}
             event = swarm.select_next_some() => {
                 match event {
                     SwarmEvent::ConnectionEstablished { peer_id, .. } => {

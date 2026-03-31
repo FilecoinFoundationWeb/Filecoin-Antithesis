@@ -93,7 +93,7 @@ pub fn big_int_bytes(v: u64) -> Vec<u8> {
 
 pub fn random_cid() -> Vec<u8> {
     use sha2::{Digest, Sha256};
-    let data: Vec<u8> = (0..32).map(|_| rand_byte()).collect();
+    let data = random_bytes(32);
     let hash = Sha256::digest(&data);
     let mut cid = Vec::new();
     cid.push(0x01); // CIDv1
@@ -104,13 +104,12 @@ pub fn random_cid() -> Vec<u8> {
     cid
 }
 
-fn rand_byte() -> u8 {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    let s = RandomState::new();
-    let mut h = s.build_hasher();
-    h.write_u8(0);
-    (h.finish() & 0xFF) as u8
+/// Generate random bytes using getrandom. Inside Antithesis, getrandom is
+/// intercepted so this is deterministic per-run.
+pub fn random_bytes(len: usize) -> Vec<u8> {
+    let mut buf = vec![0u8; len];
+    getrandom::getrandom(&mut buf).expect("getrandom failed");
+    buf
 }
 
 #[cfg(test)]

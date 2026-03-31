@@ -226,7 +226,7 @@ services:
       - ./data/curio:/root/devgen/curio
 
   hegel-workload:
-    <<: [ *filecoin_service ]
+    <<: [ *filecoin_service, *needs_lotus0_healthy ]
     image: hegel-workload:latest
     container_name: hegel-workload
     environment:
