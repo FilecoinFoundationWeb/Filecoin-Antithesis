@@ -1,5 +1,5 @@
 # Stage 1: Build the Rust binary
-FROM rust:1.82 AS builder
+FROM rust:1.86 AS builder
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src/ ./src/
