@@ -153,8 +153,8 @@ func remainingPowerPct(table []minerPowerInfo, target address.Address) float64 {
 // ===========================================================================
 
 var (
-	f3LastInstance uint64
-	f3LastCheckAt  time.Time
+	f3LastInstance = make(map[string]uint64)
+	f3LastCheckAt  = make(map[string]time.Time)
 	f3LastCheckMu  sync.Mutex
 )
 
@@ -544,7 +544,7 @@ func DoQuorumBoundaryTest() {
 
 func DoF3FinalityMonitor() {
 	// Pick a lotus node (forest may not support F3 API)
-	lotusNode, _ := pickLotusNode()
+	lotusNode, nodeName := pickLotusNode()
 	if lotusNode == nil {
 		return
 	}
@@ -557,25 +557,26 @@ func DoF3FinalityMonitor() {
 		return
 	}
 
-	// Phase 1: record baseline and return
-	if f3LastCheckAt.IsZero() {
-		f3LastInstance = inst
-		f3LastCheckAt = time.Now()
-		debugLog("[f3-monitor] baseline recorded: instance=%d", inst)
+	// Phase 1: record baseline for this node and return
+	if f3LastCheckAt[nodeName].IsZero() {
+		f3LastInstance[nodeName] = inst
+		f3LastCheckAt[nodeName] = time.Now()
+		debugLog("[f3-monitor] baseline recorded: node=%s instance=%d", nodeName, inst)
 		return
 	}
 
-	// Phase 2: check only if enough time has passed
-	if time.Since(f3LastCheckAt) < 15*time.Second {
+	// Phase 2: check only if enough time has passed for this node
+	if time.Since(f3LastCheckAt[nodeName]) < 15*time.Second {
 		return
 	}
 
-	prevInst := f3LastInstance
-	f3LastInstance = inst
-	f3LastCheckAt = time.Now()
+	prevInst := f3LastInstance[nodeName]
+	f3LastInstance[nodeName] = inst
+	f3LastCheckAt[nodeName] = time.Now()
 
-	// Safety: F3 instance should never regress
+	// Safety: F3 instance should never regress on the same node
 	assert.Always(inst >= prevInst, "F3 instance never regresses", map[string]any{
+		"node":     nodeName,
 		"previous": prevInst,
 		"current":  inst,
 	})
@@ -583,12 +584,13 @@ func DoF3FinalityMonitor() {
 	// Liveness: F3 should be making progress
 	advanced := inst > prevInst
 	assert.Sometimes(advanced, "F3 is making progress", map[string]any{
+		"node":     nodeName,
 		"previous": prevInst,
 		"current":  inst,
 	})
 
 	if advanced {
-		debugLog("[f3-monitor] F3 instance %d → %d", prevInst, inst)
+		debugLog("[f3-monitor] %s F3 instance %d → %d", nodeName, prevInst, inst)
 	}
 
 	// Cross-node consistency: check all lotus nodes
