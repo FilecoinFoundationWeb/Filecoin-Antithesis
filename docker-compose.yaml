@@ -230,7 +230,7 @@ services:
     image: hegel-workload:latest
     container_name: hegel-workload
     environment:
-      - STRESS_NODES=lotus0,lotus1,lotus2,lotus3,forest0
+      - STRESS_NODES=${STRESS_NODES:-lotus0,lotus1}
       - ANTITHESIS_OUTPUT_DIR=/tmp/antithesis
       - HEGEL_BATCH_SIZE=100
       - RUST_LOG=info
