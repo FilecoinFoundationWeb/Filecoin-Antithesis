@@ -57,11 +57,15 @@ pub fn build_swarm() -> Result<Swarm<gossipsub::Behaviour>, Box<dyn std::error::
 
 /// Run the network event loop. Connects to peers, subscribes to topics, and
 /// publishes messages received on the `rx` channel.
+///
+/// Sends a signal on `ready_tx` once at least one peer has joined the mesh
+/// for any subscribed topic, so the generator knows it can start publishing.
 pub async fn run_network(
     mut swarm: Swarm<gossipsub::Behaviour>,
     peers: Vec<(Multiaddr, PeerId)>,
     topics: Vec<String>,
     mut rx: mpsc::Receiver<PublishRequest>,
+    ready_tx: tokio::sync::oneshot::Sender<()>,
 ) {
     // Listen on random port
     swarm
@@ -78,21 +82,41 @@ pub async fn run_network(
     }
 
     // Subscribe to topics
-    for topic_str in &topics {
-        let topic = IdentTopic::new(topic_str);
-        if let Err(e) = swarm.behaviour_mut().subscribe(&topic) {
-            warn!("failed to subscribe to {}: {}", topic_str, e);
-        } else {
-            info!("subscribed to {}", topic_str);
-        }
-    }
+    let topic_hashes: Vec<_> = topics
+        .iter()
+        .map(|t| {
+            let topic = IdentTopic::new(t);
+            if let Err(e) = swarm.behaviour_mut().subscribe(&topic) {
+                warn!("failed to subscribe to {}: {}", t, e);
+            } else {
+                info!("subscribed to {}", t);
+            }
+            topic.hash()
+        })
+        .collect();
 
-    // Drive swarm events during mesh formation wait
-    info!("waiting 5s for GossipSub mesh formation...");
-    let mesh_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    // Wait for at least one peer in the mesh for any topic (up to 60s)
+    info!("waiting for GossipSub mesh peers...");
+    let mesh_deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    let mut ready_tx = Some(ready_tx);
     while tokio::time::Instant::now() < mesh_deadline {
+        // Check if any topic has mesh peers
+        if ready_tx.is_some() {
+            for hash in &topic_hashes {
+                if !swarm.behaviour().mesh_peers(hash).collect::<Vec<_>>().is_empty() {
+                    info!("mesh formed — peers available, signalling ready");
+                    if let Some(tx) = ready_tx.take() {
+                        let _ = tx.send(());
+                    }
+                    break;
+                }
+            }
+        }
+        if ready_tx.is_none() {
+            break;
+        }
         tokio::select! {
-            _ = tokio::time::sleep_until(mesh_deadline) => { break; }
+            _ = tokio::time::sleep(Duration::from_millis(500)) => {}
             event = swarm.select_next_some() => {
                 if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event {
                     info!("connected to {} during mesh formation", peer_id);
@@ -100,7 +124,11 @@ pub async fn run_network(
             }
         }
     }
-    info!("mesh formation complete, entering event loop");
+    if let Some(tx) = ready_tx.take() {
+        warn!("mesh formation timed out after 60s, proceeding anyway");
+        let _ = tx.send(());
+    }
+    info!("entering event loop");
 
     // Main event loop
     loop {

@@ -12,6 +12,7 @@ use properties::log_generation;
 
 use hegel::generators as gs;
 use log::{error, info, warn};
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 fn main() {
@@ -30,6 +31,12 @@ fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(100);
+    let publish_delay: Duration = Duration::from_millis(
+        std::env::var("PUBLISH_DELAY_MS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(500),
+    );
 
     info!(
         "config: nodes={:?}, network={}, batch_size={}",
@@ -52,6 +59,7 @@ fn main() {
     // Build swarm and channel
     let swarm = build_swarm().expect("failed to build libp2p swarm");
     let (tx, rx) = mpsc::channel::<PublishRequest>(256);
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
 
     // Prepare peer info for the network task
     let peers: Vec<_> = nodes.iter().map(|n| (n.addr.clone(), n.peer_id)).collect();
@@ -60,10 +68,11 @@ fn main() {
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
 
     // Spawn network task
-    rt.spawn(run_network(swarm, peers, topics, rx));
+    rt.spawn(run_network(swarm, peers, topics, rx, ready_tx));
 
-    // Wait for mesh formation before generating
-    std::thread::sleep(std::time::Duration::from_secs(8));
+    // Wait for mesh to be ready before generating
+    info!("waiting for mesh to be ready...");
+    let _ = rt.block_on(ready_rx);
     info!("starting Hegel generation loop");
 
     // Main Hegel loop
@@ -91,6 +100,8 @@ fn main() {
                         data,
                     });
                 }
+
+                std::thread::sleep(publish_delay);
             })
             .settings(hegel::Settings::new().test_cases(batch_size))
             .run();
