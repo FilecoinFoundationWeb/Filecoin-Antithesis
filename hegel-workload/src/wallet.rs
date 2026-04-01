@@ -26,8 +26,10 @@ pub fn parse_keystore(json_str: &str) -> Result<Vec<Wallet>, String> {
 
     let mut wallets = Vec::with_capacity(entries.len());
     for entry in entries {
-        let address = Network::Testnet
+        // Try mainnet first (f-prefix), fall back to testnet (t-prefix)
+        let address = Network::Mainnet
             .parse_address(&entry.address)
+            .or_else(|_| Network::Testnet.parse_address(&entry.address))
             .map_err(|e| format!("invalid address '{}': {}", entry.address, e))?;
 
         let private_key = hex::decode(&entry.private_key)
