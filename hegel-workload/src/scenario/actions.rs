@@ -292,7 +292,11 @@ pub fn publish_msg_rpc(tc: hegel::TestCase, msg: &SignedMsg, io: &ScenarioIO) {
             "GasFeeCap": msg.message.gas_fee_cap.atto().to_string(),
             "GasPremium": msg.message.gas_premium.atto().to_string(),
             "Method": msg.message.method_num,
-            "Params": null,
+            "Params": if msg.message.params.bytes().is_empty() {
+                serde_json::Value::Null
+            } else {
+                serde_json::Value::String(base64_encode(msg.message.params.bytes()))
+            },
         },
         "Signature": {
             "Type": 1,
@@ -385,8 +389,8 @@ pub fn wait_for_inclusion(msg: &SignedMsg, io: &ScenarioIO) -> Option<IncludedMs
     let addr_str = msg.message.from.to_string();
     let nonce = msg.message.sequence;
 
-    // Poll every 2s for up to 60s
-    for _ in 0..30 {
+    // Poll every 2s for up to 20s (keep scenarios moving)
+    for _ in 0..10 {
         std::thread::sleep(std::time::Duration::from_secs(2));
 
         for (_, client) in &io.rpc_clients {
@@ -398,7 +402,7 @@ pub fn wait_for_inclusion(msg: &SignedMsg, io: &ScenarioIO) -> Option<IncludedMs
                     log::debug!("scenario: message from {} nonce {} included", addr_str, nonce);
                     antithesis_sdk::assert_sometimes!(
                         true,
-                        "Scenario: message included on-chain",
+                        "Scenario: message left mempool",
                         &serde_json::json!({"from": addr_str, "nonce": nonce})
                     );
                     return Some(IncludedMsg { original: msg.clone() });
