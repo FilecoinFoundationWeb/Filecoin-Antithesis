@@ -6,6 +6,7 @@ mod network;
 mod properties;
 mod rpc;
 mod scenario;
+mod wallet;
 
 use assertions::{mark_p2p_active, run_rpc_monitor, run_rpc_traffic};
 use discovery::discover_nodes;
