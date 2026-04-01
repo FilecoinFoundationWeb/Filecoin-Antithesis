@@ -17,3 +17,8 @@ getrandom = "0.2"
 futures = "0.3"
 fvm_shared = { version = "4", features = [] }
 fvm_ipld_encoding = "0.5"
+serde_bytes = "0.11"
+serde = { version = "1", features = ["derive"] }
+cid = { version = "0.11", features = ["serde"] }
+multihash-codetable = { version = "0.1", features = ["sha2"] }
+multihash = "0.19"
