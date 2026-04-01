@@ -1,5 +1,6 @@
 use crate::generators::blocks::block_msg;
 use crate::generators::messages::signed_message;
+use crate::network::PublishRequest;
 use crate::scenario::types::*;
 use crate::wallet::sign_message;
 use fvm_ipld_encoding::{to_vec as cbor_serialize, RawBytes};
@@ -252,6 +253,150 @@ pub fn create_fuzzed_msg(tc: hegel::TestCase) -> SignedMsg {
 pub fn create_fuzzed_block(tc: hegel::TestCase) -> FuzzedBlock {
     let cbor_bytes: Vec<u8> = tc.draw(block_msg());
     FuzzedBlock { cbor_bytes }
+}
+
+// ---------------------------------------------------------------------------
+// Delivery actions
+// ---------------------------------------------------------------------------
+
+/// Publish a signed message over GossipSub P2P.
+pub fn publish_msg_p2p(msg: &SignedMsg, io: &ScenarioIO) {
+    let _ = io.p2p_tx.blocking_send(PublishRequest {
+        topic: io.msgs_topic.clone(),
+        data: msg.cbor_bytes.clone(),
+    });
+    crate::assertions::mark_p2p_active();
+    log::debug!("scenario: published msg via P2P ({} bytes)", msg.cbor_bytes.len());
+}
+
+/// Publish a signed message via RPC MpoolPush to a random node.
+pub fn publish_msg_rpc(tc: hegel::TestCase, msg: &SignedMsg, io: &ScenarioIO) {
+    if io.rpc_clients.is_empty() {
+        return;
+    }
+    let idx: usize = tc.draw(gs::integers::<usize>().min_value(0).max_value(io.rpc_clients.len() - 1));
+    let (name, client) = &io.rpc_clients[idx];
+
+    // Build JSON representation for MpoolPush
+    let sig_bytes = msg.signature.bytes();
+    let sig_b64 = base64_encode(sig_bytes);
+
+    let msg_json = serde_json::json!({
+        "Message": {
+            "Version": msg.message.version,
+            "To": msg.message.to.to_string(),
+            "From": msg.message.from.to_string(),
+            "Nonce": msg.message.sequence,
+            "Value": msg.message.value.atto().to_string(),
+            "GasLimit": msg.message.gas_limit,
+            "GasFeeCap": msg.message.gas_fee_cap.atto().to_string(),
+            "GasPremium": msg.message.gas_premium.atto().to_string(),
+            "Method": msg.message.method_num,
+            "Params": null,
+        },
+        "Signature": {
+            "Type": 1,
+            "Data": sig_b64,
+        }
+    });
+
+    let accepted = io.rt_handle.block_on(client.mpool_push_raw(&msg_json));
+    log::debug!("scenario: published msg via RPC to {} (accepted={})", name, accepted);
+    crate::assertions::mark_rpc_active();
+}
+
+/// Publish a fuzzed block over GossipSub P2P.
+pub fn publish_block_p2p(block: &FuzzedBlock, io: &ScenarioIO) {
+    let _ = io.p2p_tx.blocking_send(PublishRequest {
+        topic: io.blocks_topic.clone(),
+        data: block.cbor_bytes.clone(),
+    });
+    crate::assertions::mark_p2p_active();
+    log::debug!("scenario: published block via P2P ({} bytes)", block.cbor_bytes.len());
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+// ---------------------------------------------------------------------------
+// Observation actions
+// ---------------------------------------------------------------------------
+
+/// Observe chain head from a random node.
+pub fn observe_chain_head(tc: hegel::TestCase, io: &ScenarioIO) -> Option<ChainTip> {
+    if io.rpc_clients.is_empty() {
+        return None;
+    }
+    let idx: usize = tc.draw(gs::integers::<usize>().min_value(0).max_value(io.rpc_clients.len() - 1));
+    let (name, client) = &io.rpc_clients[idx];
+
+    let head = io.rt_handle.block_on(client.chain_head())?;
+    log::debug!("scenario: observed chain head height={} from {}", head.height, name);
+    Some(ChainTip { height: head.height })
+}
+
+/// Observe a wallet's current nonce via MpoolGetNonce.
+pub fn observe_nonce(tc: hegel::TestCase, wallet: &Wallet, io: &ScenarioIO) -> Option<WalletState> {
+    if io.rpc_clients.is_empty() {
+        return None;
+    }
+    let idx: usize = tc.draw(gs::integers::<usize>().min_value(0).max_value(io.rpc_clients.len() - 1));
+    let (name, client) = &io.rpc_clients[idx];
+
+    let addr_str = wallet.address.to_string();
+    let nonce = io.rt_handle.block_on(client.mpool_get_nonce(&addr_str))?;
+    log::debug!("scenario: observed nonce={} for {} from {}", nonce, addr_str, name);
+    Some(WalletState {
+        wallet: wallet.clone(),
+        nonce,
+    })
+}
+
+/// Observe current mempool state.
+pub fn observe_mempool(tc: hegel::TestCase, io: &ScenarioIO) -> Option<MempoolSnapshot> {
+    if io.rpc_clients.is_empty() {
+        return None;
+    }
+    let idx: usize = tc.draw(gs::integers::<usize>().min_value(0).max_value(io.rpc_clients.len() - 1));
+    let (_, client) = &io.rpc_clients[idx];
+
+    let pending = io.rt_handle.block_on(client.mpool_pending())?;
+    Some(MempoolSnapshot {
+        pending: pending.iter().map(|m| (m.message.from.clone(), m.message.nonce)).collect(),
+    })
+}
+
+/// Wait for a message to leave the mempool (included in a tipset) or timeout.
+pub fn wait_for_inclusion(msg: &SignedMsg, io: &ScenarioIO) -> Option<IncludedMsg> {
+    let addr_str = msg.message.from.to_string();
+    let nonce = msg.message.sequence;
+
+    // Poll every 2s for up to 60s
+    for _ in 0..30 {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        for (_, client) in &io.rpc_clients {
+            if let Some(pending) = io.rt_handle.block_on(client.mpool_pending()) {
+                let still_pending = pending
+                    .iter()
+                    .any(|m| m.message.from == addr_str && m.message.nonce == nonce);
+                if !still_pending {
+                    log::debug!("scenario: message from {} nonce {} included", addr_str, nonce);
+                    return Some(IncludedMsg { original: msg.clone() });
+                }
+            }
+        }
+    }
+    log::warn!("scenario: timed out waiting for inclusion of {} nonce {}", addr_str, nonce);
+    None
+}
+
+/// Random pause between actions.
+pub fn pause(tc: hegel::TestCase) {
+    let ms: u64 = tc.draw(gs::sampled_from(vec![100u64, 500, 1000, 2000, 5000]));
+    std::thread::sleep(std::time::Duration::from_millis(ms));
 }
 
 #[cfg(test)]

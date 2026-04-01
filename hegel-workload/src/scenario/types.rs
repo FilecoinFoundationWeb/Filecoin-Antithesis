@@ -2,6 +2,10 @@ use fvm_shared::address::Address;
 use fvm_shared::crypto::signature::Signature;
 use fvm_shared::message::Message;
 
+use crate::network::PublishRequest;
+use crate::rpc::LotusRpc;
+use tokio::sync::mpsc;
+
 /// A wallet loaded from the stress keystore.
 #[derive(Debug, Clone)]
 pub struct Wallet {
@@ -47,4 +51,14 @@ pub struct MempoolSnapshot {
 #[derive(Debug, Clone)]
 pub struct IncludedMsg {
     pub original: SignedMsg,
+}
+
+/// I/O handles passed to actions that need network or RPC access.
+/// Separate from ScenarioContext so context remains pure data.
+pub struct ScenarioIO {
+    pub p2p_tx: mpsc::Sender<PublishRequest>,
+    pub rpc_clients: Vec<(String, LotusRpc)>,
+    pub rt_handle: tokio::runtime::Handle,
+    pub msgs_topic: String,
+    pub blocks_topic: String,
 }
