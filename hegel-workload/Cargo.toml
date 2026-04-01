@@ -8,7 +8,7 @@ antithesis = ["hegeltest/antithesis"]
 
 [dependencies]
 hegeltest = "0.3"
-libp2p = { version = "0.55", features = ["gossipsub", "tcp", "noise", "yamux", "tokio", "macros"] }
+libp2p = { version = "0.55", features = ["gossipsub", "identify", "tcp", "noise", "yamux", "tokio", "macros"] }
 tokio = { version = "1", features = ["full"] }
 log = "0.4"
 env_logger = "0.11"

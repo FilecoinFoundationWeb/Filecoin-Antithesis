@@ -3,6 +3,9 @@ set -euo pipefail
 
 echo "[hegel-workload] starting entrypoint"
 
+# Ensure Antithesis output directory exists (needed by hegeltest SDK even outside Antithesis)
+mkdir -p "${ANTITHESIS_OUTPUT_DIR:-/tmp/antithesis}"
+
 # Default devgen directory
 DEVGEN_DIR="${DEVGEN_DIR:-/root/devgen}"
 

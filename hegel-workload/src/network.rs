@@ -1,8 +1,9 @@
 use libp2p::{
     gossipsub::{self, IdentTopic, MessageAuthenticity, MessageId, ValidationMode},
+    identify,
     identity,
     noise,
-    swarm::SwarmEvent,
+    swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Swarm,
 };
 use log::{info, warn};
@@ -17,8 +18,16 @@ pub struct PublishRequest {
     pub data: Vec<u8>,
 }
 
-/// Build a libp2p Swarm with GossipSub configured for Filecoin interop.
-pub fn build_swarm() -> Result<Swarm<gossipsub::Behaviour>, Box<dyn std::error::Error>> {
+/// Combined behaviour: GossipSub for pubsub + Identify for protocol negotiation.
+/// Lotus requires the identify protocol before accepting GossipSub traffic.
+#[derive(NetworkBehaviour)]
+pub struct Behaviour {
+    gossipsub: gossipsub::Behaviour,
+    identify: identify::Behaviour,
+}
+
+/// Build a libp2p Swarm with GossipSub + Identify configured for Filecoin interop.
+pub fn build_swarm() -> Result<Swarm<Behaviour>, Box<dyn std::error::Error>> {
     let local_key = identity::Keypair::generate_ed25519();
 
     // Content-hash message ID function — critical for Lotus interop.
@@ -41,6 +50,11 @@ pub fn build_swarm() -> Result<Swarm<gossipsub::Behaviour>, Box<dyn std::error::
     )
     .map_err(|e| format!("gossipsub behaviour error: {}", e))?;
 
+    let identify = identify::Behaviour::new(identify::Config::new(
+        "/fil/hegel/0.1.0".to_string(),
+        local_key.public(),
+    ));
+
     let swarm = libp2p::SwarmBuilder::with_existing_identity(local_key)
         .with_tokio()
         .with_tcp(
@@ -48,7 +62,7 @@ pub fn build_swarm() -> Result<Swarm<gossipsub::Behaviour>, Box<dyn std::error::
             noise::Config::new,
             yamux::Config::default,
         )?
-        .with_behaviour(|_| gossipsub)?
+        .with_behaviour(|_| Behaviour { gossipsub, identify })?
         .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
@@ -61,7 +75,7 @@ pub fn build_swarm() -> Result<Swarm<gossipsub::Behaviour>, Box<dyn std::error::
 /// Sends a signal on `ready_tx` once at least one peer has joined the mesh
 /// for any subscribed topic, so the generator knows it can start publishing.
 pub async fn run_network(
-    mut swarm: Swarm<gossipsub::Behaviour>,
+    mut swarm: Swarm<Behaviour>,
     peers: Vec<(Multiaddr, PeerId)>,
     topics: Vec<String>,
     mut rx: mpsc::Receiver<PublishRequest>,
@@ -77,7 +91,7 @@ pub async fn run_network(
     // which avoids InsufficientPeers errors when Go/Rust GossipSub protocol
     // negotiation doesn't fully establish a mesh.
     for (addr, peer_id) in &peers {
-        swarm.behaviour_mut().add_explicit_peer(peer_id);
+        swarm.behaviour_mut().gossipsub.add_explicit_peer(peer_id);
         let dial_addr = addr.clone().with(libp2p::multiaddr::Protocol::P2p(*peer_id));
         match swarm.dial(dial_addr.clone()) {
             Ok(_) => info!("dialing {} (explicit peer)", dial_addr),
@@ -88,7 +102,7 @@ pub async fn run_network(
     // Subscribe to topics
     for t in &topics {
         let topic = IdentTopic::new(t);
-        if let Err(e) = swarm.behaviour_mut().subscribe(&topic) {
+        if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&topic) {
             warn!("failed to subscribe to {}: {}", t, e);
         } else {
             info!("subscribed to {}", t);
@@ -113,8 +127,8 @@ pub async fn run_network(
         }
     }
     if connected {
-        // Brief pause for protocol negotiation after first connection
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        // Brief pause for identify exchange + gossipsub subscription propagation
+        tokio::time::sleep(Duration::from_secs(3)).await;
         info!("peer connected, signalling ready");
     } else {
         warn!("no peer connections after 60s, proceeding anyway");
@@ -140,7 +154,7 @@ pub async fn run_network(
             }
             Some(req) = rx.recv() => {
                 let topic = IdentTopic::new(&req.topic);
-                match swarm.behaviour_mut().publish(topic, req.data) {
+                match swarm.behaviour_mut().gossipsub.publish(topic, req.data) {
                     Ok(msg_id) => {
                         log::debug!("published to {}: {:?}", req.topic, msg_id);
                     }
