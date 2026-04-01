@@ -238,6 +238,7 @@ services:
       - MONITOR_INTERVAL_MS=5000
       - RPC_TRAFFIC_INTERVAL_MS=1000
     volumes:
+      - ./shared/configs:/shared/configs
       - ./data/lotus0:/root/devgen/lotus0
       - ./data/lotus1:/root/devgen/lotus1
       - ./data/lotus2:/root/devgen/lotus2
