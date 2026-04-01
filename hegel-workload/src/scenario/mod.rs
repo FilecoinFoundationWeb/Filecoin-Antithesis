@@ -100,6 +100,227 @@ impl ScenarioContext {
     }
 }
 
+/// Execute a single randomly-chosen action, updating the scenario context.
+pub fn execute_step(tc: hegel::TestCase, ctx: &mut ScenarioContext, io: &types::ScenarioIO) {
+    let available = ctx.available_actions();
+    if available.is_empty() {
+        return;
+    }
+
+    let action = tc.clone().draw(hegel::generators::sampled_from(available));
+
+    match action {
+        ActionKind::PickWallet => {
+            let wallet = actions::pick_wallet(tc.clone(), &ctx.wallets);
+            if let Some(state) = actions::observe_nonce(tc.clone(), &wallet, io) {
+                ctx.wallet_states.push(state);
+            }
+        }
+        ActionKind::ObserveChainHead => {
+            if let Some(tip) = actions::observe_chain_head(tc.clone(), io) {
+                ctx.chain_tips.push(tip);
+            }
+        }
+        ActionKind::ObserveMempool => {
+            if let Some(snapshot) = actions::observe_mempool(tc.clone(), io) {
+                ctx.mempool_snapshots.push(snapshot);
+            }
+        }
+        ActionKind::ObserveNonce => {
+            let idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.wallet_states.len() - 1),
+            );
+            let wallet = ctx.wallet_states[idx].wallet.clone();
+            if let Some(state) = actions::observe_nonce(tc.clone(), &wallet, io) {
+                ctx.wallet_states[idx] = state;
+            }
+        }
+        ActionKind::CreateValidTransfer => {
+            let sender_idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.wallet_states.len() - 1),
+            );
+            let recip_idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.wallets.len() - 1),
+            );
+            let msg = actions::create_valid_transfer(
+                tc.clone(),
+                &ctx.wallet_states[sender_idx],
+                &ctx.wallets[recip_idx],
+            );
+            ctx.signed_msgs.push(msg);
+        }
+        ActionKind::CreateNonceReuse => {
+            let msg_idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.signed_msgs.len() - 1),
+            );
+            let original = ctx.signed_msgs[msg_idx].clone();
+            let msg = actions::create_nonce_reuse(tc.clone(), &original, &ctx.wallets);
+            ctx.signed_msgs.push(msg);
+        }
+        ActionKind::CreateGasBump => {
+            let msg_idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.signed_msgs.len() - 1),
+            );
+            let original = ctx.signed_msgs[msg_idx].clone();
+            let msg = actions::create_gas_bump(tc.clone(), &original);
+            ctx.signed_msgs.push(msg);
+        }
+        ActionKind::CreateNonceGap => {
+            let sender_idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.wallet_states.len() - 1),
+            );
+            let recip_idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.wallets.len() - 1),
+            );
+            let msg = actions::create_nonce_gap(
+                tc.clone(),
+                &ctx.wallet_states[sender_idx],
+                &ctx.wallets[recip_idx],
+            );
+            ctx.signed_msgs.push(msg);
+        }
+        ActionKind::CreateSemiValidMsg => {
+            let sender_idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.wallet_states.len() - 1),
+            );
+            let recip_idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.wallets.len() - 1),
+            );
+            let msg = actions::create_semi_valid_msg(
+                tc.clone(),
+                &ctx.wallet_states[sender_idx],
+                &ctx.wallets[recip_idx],
+            );
+            ctx.signed_msgs.push(msg);
+        }
+        ActionKind::CreateDrain => {
+            // Same as CreateValidTransfer for now
+            let sender_idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.wallet_states.len() - 1),
+            );
+            let recip_idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.wallets.len() - 1),
+            );
+            let msg = actions::create_valid_transfer(
+                tc.clone(),
+                &ctx.wallet_states[sender_idx],
+                &ctx.wallets[recip_idx],
+            );
+            ctx.signed_msgs.push(msg);
+        }
+        ActionKind::CreateFuzzedMsg => {
+            let msg = actions::create_fuzzed_msg(tc.clone());
+            ctx.signed_msgs.push(msg);
+        }
+        ActionKind::CreateFuzzedBlock => {
+            let block = actions::create_fuzzed_block(tc.clone());
+            ctx.fuzzed_blocks.push(block);
+        }
+        ActionKind::CreateBlockAtHeight => {
+            // Use existing fuzzed block generator (height parameterization is future work)
+            let block = actions::create_fuzzed_block(tc.clone());
+            ctx.fuzzed_blocks.push(block);
+        }
+        ActionKind::PublishMsgP2p => {
+            let idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.signed_msgs.len() - 1),
+            );
+            actions::publish_msg_p2p(&ctx.signed_msgs[idx], io);
+        }
+        ActionKind::PublishMsgRpc => {
+            let idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.signed_msgs.len() - 1),
+            );
+            let msg = ctx.signed_msgs[idx].clone();
+            actions::publish_msg_rpc(tc.clone(), &msg, io);
+        }
+        ActionKind::PublishBlockP2p => {
+            let idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.fuzzed_blocks.len() - 1),
+            );
+            actions::publish_block_p2p(&ctx.fuzzed_blocks[idx], io);
+        }
+        ActionKind::WaitForInclusion => {
+            let idx: usize = tc.clone().draw(
+                hegel::generators::integers::<usize>()
+                    .min_value(0)
+                    .max_value(ctx.signed_msgs.len() - 1),
+            );
+            let msg = ctx.signed_msgs[idx].clone();
+            if actions::wait_for_inclusion(&msg, io).is_some() {
+                // Re-observe nonce for the sender
+                let sender_wallet = ctx.wallets.iter().find(|w| w.address == msg.message.from);
+                if let Some(wallet) = sender_wallet {
+                    if let Some(state) = actions::observe_nonce(tc.clone(), wallet, io) {
+                        if let Some(existing) = ctx
+                            .wallet_states
+                            .iter_mut()
+                            .find(|s| s.wallet.address == msg.message.from)
+                        {
+                            *existing = state;
+                        }
+                    }
+                }
+            }
+        }
+        ActionKind::Pause => {
+            actions::pause(tc.clone());
+        }
+    }
+}
+
+/// Run a complete scenario: draw N steps and execute them sequentially.
+pub fn run_scenario(tc: hegel::TestCase, ctx: &mut ScenarioContext, io: &types::ScenarioIO) {
+    let num_steps: usize = tc.clone().draw(
+        hegel::generators::integers::<usize>()
+            .min_value(1)
+            .max_value(10),
+    );
+    log::info!("scenario: starting with {} steps", num_steps);
+
+    for step in 0..num_steps {
+        log::info!(
+            "scenario: step {}/{}, context: {} wallet_states, {} msgs, {} blocks",
+            step + 1,
+            num_steps,
+            ctx.wallet_states.len(),
+            ctx.signed_msgs.len(),
+            ctx.fuzzed_blocks.len(),
+        );
+        execute_step(tc.clone(), ctx, io);
+    }
+
+    log::info!("scenario: complete");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
