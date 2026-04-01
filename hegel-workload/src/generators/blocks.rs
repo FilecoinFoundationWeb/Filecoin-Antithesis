@@ -1,9 +1,11 @@
+use fvm_shared::address::Address;
 use hegel::generators as gs;
 
 use crate::cbor::*;
 use crate::generators::address::filecoin_address;
 
 /// Generate a `BlockMsg` as CBOR array(3): [Header, BlsMessages []CID, SecpkMessages []CID].
+/// The header uses a valid miner address (via fvm_shared) for correct decoding.
 #[hegel::composite]
 pub fn block_msg(tc: hegel::TestCase) -> Vec<u8> {
     let header = tc.draw(block_header());
@@ -12,15 +14,13 @@ pub fn block_msg(tc: hegel::TestCase) -> Vec<u8> {
     cbor_array(&[&header, &bls_msgs, &secpk_msgs])
 }
 
-/// Generate a Filecoin block header as a 16-field CBOR array:
-/// [Miner, Ticket, ElectionProof, BeaconEntries, WinPoStProof, Parents,
-///  ParentWeight, Height, ParentStateRoot, ParentMessageReceipts, Messages,
-///  BLSAggregate, Timestamp, BlockSig, ForkSignaling, ParentBaseFee]
+/// Generate a Filecoin block header as a 16-field CBOR array.
+/// Miner address uses fvm_shared for correct encoding.
 #[hegel::composite]
 fn block_header(tc: hegel::TestCase) -> Vec<u8> {
-    // Miner address
-    let miner_addr: Vec<u8> = tc.draw(filecoin_address());
-    let miner = cbor_bytes(&miner_addr);
+    // Miner address — use fvm_shared Address serialized to bytes
+    let miner_addr: Address = tc.draw(filecoin_address());
+    let miner = cbor_bytes(&miner_addr.to_bytes());
 
     // Ticket
     let ticket = tc.draw(ticket_field());
