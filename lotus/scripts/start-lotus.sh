@@ -124,6 +124,20 @@ fi
 connect_with_retries() {
     local max_retries=10
     local addr_file="$1"
+    local node_name="$2"
+    local wait_retries=3
+
+    # Wait briefly for the addr file to appear; skip if the node isn't running
+    for (( j=1; j<=wait_retries; j++ )); do
+        if [ -f "$addr_file" ] && [ -s "$addr_file" ]; then
+            break
+        fi
+        if [ "$j" -eq "$wait_retries" ]; then
+            echo "SKIP: $node_name addr file not found at $addr_file (node probably not running)"
+            return 0
+        fi
+        sleep 2
+    done
 
     for (( j=1; j<=max_retries; j++ )); do
         echo "attempt $j/$max_retries..."
@@ -137,7 +151,7 @@ connect_with_retries() {
         fi
     done
 
-    echo "ERROR: reached $max_retries attempts."
+    echo "ERROR: reached $max_retries attempts for $node_name."
     return 1
 }
 
@@ -152,7 +166,7 @@ for (( i=0; i<$NUM_LOTUS_CLIENTS; i++ )); do
     addr_file="${OTHER_LOTUS_DATA_DIR}/lotus${i}-ipv4addr"
 
     echo "Connecting to lotus$i at $addr_file"
-    connect_with_retries "$addr_file"
+    connect_with_retries "$addr_file" "lotus$i"
 done
 
 echo "connecting to forest nodes..."
@@ -162,7 +176,7 @@ for (( i=0; i<$NUM_FOREST_CLIENTS; i++ )); do
     addr_file="${FOREST_DATA_DIR}/forest${i}-ipv4addr"
 
     echo "Connecting to forest$i at $addr_file"
-    connect_with_retries "$addr_file"
+    connect_with_retries "$addr_file" "forest$i"
 done
 
 touch "${SHARED_CONFIGS}/lotus-${node_number}-ready"

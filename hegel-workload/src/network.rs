@@ -72,60 +72,54 @@ pub async fn run_network(
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
         .expect("failed to listen");
 
-    // Dial all peers
+    // Register peers as explicit GossipSub peers and dial them.
+    // Explicit peers always receive published messages regardless of mesh state,
+    // which avoids InsufficientPeers errors when Go/Rust GossipSub protocol
+    // negotiation doesn't fully establish a mesh.
     for (addr, peer_id) in &peers {
+        swarm.behaviour_mut().add_explicit_peer(peer_id);
         let dial_addr = addr.clone().with(libp2p::multiaddr::Protocol::P2p(*peer_id));
         match swarm.dial(dial_addr.clone()) {
-            Ok(_) => info!("dialing {}", dial_addr),
+            Ok(_) => info!("dialing {} (explicit peer)", dial_addr),
             Err(e) => warn!("failed to dial {}: {}", dial_addr, e),
         }
     }
 
     // Subscribe to topics
-    let topic_hashes: Vec<_> = topics
-        .iter()
-        .map(|t| {
-            let topic = IdentTopic::new(t);
-            if let Err(e) = swarm.behaviour_mut().subscribe(&topic) {
-                warn!("failed to subscribe to {}: {}", t, e);
-            } else {
-                info!("subscribed to {}", t);
-            }
-            topic.hash()
-        })
-        .collect();
+    for t in &topics {
+        let topic = IdentTopic::new(t);
+        if let Err(e) = swarm.behaviour_mut().subscribe(&topic) {
+            warn!("failed to subscribe to {}: {}", t, e);
+        } else {
+            info!("subscribed to {}", t);
+        }
+    }
 
-    // Wait for at least one peer in the mesh for any topic (up to 60s)
-    info!("waiting for GossipSub mesh peers...");
-    let mesh_deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    // Wait for at least one connection to be established (up to 60s).
+    // With explicit peers, we don't need mesh formation — just a live connection.
+    info!("waiting for peer connections...");
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    let mut connected = false;
     let mut ready_tx = Some(ready_tx);
-    while tokio::time::Instant::now() < mesh_deadline {
-        // Check if any topic has mesh peers
-        if ready_tx.is_some() {
-            for hash in &topic_hashes {
-                if !swarm.behaviour().mesh_peers(hash).collect::<Vec<_>>().is_empty() {
-                    info!("mesh formed — peers available, signalling ready");
-                    if let Some(tx) = ready_tx.take() {
-                        let _ = tx.send(());
-                    }
-                    break;
-                }
-            }
-        }
-        if ready_tx.is_none() {
-            break;
-        }
+    while tokio::time::Instant::now() < deadline && !connected {
         tokio::select! {
-            _ = tokio::time::sleep(Duration::from_millis(500)) => {}
+            _ = tokio::time::sleep_until(deadline) => { break; }
             event = swarm.select_next_some() => {
                 if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event {
-                    info!("connected to {} during mesh formation", peer_id);
+                    info!("connected to {} (explicit peer)", peer_id);
+                    connected = true;
                 }
             }
         }
     }
+    if connected {
+        // Brief pause for protocol negotiation after first connection
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        info!("peer connected, signalling ready");
+    } else {
+        warn!("no peer connections after 60s, proceeding anyway");
+    }
     if let Some(tx) = ready_tx.take() {
-        warn!("mesh formation timed out after 60s, proceeding anyway");
         let _ = tx.send(());
     }
     info!("entering event loop");
