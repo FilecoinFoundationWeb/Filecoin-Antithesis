@@ -1,14 +1,17 @@
+mod assertions;
 mod cbor;
 mod discovery;
 mod generators;
 mod network;
 mod properties;
+mod rpc;
 
+use assertions::{mark_p2p_active, run_rpc_monitor, run_rpc_traffic};
 use discovery::discover_nodes;
 use generators::blocks::block_msg;
 use generators::messages::signed_message;
 use network::{build_swarm, run_network, PublishRequest};
-use properties::log_generation;
+use rpc::discover_rpc_clients;
 
 use hegel::generators as gs;
 use log::{error, info, warn};
@@ -37,19 +40,39 @@ fn main() {
             .and_then(|s| s.parse().ok())
             .unwrap_or(500),
     );
-
-    info!(
-        "config: nodes={:?}, network={}, batch_size={}",
-        node_names, network_name, batch_size
+    let rpc_port: u16 = std::env::var("RPC_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1234);
+    let monitor_interval: Duration = Duration::from_millis(
+        std::env::var("MONITOR_INTERVAL_MS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5000),
+    );
+    let rpc_traffic_interval: Duration = Duration::from_millis(
+        std::env::var("RPC_TRAFFIC_INTERVAL_MS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1000),
     );
 
-    // Discover peers
+    info!(
+        "config: nodes={:?}, network={}, batch_size={}, rpc_port={}",
+        node_names, network_name, batch_size, rpc_port
+    );
+
+    // Discover peers for P2P
     let nodes = discover_nodes(&node_names, &devgen_dir);
     if nodes.is_empty() {
         error!("no nodes discovered, exiting");
         std::process::exit(1);
     }
-    info!("discovered {} nodes", nodes.len());
+    info!("discovered {} nodes for P2P", nodes.len());
+
+    // Discover RPC clients
+    let rpc_clients = discover_rpc_clients(&node_names, &devgen_dir, rpc_port);
+    info!("created {} RPC clients", rpc_clients.len());
 
     // Build topics
     let msgs_topic = format!("/fil/msgs/{}", network_name);
@@ -64,18 +87,35 @@ fn main() {
     // Prepare peer info for the network task
     let peers: Vec<_> = nodes.iter().map(|n| (n.addr.clone(), n.peer_id)).collect();
 
-    // Spawn tokio runtime for network
+    // Spawn tokio runtime for network + RPC tasks
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
 
-    // Spawn network task
+    // Spawn network task (existing P2P layer)
     rt.spawn(run_network(swarm, peers, topics, rx, ready_tx));
+
+    // Spawn RPC monitor (assertions + consistency checks)
+    // Clone the clients since we need separate ownership for each task.
+    let monitor_clients = discover_rpc_clients(&node_names, &devgen_dir, rpc_port);
+    rt.spawn(run_rpc_monitor(monitor_clients, monitor_interval));
+
+    // Spawn RPC traffic (mixed P2P + RPC contention)
+    let traffic_clients = discover_rpc_clients(&node_names, &devgen_dir, rpc_port);
+    rt.spawn(run_rpc_traffic(traffic_clients, rpc_traffic_interval));
 
     // Wait for mesh to be ready before generating
     info!("waiting for mesh to be ready...");
     let _ = rt.block_on(ready_rx);
+
+    // Fire a GossipSub connectivity assertion
+    antithesis_sdk::assert_sometimes!(
+        true,
+        "GossipSub peer connected",
+        &serde_json::json!({})
+    );
+
     info!("starting Hegel generation loop");
 
-    // Main Hegel loop
+    // Main Hegel loop — generates fuzzed messages and publishes over GossipSub
     loop {
         let tx_ref = &tx;
         let msgs_topic_ref = &msgs_topic;
@@ -87,19 +127,22 @@ fn main() {
 
                 if use_blocks {
                     let data: Vec<u8> = tc.draw(block_msg());
-                    log_generation(blocks_topic_ref, data.len());
+                    properties::log_generation(blocks_topic_ref, data.len());
                     let _ = tx_ref.blocking_send(PublishRequest {
                         topic: blocks_topic_ref.to_string(),
                         data,
                     });
                 } else {
                     let data: Vec<u8> = tc.draw(signed_message());
-                    log_generation(msgs_topic_ref, data.len());
+                    properties::log_generation(msgs_topic_ref, data.len());
                     let _ = tx_ref.blocking_send(PublishRequest {
                         topic: msgs_topic_ref.to_string(),
                         data,
                     });
                 }
+
+                // Signal P2P activity for mixed-traffic assertion
+                mark_p2p_active();
 
                 std::thread::sleep(publish_delay);
             })

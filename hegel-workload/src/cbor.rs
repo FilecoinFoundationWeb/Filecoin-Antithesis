@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_big_int_bytes_zero() {
-        assert_eq!(big_int_bytes(0), vec![]);
+        assert_eq!(big_int_bytes(0), Vec::<u8>::new());
     }
 
     #[test]
