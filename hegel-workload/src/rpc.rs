@@ -125,6 +125,13 @@ impl LotusRpc {
         // MpoolSelect takes (TipSetKey, quality)
         self.call("MpoolSelect", json!([[], quality])).await
     }
+
+    /// Get the next expected nonce for an address from the mempool.
+    /// This accounts for pending messages, not just on-chain state.
+    pub async fn mpool_get_nonce(&self, address: &str) -> Option<u64> {
+        self.call("MpoolGetNonce", serde_json::json!([address]))
+            .await
+    }
 }
 
 /// Discover RPC endpoints for nodes, reading JWT tokens from devgen.
