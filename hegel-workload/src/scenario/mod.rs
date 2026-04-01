@@ -318,6 +318,11 @@ pub fn run_scenario(tc: hegel::TestCase, ctx: &mut ScenarioContext, io: &types::
         execute_step(tc.clone(), ctx, io);
     }
 
+    antithesis_sdk::assert_sometimes!(
+        true,
+        "Scenario: multi-step scenario completed",
+        &serde_json::json!({"steps": num_steps, "msgs_created": ctx.signed_msgs.len()})
+    );
     log::info!("scenario: complete");
 }
 

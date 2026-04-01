@@ -14,6 +14,9 @@ use generators::blocks::block_msg;
 use generators::messages::signed_message;
 use network::{build_swarm, run_network, PublishRequest};
 use rpc::discover_rpc_clients;
+use scenario::types::ScenarioIO;
+use scenario::{run_scenario, ScenarioContext};
+use wallet::load_keystore;
 
 use hegel::generators as gs;
 use log::{error, info, warn};
@@ -117,39 +120,69 @@ fn main() {
 
     info!("starting Hegel generation loop");
 
-    // Main Hegel loop — generates fuzzed messages and publishes over GossipSub
+    let keystore_path = std::env::var("STRESS_KEYSTORE_PATH")
+        .unwrap_or_else(|_| "/shared/configs/stress_keystore.json".to_string());
+    let wallets = load_keystore(&keystore_path);
+
+    let scenario_io = ScenarioIO {
+        p2p_tx: tx.clone(),
+        rpc_clients: discover_rpc_clients(&node_names, &devgen_dir, rpc_port),
+        rt_handle: rt.handle().clone(),
+        msgs_topic: msgs_topic.clone(),
+        blocks_topic: blocks_topic.clone(),
+    };
+
+    if wallets.is_empty() {
+        warn!("no wallets loaded, falling back to flat generation only");
+    } else {
+        info!(
+            "loaded {} wallets, running composable scenario loop",
+            wallets.len()
+        );
+    }
+
+    // Main Hegel loop — composable scenarios if wallets are available, flat generation otherwise
     loop {
         let tx_ref = &tx;
         let msgs_topic_ref = &msgs_topic;
         let blocks_topic_ref = &blocks_topic;
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            hegel::Hegel::new(|tc| {
-                let use_blocks: bool = tc.draw(gs::booleans());
+            if !wallets.is_empty() {
+                // Composable scenario mode
+                let mut ctx = ScenarioContext::new(wallets.clone());
+                hegel::Hegel::new(|tc| {
+                    run_scenario(tc, &mut ctx, &scenario_io);
+                })
+                .settings(hegel::Settings::new().test_cases(batch_size))
+                .run();
+            } else {
+                // Flat generation fallback (original behavior)
+                hegel::Hegel::new(|tc| {
+                    let use_blocks: bool = tc.draw(gs::booleans());
 
-                if use_blocks {
-                    let data: Vec<u8> = tc.draw(block_msg());
-                    properties::log_generation(blocks_topic_ref, data.len());
-                    let _ = tx_ref.blocking_send(PublishRequest {
-                        topic: blocks_topic_ref.to_string(),
-                        data,
-                    });
-                } else {
-                    let data: Vec<u8> = tc.draw(signed_message());
-                    properties::log_generation(msgs_topic_ref, data.len());
-                    let _ = tx_ref.blocking_send(PublishRequest {
-                        topic: msgs_topic_ref.to_string(),
-                        data,
-                    });
-                }
+                    if use_blocks {
+                        let data: Vec<u8> = tc.draw(block_msg());
+                        properties::log_generation(blocks_topic_ref, data.len());
+                        let _ = tx_ref.blocking_send(PublishRequest {
+                            topic: blocks_topic_ref.to_string(),
+                            data,
+                        });
+                    } else {
+                        let data: Vec<u8> = tc.draw(signed_message());
+                        properties::log_generation(msgs_topic_ref, data.len());
+                        let _ = tx_ref.blocking_send(PublishRequest {
+                            topic: msgs_topic_ref.to_string(),
+                            data,
+                        });
+                    }
 
-                // Signal P2P activity for mixed-traffic assertion
-                mark_p2p_active();
-
-                std::thread::sleep(publish_delay);
-            })
-            .settings(hegel::Settings::new().test_cases(batch_size))
-            .run();
+                    mark_p2p_active();
+                    std::thread::sleep(publish_delay);
+                })
+                .settings(hegel::Settings::new().test_cases(batch_size))
+                .run();
+            }
         }));
 
         if let Err(e) = result {

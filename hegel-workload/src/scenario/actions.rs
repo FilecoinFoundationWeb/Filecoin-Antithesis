@@ -302,6 +302,13 @@ pub fn publish_msg_rpc(tc: hegel::TestCase, msg: &SignedMsg, io: &ScenarioIO) {
 
     let accepted = io.rt_handle.block_on(client.mpool_push_raw(&msg_json));
     log::debug!("scenario: published msg via RPC to {} (accepted={})", name, accepted);
+    if accepted {
+        antithesis_sdk::assert_sometimes!(
+            true,
+            "Scenario: valid signed message accepted via RPC",
+            &serde_json::json!({"from": msg.message.from.to_string(), "nonce": msg.message.sequence})
+        );
+    }
     crate::assertions::mark_rpc_active();
 }
 
@@ -348,6 +355,11 @@ pub fn observe_nonce(tc: hegel::TestCase, wallet: &Wallet, io: &ScenarioIO) -> O
     let addr_str = wallet.address.to_string();
     let nonce = io.rt_handle.block_on(client.mpool_get_nonce(&addr_str))?;
     log::debug!("scenario: observed nonce={} for {} from {}", nonce, addr_str, name);
+    antithesis_sdk::assert_sometimes!(
+        true,
+        "Scenario: wallet nonce observed",
+        &serde_json::json!({"address": addr_str, "nonce": nonce})
+    );
     Some(WalletState {
         wallet: wallet.clone(),
         nonce,
@@ -384,6 +396,11 @@ pub fn wait_for_inclusion(msg: &SignedMsg, io: &ScenarioIO) -> Option<IncludedMs
                     .any(|m| m.message.from == addr_str && m.message.nonce == nonce);
                 if !still_pending {
                     log::debug!("scenario: message from {} nonce {} included", addr_str, nonce);
+                    antithesis_sdk::assert_sometimes!(
+                        true,
+                        "Scenario: message included on-chain",
+                        &serde_json::json!({"from": addr_str, "nonce": nonce})
+                    );
                     return Some(IncludedMsg { original: msg.clone() });
                 }
             }
