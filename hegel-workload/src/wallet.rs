@@ -1,6 +1,12 @@
 use crate::scenario::types::Wallet;
+use cid::Cid;
+use fvm_ipld_encoding::to_vec as cbor_serialize;
 use fvm_shared::address::Network;
+use fvm_shared::crypto::signature::Signature;
+use fvm_shared::message::Message;
+use k256::ecdsa::{SigningKey, signature::hazmat::PrehashSigner};
 use log::{info, warn};
+use multihash_codetable::{Code, MultihashDigest};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -90,6 +96,35 @@ pub fn load_keystore(path: &str) -> Vec<Wallet> {
     Vec::new()
 }
 
+pub fn sign_message(msg: &Message, private_key: &[u8]) -> Result<Signature, String> {
+    // Step 1: CBOR-serialize the message
+    let cbor_bytes = cbor_serialize(msg).map_err(|e| format!("cbor serialize: {}", e))?;
+
+    // Step 2: Compute CID (CIDv1, dag-cbor codec 0x71, SHA2-256)
+    let mh = Code::Sha2_256.digest(&cbor_bytes);
+    let cid = Cid::new_v1(0x71, mh);
+    let cid_bytes = cid.to_bytes();
+
+    // Step 3: Blake2b-256 hash the CID bytes (Filecoin signing convention)
+    let hash = blake2b_simd::Params::new()
+        .hash_length(32)
+        .hash(&cid_bytes);
+
+    // Step 4: ECDSA sign with recovery
+    let signing_key =
+        SigningKey::from_bytes(private_key.into()).map_err(|e| format!("bad key: {}", e))?;
+    let (sig, recovery_id) = signing_key
+        .sign_prehash(hash.as_bytes())
+        .map_err(|e| format!("sign failed: {}", e))?;
+
+    // Encode as 65 bytes: r (32) || s (32) || v (1)
+    let mut sig_bytes = Vec::with_capacity(65);
+    sig_bytes.extend_from_slice(&sig.to_bytes());
+    sig_bytes.push(recovery_id.to_byte());
+
+    Ok(Signature::new_secp256k1(sig_bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,5 +181,56 @@ mod tests {
             "error message should mention byte length, got: {}",
             err
         );
+    }
+
+    #[test]
+    fn test_sign_message_produces_65_byte_signature() {
+        use fvm_ipld_encoding::RawBytes;
+        use fvm_shared::address::Address;
+        use fvm_shared::econ::TokenAmount;
+        use fvm_shared::message::Message;
+
+        let private_key = vec![1u8; 32];
+        let msg = Message {
+            version: 0,
+            to: Address::new_id(1000),
+            from: Address::new_id(1001),
+            sequence: 0,
+            value: TokenAmount::from_atto(1000u64),
+            method_num: 0,
+            params: RawBytes::new(vec![]),
+            gas_limit: 1_000_000,
+            gas_fee_cap: TokenAmount::from_atto(100_000u64),
+            gas_premium: TokenAmount::from_atto(1_000u64),
+        };
+
+        let sig = sign_message(&msg, &private_key).unwrap();
+        assert_eq!(sig.bytes().len(), 65, "secp256k1 recoverable sig must be 65 bytes");
+    }
+
+    #[test]
+    fn test_sign_message_deterministic() {
+        use fvm_ipld_encoding::RawBytes;
+        use fvm_shared::address::Address;
+        use fvm_shared::econ::TokenAmount;
+        use fvm_shared::message::Message;
+
+        let private_key = vec![42u8; 32];
+        let msg = Message {
+            version: 0,
+            to: Address::new_id(1000),
+            from: Address::new_id(1001),
+            sequence: 5,
+            value: TokenAmount::from_atto(0u64),
+            method_num: 0,
+            params: RawBytes::new(vec![]),
+            gas_limit: 1_000_000,
+            gas_fee_cap: TokenAmount::from_atto(100_000u64),
+            gas_premium: TokenAmount::from_atto(1_000u64),
+        };
+
+        let sig1 = sign_message(&msg, &private_key).unwrap();
+        let sig2 = sign_message(&msg, &private_key).unwrap();
+        assert_eq!(sig1.bytes(), sig2.bytes(), "signing must be deterministic");
     }
 }
