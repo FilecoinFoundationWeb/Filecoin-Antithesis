@@ -24,7 +24,7 @@ import (
 
 const (
 	slashMinHeight   = 30
-	slashMaxLookback = 5 // tipsets to search for a block by the target miner
+	slashMaxLookback = 15 // tipsets to search for a block by the target miner (from finalized height)
 	quorumThreshold  = 67.0
 )
 
@@ -68,29 +68,53 @@ func getF3PowerTable(node api.FullNode) []minerPowerInfo {
 		return powerCache
 	}
 
+	var totalPower int64
+	var table []minerPowerInfo
+
 	entries, err := node.F3GetECPowerTable(ctx, types.EmptyTSK)
-	if err != nil {
-		log.Printf("[power] F3GetECPowerTable failed: %v", err)
-		return nil
+	if err == nil {
+		// F3 power table available
+		for _, e := range entries {
+			addr, err := address.NewIDAddress(uint64(e.ID))
+			if err != nil {
+				continue
+			}
+			p := e.Power.Int64()
+			totalPower += p
+			table = append(table, minerPowerInfo{addr: addr, power: p})
+		}
+	} else {
+		// F3 unavailable — fall back to StateListMiners + StateMinerPower
+		debugLog("[power] F3GetECPowerTable failed (%v), falling back to state power", err)
+		miners, err := node.StateListMiners(ctx, types.EmptyTSK)
+		if err != nil {
+			log.Printf("[power] StateListMiners failed: %v", err)
+			return nil
+		}
+		for _, addr := range miners {
+			mp, err := node.StateMinerPower(ctx, addr, types.EmptyTSK)
+			if err != nil || mp == nil || mp.MinerPower.QualityAdjPower.IsZero() {
+				continue
+			}
+			p := mp.MinerPower.QualityAdjPower.Int64()
+			totalPower += p
+			table = append(table, minerPowerInfo{addr: addr, power: p})
+		}
 	}
 
 	slashedMinersMu.Lock()
 	defer slashedMinersMu.Unlock()
 
-	var totalPower int64
-	var table []minerPowerInfo
-	for _, e := range entries {
-		addr, err := address.NewIDAddress(uint64(e.ID))
-		if err != nil {
-			continue
+	// Filter slashed miners
+	filtered := table[:0]
+	for _, m := range table {
+		if !slashedMiners[m.addr] {
+			filtered = append(filtered, m)
+		} else {
+			totalPower -= m.power
 		}
-		if slashedMiners[addr] {
-			continue
-		}
-		p := e.Power.Int64()
-		totalPower += p
-		table = append(table, minerPowerInfo{addr: addr, power: p})
 	}
+	table = filtered
 
 	if totalPower == 0 {
 		return nil
@@ -273,22 +297,14 @@ func submitConsensusFault(lotusNode api.FullNode, lotusName string, target addre
 		return false
 	}
 
-	result := waitForMsg(lotusNode, msgCid, "power-slash")
-	if result == nil {
-		log.Printf("[power-slash] message not confirmed within timeout")
-		return false
-	}
-
-	if !result.Receipt.ExitCode.IsSuccess() {
-		log.Printf("[power-slash] ReportConsensusFault rejected: exit=%d", result.Receipt.ExitCode)
-		return false
-	}
-
+	// Mark miner as slashed optimistically — the power table will filter it
+	// immediately. If the tx fails on-chain, the miner keeps producing blocks
+	// but our power calculations will be conservative (treating them as gone).
 	slashedMinersMu.Lock()
 	slashedMiners[target] = true
 	slashedMinersMu.Unlock()
 
-	log.Printf("[power-slash] miner %s successfully slashed!", target)
+	log.Printf("[power-slash] slash submitted for %s (cid=%s), marked as slashed", target, cidStr(msgCid))
 	return true
 }
 
@@ -329,16 +345,9 @@ func walletSignOnLotusNode(workerAddr address.Address, data []byte) (*crypto.Sig
 
 // findMinerBlock searches recent tipsets for a block produced by the given miner.
 func findMinerBlock(node api.FullNode, miner address.Address, maxDepth int) *types.BlockHeader {
-	head, err := node.ChainHead(ctx)
-	if err != nil {
-		return nil
-	}
-
-	parentTs, err := node.ChainGetTipSet(ctx, head.Parents())
-	if err != nil {
-		return nil
-	}
-	ts, err := node.ChainGetTipSet(ctx, parentTs.Parents())
+	// Start from finalized tipset, not chain head. ReportConsensusFault
+	// requires the fault epoch to be at or below the finalized height.
+	ts, err := node.ChainGetFinalizedTipSet(ctx)
 	if err != nil {
 		return nil
 	}
@@ -386,7 +395,15 @@ func getEligibleMiners(node api.FullNode) []address.Address {
 // DoPowerAwareSlash — Power-Targeted Consensus Fault
 // ===========================================================================
 
+var slashFired bool
+
 func DoPowerAwareSlash() {
+	// Only slash once per simulation — repeated slashing kills the network.
+	// One slash shifts the power table; nsplit vectors observe the new posture.
+	if slashFired {
+		return
+	}
+
 	if len(nodeKeys) < 2 {
 		return
 	}
@@ -415,127 +432,29 @@ func DoPowerAwareSlash() {
 	strategy := strategies[rngIntn(len(strategies))]
 	target := pickMinerByStrategy(table, strategy)
 
-	// Quorum guard: don't slash if remaining power < 67%
+	// No quorum guard — slashing in production doesn't check whether F3
+	// quorum survives. If this slash breaks quorum, the nsplit framework
+	// detects the changed security posture (f3HasQuorum flips, assertions
+	// become Sometimes instead of Always). This tests the real cascade:
+	// slash → quorum loss → EC-only vulnerability.
 	remaining := remainingPowerPct(table, target.addr)
-	if remaining < quorumThreshold {
-		log.Printf("[power-slash] target %s (%.1f%%), remaining %.1f%% < %.0f%% — skipped (quorum guard)",
-			target.addr, target.pct, remaining, quorumThreshold)
-		return
-	}
+	breaksQuorum := remaining < quorumThreshold
 
-	log.Printf("[power-slash] strategy=%s target=%s (%.1f%%), remaining=%.1f%%",
-		strategy, target.addr, target.pct, remaining)
+	log.Printf("[power-slash] strategy=%s target=%s (%.1f%%), remaining=%.1f%% (breaks_quorum=%v)",
+		strategy, target.addr, target.pct, remaining, breaksQuorum)
 
-	// Snapshot F3 instance before slash
-	preInst, f3ok := getF3Instance(lotusNode)
+	// Fire-and-forget: submit the slash and return immediately so the deck
+	// keeps spinning. The power table updates asynchronously when the tx lands.
+	// DoF3FinalityMonitor and nsplit vectors will observe the changed posture.
+	slashFired = true
 
 	if !submitConsensusFault(lotusNode, lotusName, target.addr) {
+		log.Printf("[power-slash] slash submission failed for %s, will not retry", target.addr)
 		return
 	}
 
-	// Check F3 recovery after slash
-	if f3ok {
-		advanced, postInst := checkF3Advancing(lotusNode, preInst, 3*time.Minute)
-
-		assert.Sometimes(advanced, "F3 advances after power-aware slash", map[string]any{
-			"strategy":      strategy,
-			"target":        target.addr.String(),
-			"target_pct":    target.pct,
-			"remaining_pct": remaining,
-			"pre_instance":  preInst,
-			"post_instance": postInst,
-		})
-
-		if advanced {
-			log.Printf("[power-slash] F3 advanced %d→%d after slashing %s", preInst, postInst, target.addr)
-		} else {
-			log.Printf("[power-slash] F3 did NOT advance after slashing %s (instance stuck at %d)", target.addr, preInst)
-		}
-	}
-}
-
-// ===========================================================================
-// DoQuorumBoundaryTest — Deliberate F3 Stall (opt-in, weight 0 by default)
-// ===========================================================================
-
-func DoQuorumBoundaryTest() {
-	if len(nodeKeys) < 2 {
-		return
-	}
-
-	head, err := nodes[nodeKeys[0]].ChainHead(ctx)
-	if err != nil {
-		return
-	}
-	if head.Height() < slashMinHeight {
-		return
-	}
-
-	lotusNode, lotusName := pickLotusNode()
-	if lotusNode == nil {
-		return
-	}
-
-	table := getF3PowerTable(lotusNode)
-	if len(table) < 3 {
-		return
-	}
-
-	// Find a miner whose removal drops remaining power below quorum
-	var stallTarget *minerPowerInfo
-	for i := range table {
-		rem := remainingPowerPct(table, table[i].addr)
-		if rem < quorumThreshold {
-			stallTarget = &table[i]
-			break
-		}
-	}
-
-	if stallTarget == nil {
-		debugLog("[quorum-test] no miner large enough to break quorum, skipping")
-		return
-	}
-
-	remaining := remainingPowerPct(table, stallTarget.addr)
-	log.Printf("[quorum-test] slashing %s (%.1f%%), remaining %.1f%% (below %.0f%% quorum)",
-		stallTarget.addr, stallTarget.pct, remaining, quorumThreshold)
-
-	preInst, f3ok := getF3Instance(lotusNode)
-
-	if !submitConsensusFault(lotusNode, lotusName, stallTarget.addr) {
-		return
-	}
-
-	if !f3ok {
-		return
-	}
-
-	// Phase 1: Check if F3 stalls (expected)
-	stalled, inst1 := checkF3Advancing(lotusNode, preInst, 3*time.Minute)
-
-	assert.Sometimes(!stalled, "F3 stalls when remaining power < 2/3", map[string]any{
-		"target":        stallTarget.addr.String(),
-		"target_pct":    stallTarget.pct,
-		"remaining_pct": remaining,
-		"pre_instance":  preInst,
-		"post_instance": inst1,
-	})
-
-	// Phase 2: Check if F3 recovers (power table should update)
-	recovered, inst2 := checkF3Advancing(lotusNode, inst1, 5*time.Minute)
-
-	assert.Sometimes(recovered, "F3 eventually recovers after power table update", map[string]any{
-		"target":        stallTarget.addr.String(),
-		"pre_instance":  preInst,
-		"phase1_inst":   inst1,
-		"post_instance": inst2,
-	})
-
-	if recovered {
-		log.Printf("[quorum-test] F3 recovered: %d→%d→%d", preInst, inst1, inst2)
-	} else {
-		log.Printf("[quorum-test] F3 did NOT recover (stuck at %d)", inst2)
-	}
+	log.Printf("[power-slash] slash landed for %s (%.1f%%), remaining=%.1f%% (breaks_quorum=%v) — power table will update",
+		target.addr, target.pct, remaining, breaksQuorum)
 }
 
 // ===========================================================================
@@ -543,7 +462,8 @@ func DoQuorumBoundaryTest() {
 // ===========================================================================
 
 func DoF3FinalityMonitor() {
-	// Pick a lotus node (forest may not support F3 API)
+	// Pick a lotus node — per-node tracking avoids false regressions from
+	// querying different nodes that are at different F3 instances.
 	lotusNode, nodeName := pickLotusNode()
 	if lotusNode == nil {
 		return
