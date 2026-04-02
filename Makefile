@@ -116,11 +116,6 @@ build-workload:
 	@echo "Building workload for $(TARGET_ARCH)..."
 	$(BUILD_CMD) -t workload:latest -f workload/Dockerfile workload
 
-.PHONY: build-hegel-workload
-build-hegel-workload:
-	@echo "Building hegel-workload for $(TARGET_ARCH)..."
-	$(BUILD_CMD) -t hegel-workload:latest -f hegel-workload/Dockerfile hegel-workload
-
 .PHONY: build-filwizard
 build-filwizard:
 	@echo "Building filwizard for $(TARGET_ARCH)..."
@@ -173,7 +168,7 @@ build-nodes: build-lotus build-forest build-curio
 	@echo "Node images built."
 
 .PHONY: build-all
-build-all: build-drand build-lotus build-forest build-curio build-workload build-filwizard build-hegel-workload
+build-all: build-drand build-lotus build-forest build-curio build-workload build-filwizard
 	@echo "All images built."
 
 # ==========================================
@@ -210,7 +205,6 @@ help:
 	@echo "  make build-curio      Build curio image"
 	@echo "  make build-filwizard  Build filwizard image"
 	@echo "  make build-workload   Build workload image"
-	@echo "  make build-hegel-workload  Build hegel-workload image (Rust/Hegel)"
 	@echo ""
 	@echo "Build groups:"
 	@echo "  make build-infra      Build infrastructure (drand)"

@@ -45,7 +45,6 @@ jobs:
               - 'drand/**'
             workload:
               - 'workload/**'
-              - 'hegel-workload/**'
             filwizard:
               - 'filwizard/**'
       - name: Check if curio or lotus changed
