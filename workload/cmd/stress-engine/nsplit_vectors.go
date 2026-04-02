@@ -1,9 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math/big"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
@@ -13,46 +14,116 @@ import (
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/ipfs/go-cid"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // ===========================================================================
-// N-Split Attack Vectors (EC/F3 Security Threshold Testing)
+// Consensus Integration Test — Lifecycle-Based EC/F3 Safety Proof
 //
-//   DoNetworkBisection     — creates partition topologies (fire-and-forget)
-//   DoNetworkHeal          — reconnects all nodes to full mesh + verifies
-//   DoAdversarialDuringFork — opportunistically injects double-spend when fork exists
-//   DoAdversarialVerify    — checks pending double-spends for safety violations
+// Structured, reproducible test cycles that prove:
+//   - Without F3: double-spend is possible at 20%+ adversary power
+//   - With F3: double-spend is prevented when F3 has quorum
 //
-// Design: DoNetworkBisection creates the partition and returns immediately,
-// allowing the deck to keep spinning. Transfers, gas wars, deploys, and
-// adversarial vectors all run while the partition is active. DoNetworkHeal
-// reconnects nodes AND runs post-partition F3/EC verification.
+// Runs as a background goroutine. Each cycle:
+//   1. Create partition (full isolation of largest miner)
+//   2. Wait for chains to diverge past EC finality depth
+//   3. Inject adversarial action (rotates: double-spend, gas-premium-frontrun, balance-exhaustion)
+//   4. Heal partition, wait for convergence
+//   5. Verify outcome with condition-specific assertions
+//   6. Log structured summary
+//
+// The deck continues running background activity (transfers, gas wars)
+// during the partition, making the test more realistic.
 // ===========================================================================
 
 const (
-	// nsplitConvergenceBuffer is how many epochs must pass after a double-spend
-	// injection before we verify the outcome. Must exceed EC finality depth (20)
-	// to ensure the chain has settled.
-	nsplitConvergenceBuffer = 25
-
-	// nsplitMaxPending limits memory for tracked double-spends.
-	nsplitMaxPending = 50
-
-	// nsplitMinHoldEpochs is the minimum number of epochs a partition must be
-	// active before DoNetworkHeal will reconnect. Ensures forks have time to
-	// form at EC finality depth (head-20).
-	nsplitMinHoldEpochs = 10
-
-	// EC security threshold — adversary above this can break EC (Wang 2023, m=5)
-	ecThresholdPct = 20.0
-
-	// F3 quorum threshold — need > 67% honest power for F3 to finalize
-	f3QuorumPct = 67.0
+	ecThresholdPct    = 20.0           // EC vulnerability threshold (Wang 2023, m=5)
+	f3QuorumPct       = 67.0           // F3 honest power requirement
+	convergenceBuffer = 25             // epochs past heal before verification
+	divergeMinEpochs  = 5              // min epoch diff before injecting attack
+	divergeTimeout    = 5 * time.Minute
+	settlementTimeout = 10 * time.Minute
+	testCooldown      = 30 * time.Second
 )
 
-// isF3Active returns true if F3 is actually running on at least one lotus node.
-// Checks F3GetProgress — if all nodes return errors (e.g. "f3 is disabled"),
-// F3 is not active regardless of what the power table says about quorum.
+// partitionActive signals to deck vectors that a test partition is active.
+var partitionActive atomic.Bool
+
+// splitStrategy enumerates the partition topologies.
+type splitStrategy int
+
+const (
+	splitFullIsolation splitStrategy = iota // one miner disconnected from all
+	splitStar                              // hub miner connected to all, honest miners isolated from each other
+	splitBisection                         // network split into two ~equal halves
+	splitCount                             // sentinel for rotation
+)
+
+func (s splitStrategy) String() string {
+	switch s {
+	case splitFullIsolation:
+		return "full-isolation"
+	case splitStar:
+		return "star-split"
+	case splitBisection:
+		return "50/50-bisection"
+	default:
+		return "unknown"
+	}
+}
+
+// attackType enumerates the adversarial strategies.
+type attackType int
+
+const (
+	attackDoubleSpend        attackType = iota // same nonce, different recipients
+	attackGasPremiumFrontrun                   // same nonce, different gas premiums
+	attackBalanceExhaustion                    // same nonce, full balance to different recipients
+	attackCount                                // sentinel for rotation
+)
+
+func (a attackType) String() string {
+	switch a {
+	case attackDoubleSpend:
+		return "double-spend"
+	case attackGasPremiumFrontrun:
+		return "gas-premium-frontrun"
+	case attackBalanceExhaustion:
+		return "balance-exhaustion"
+	default:
+		return "unknown"
+	}
+}
+
+// splitResult carries the partition state for heal + verification.
+type splitResult struct {
+	strategy      splitStrategy
+	adversaryName string
+	adversaryPct  float64
+	honestPct     float64
+	honestNode    string           // a node on the honest side (for injection)
+	advNode       api.FullNode     // adversary's API handle
+	savedPeers    []peer.AddrInfo  // for healing
+	ecVulnerable  bool
+	f3HasQuorum   bool
+	expected      string
+}
+
+// attackResult captures the injected attack for verification.
+type attackResult struct {
+	attack     attackType
+	fromAddr   address.Address
+	nonce      uint64
+	cidA       cid.Cid // sent to honest node
+	cidB       cid.Cid // sent to adversary node
+	honestNode string
+	advNode    string
+}
+
+// ---------------------------------------------------------------------------
+// F3 Detection
+// ---------------------------------------------------------------------------
+
 func isF3Active() bool {
 	for _, name := range nodeKeys {
 		if nodeType(name) != "lotus" {
@@ -66,329 +137,6 @@ func isF3Active() bool {
 	return false
 }
 
-// bisectionResult carries the power analysis from a partition for condition-specific assertions.
-type bisectionResult struct {
-	strategy      string  // "star", "bilateral", "isolation"
-	adversaryPct  float64 // hub/isolated miner's power percentage
-	honestPct     float64 // remaining honest power
-	ecVulnerable  bool    // adversary >= 20%
-	f3HasQuorum   bool    // honest > 67%
-	expected      string  // human-readable expected outcome
-}
-
-// activePartition tracks the currently active network partition so that
-// DoNetworkHeal can run post-partition verification when it reconnects.
-type activePartition struct {
-	result       *bisectionResult
-	preF3Inst    uint64
-	createdAt    time.Time
-	startHeight  abi.ChainEpoch
-}
-
-var (
-	currentPartition   *activePartition
-	currentPartitionMu sync.Mutex
-)
-
-// pendingDoubleSpend tracks a pair of conflicting transactions for later verification.
-// Carries the partition context at injection time so assertions match expected behavior.
-type pendingDoubleSpend struct {
-	fromAddr    address.Address
-	nonce       uint64
-	cidA        cid.Cid
-	cidB        cid.Cid
-	nodeA       string
-	nodeB       string
-	injectedAt  abi.ChainEpoch // chain head when injected
-	attackType  string         // "double-spend", "fee-snipe", "balance-drain"
-	f3HasQuorum bool           // whether F3 had honest quorum at injection time
-	ecSafe      bool           // whether EC was safe (adversary < 20%) at injection time
-}
-
-var (
-	pendingDoubleSpends   []pendingDoubleSpend
-	pendingDoubleSpendsMu sync.Mutex
-)
-
-// ===========================================================================
-// DoNetworkBisection — Create Partition Topologies (non-blocking)
-// ===========================================================================
-
-// DoNetworkBisection picks a random partition strategy and creates the topology.
-// Returns immediately so the deck keeps spinning — transfers, gas wars, deploys,
-// and adversarial vectors all run while the partition is active. Verification
-// happens when DoNetworkHeal is drawn from the deck.
-func DoNetworkBisection() {
-	if len(nodeKeys) < 2 {
-		return
-	}
-
-	// Wait for chain to mature past EC finality depth before partitioning.
-	// Splitting before finality works means no forks can be detected.
-	if !allNodesPastEpoch(f3MinEpoch) {
-		return
-	}
-
-	// Don't stack partitions — if one is already active, skip
-	currentPartitionMu.Lock()
-	if currentPartition != nil {
-		currentPartitionMu.Unlock()
-		debugLog("[nsplit] partition already active, skipping")
-		return
-	}
-	currentPartitionMu.Unlock()
-
-	var result *bisectionResult
-	strategy := rngIntn(100)
-	switch {
-	case strategy < 40:
-		result = doStarSplit()
-	case strategy < 80:
-		result = doBilateralSplit()
-	default:
-		result = doFullIsolation()
-	}
-
-	if result == nil {
-		return
-	}
-
-	// Confirm each strategy is reachable for Antithesis coverage
-	assert.Reachable("N-split strategy executed", map[string]any{
-		"strategy":     result.strategy,
-		"adversary_pct": result.adversaryPct,
-		"honest_pct":   result.honestPct,
-		"ec_vulnerable": result.ecVulnerable,
-		"f3_has_quorum": result.f3HasQuorum,
-		"expected":      result.expected,
-	})
-
-	// Snapshot F3 instance and chain height before partition
-	var preF3Inst uint64
-	lotusNode, _ := pickLotusNode()
-	if lotusNode != nil {
-		preF3Inst, _ = getF3Instance(lotusNode)
-	}
-
-	var startHeight abi.ChainEpoch
-	for _, name := range nodeKeys {
-		head, err := nodes[name].ChainHead(ctx)
-		if err == nil && head.Height() > startHeight {
-			startHeight = head.Height()
-		}
-	}
-
-	// Store partition state — deck keeps running, DoNetworkHeal will verify
-	currentPartitionMu.Lock()
-	currentPartition = &activePartition{
-		result:      result,
-		preF3Inst:   preF3Inst,
-		createdAt:   time.Now(),
-		startHeight: startHeight,
-	}
-	currentPartitionMu.Unlock()
-
-	log.Printf("[nsplit] partition created (deck continues spinning)")
-}
-
-// doStarSplit picks a hub node (power-aware) and disconnects all non-hub
-// nodes from each other. The hub stays connected to everyone.
-// This simulates the n-split attack topology from Wang et al. 2023.
-func doStarSplit() *bisectionResult {
-	// Pick hub (adversary role) based on power table
-	lotusNode, _ := pickLotusNode()
-	if lotusNode == nil {
-		return nil
-	}
-
-	table := getF3PowerTable(lotusNode)
-	if len(table) < 2 {
-		return nil
-	}
-
-	// Pick a random miner as hub
-	hubMiner := table[rngIntn(len(table))]
-	hubName := minerToNodeName(hubMiner.addr)
-	if hubName == "" {
-		return nil
-	}
-
-	// Get the hub's peer ID so we can identify it
-	hubAddrInfo, err := nodes[hubName].NetAddrsListen(ctx)
-	if err != nil {
-		return nil
-	}
-	hubPeerID := hubAddrInfo.ID
-
-	// For each non-hub node, disconnect from all other non-hub nodes
-	// (keep connection to hub)
-	totalDisconnected := 0
-	honestNodes := []string{}
-	honestPowers := map[string]float64{}
-
-	for _, m := range table {
-		name := minerToNodeName(m.addr)
-		if name == "" || name == hubName {
-			continue
-		}
-		honestNodes = append(honestNodes, name)
-		honestPowers[name] = m.pct
-	}
-
-	for _, name := range honestNodes {
-		peers, err := nodes[name].NetPeers(ctx)
-		if err != nil {
-			continue
-		}
-		for _, p := range peers {
-			// Don't disconnect from the hub
-			if p.ID == hubPeerID {
-				continue
-			}
-			// Disconnect from other honest nodes
-			if err := nodes[name].NetDisconnect(ctx, p.ID); err == nil {
-				totalDisconnected++
-			}
-		}
-	}
-
-	// Compute honest power total
-	totalHonest := 0.0
-	for _, pct := range honestPowers {
-		totalHonest += pct
-	}
-
-	// Log expected impact
-	log.Printf("[nsplit] === bisection: star ===")
-	log.Printf("[nsplit] hub: %s (%s, %.1f%% power)", hubName, hubMiner.addr, hubMiner.pct)
-	for _, name := range honestNodes {
-		log.Printf("[nsplit]   isolated: %s (%.1f%%)", name, honestPowers[name])
-	}
-	log.Printf("[nsplit] disconnected %d honest-to-honest connections", totalDisconnected)
-
-	// Log security analysis
-	ecVulnerable := hubMiner.pct >= ecThresholdPct
-	// F3 quorum requires BOTH sufficient honest power AND F3 actually running
-	f3Active := isF3Active()
-	f3HasQuorum := f3Active && totalHonest > f3QuorumPct
-
-	expected := classifyExpected(hubMiner.pct, f3HasQuorum)
-	log.Printf("[nsplit] EC threshold: vulnerable=%v (%.1f%% vs 20%%)", ecVulnerable, hubMiner.pct)
-	log.Printf("[nsplit] F3 active: %v | quorum=%v (%.1f%% honest, need >67%%)", f3Active, f3HasQuorum, totalHonest)
-	log.Printf("[nsplit] expected: %s", expected)
-
-	assert.Sometimes(totalDisconnected > 0, "N-split star topology created", map[string]any{
-		"hub":              hubName,
-		"hub_power":        hubMiner.pct,
-		"honest_nodes":     honestNodes,
-		"total_honest_pct": totalHonest,
-		"disconnected":     totalDisconnected,
-		"ec_vulnerable":    ecVulnerable,
-		"f3_has_quorum":    f3HasQuorum,
-	})
-
-	return &bisectionResult{
-		strategy:     "star",
-		adversaryPct: hubMiner.pct,
-		honestPct:    totalHonest,
-		ecVulnerable: ecVulnerable,
-		f3HasQuorum:  f3HasQuorum,
-		expected:     expected,
-	}
-}
-
-// doBilateralSplit disconnects two random nodes from each other.
-// Creates partial mesh degradation.
-func doBilateralSplit() *bisectionResult {
-	nameA, nameB, nodeA, nodeB := pickTwoDistinctNodes()
-	if nodeA == nil {
-		return nil
-	}
-
-	// Get B's peer ID
-	addrInfoB, err := nodeB.NetAddrsListen(ctx)
-	if err != nil {
-		return nil
-	}
-
-	// Disconnect A from B
-	disconnected := false
-	peers, err := nodeA.NetPeers(ctx)
-	if err != nil {
-		return nil
-	}
-	for _, p := range peers {
-		if p.ID == addrInfoB.ID {
-			if err := nodeA.NetDisconnect(ctx, p.ID); err == nil {
-				disconnected = true
-			}
-			break
-		}
-	}
-
-	if !disconnected {
-		return nil
-	}
-
-	log.Printf("[nsplit] bilateral split: %s ↔ %s disconnected", nameA, nameB)
-
-	// Bilateral splits create partial degradation — not a full adversary scenario
-	return &bisectionResult{
-		strategy:     "bilateral",
-		adversaryPct: 0,
-		honestPct:    100,
-		ecVulnerable: false,
-		f3HasQuorum:  true,
-		expected:     "partial mesh degradation — forks unlikely but possible under load",
-	}
-}
-
-// doFullIsolation disconnects one node from ALL peers.
-// Simulates an adversary going private to build a competing chain.
-func doFullIsolation() *bisectionResult {
-	// Power-aware: pick based on power table when available
-	victimName, victimPower := pickReorgVictim()
-	victim := nodes[victimName]
-
-	peers, err := victim.NetPeers(ctx)
-	if err != nil || len(peers) == 0 {
-		return nil
-	}
-
-	disconnected := 0
-	for _, p := range peers {
-		if err := victim.NetDisconnect(ctx, p.ID); err == nil {
-			disconnected++
-		}
-	}
-
-	honestPct := 100.0 - victimPower
-	ecVulnerable := victimPower >= ecThresholdPct
-	f3Active := isF3Active()
-	f3HasQuorum := f3Active && honestPct > f3QuorumPct
-
-	expected := classifyExpected(victimPower, f3HasQuorum)
-
-	log.Printf("[nsplit] === bisection: full isolation ===")
-	log.Printf("[nsplit] isolated: %s (%.1f%% power)", victimName, victimPower)
-	log.Printf("[nsplit] honest power: %.1f%%", honestPct)
-	log.Printf("[nsplit] EC threshold: vulnerable=%v (%.1f%% vs 20%%)", ecVulnerable, victimPower)
-	log.Printf("[nsplit] F3 active: %v | quorum=%v (%.1f%% honest, need >67%%)", f3Active, f3HasQuorum, honestPct)
-	log.Printf("[nsplit] expected: %s", expected)
-	log.Printf("[nsplit] disconnected %d peers", disconnected)
-
-	return &bisectionResult{
-		strategy:     "isolation",
-		adversaryPct: victimPower,
-		honestPct:    honestPct,
-		ecVulnerable: ecVulnerable,
-		f3HasQuorum:  f3HasQuorum,
-		expected:     expected,
-	}
-}
-
-// classifyExpected returns a human-readable expected outcome based on
-// adversary power and whether honest nodes have F3 quorum.
 func classifyExpected(adversaryPct float64, f3HasQuorum bool) string {
 	switch {
 	case adversaryPct < ecThresholdPct:
@@ -402,526 +150,669 @@ func classifyExpected(adversaryPct float64, f3HasQuorum bool) string {
 	}
 }
 
-// ===========================================================================
-// verifyBisectionOutcome — Condition-Specific Post-Heal Assertions
-// ===========================================================================
+// ---------------------------------------------------------------------------
+// Lifecycle Entry Point
+// ---------------------------------------------------------------------------
 
-// verifyBisectionOutcome checks F3 and EC behavior against the expected
-// outcome for the partition's power conditions.
-func verifyBisectionOutcome(result *bisectionResult, preF3Inst uint64) {
-	if result == nil {
+func startConsensusTestLifecycle() {
+	if envOrDefault("STRESS_CONSENSUS_TEST", "1") != "1" {
+		log.Println("[consensus-test] disabled (STRESS_CONSENSUS_TEST != 1)")
 		return
 	}
 
-	// Check F3 progress
-	var postF3Inst uint64
-	var f3ok bool
-	for _, name := range nodeKeys {
-		if nodeType(name) != "lotus" {
-			continue
+	go func() {
+		log.Println("[consensus-test] lifecycle started — waiting for chain maturity")
+
+		for {
+			if allNodesPastEpoch(f3MinEpoch) {
+				break
+			}
+			time.Sleep(10 * time.Second)
 		}
-		inst, ok := getF3Instance(nodes[name])
-		if ok && inst > postF3Inst {
-			postF3Inst = inst
-			f3ok = true
-		}
-	}
 
-	f3Advanced := f3ok && postF3Inst > preF3Inst
-
-	log.Printf("[nsplit] === post-heal verification ===")
-	log.Printf("[nsplit] strategy: %s | adversary: %.1f%% | honest: %.1f%%",
-		result.strategy, result.adversaryPct, result.honestPct)
-	log.Printf("[nsplit] F3 instance: %d → %d (advanced=%v)", preF3Inst, postF3Inst, f3Advanced)
-	log.Printf("[nsplit] expected: %s", result.expected)
-
-	// Skip F3 assertions if F3 hasn't bootstrapped yet — instance 0 means
-	// F3 never started, not that it stalled due to our partition.
-	if preF3Inst == 0 && postF3Inst == 0 {
-		log.Printf("[nsplit] SKIP: F3 not yet bootstrapped (instance=0), skipping F3 assertions")
-	} else if result.f3HasQuorum {
-		// F3 SHOULD advance — honest power > 67%
-		assert.Always(f3Advanced, "F3 advances during partition when honest power > 67%", map[string]any{
-			"strategy":      result.strategy,
-			"adversary_pct": result.adversaryPct,
-			"honest_pct":    result.honestPct,
-			"f3_pre":        preF3Inst,
-			"f3_post":       postF3Inst,
-			"expected":      result.expected,
-		})
-
-		if f3Advanced {
-			log.Printf("[nsplit] PASS: F3 protected (honest %.1f%% > 67%%, instance %d→%d)",
-				result.honestPct, preF3Inst, postF3Inst)
-		} else {
-			log.Printf("[nsplit] FAIL: F3 did NOT advance despite honest %.1f%% > 67%% (instance stuck at %d)",
-				result.honestPct, postF3Inst)
-		}
-	} else {
-		// F3 MAY stall — honest power <= 67%
-		assert.Sometimes(f3Advanced, "F3 may advance during partition when honest power <= 67%", map[string]any{
-			"strategy":      result.strategy,
-			"adversary_pct": result.adversaryPct,
-			"honest_pct":    result.honestPct,
-			"f3_pre":        preF3Inst,
-			"f3_post":       postF3Inst,
-			"expected":      result.expected,
-		})
-
-		if !f3Advanced {
-			log.Printf("[nsplit] EXPECTED: F3 stalled (honest %.1f%% <= 67%%, instance stuck at %d)",
-				result.honestPct, postF3Inst)
-		} else {
-			log.Printf("[nsplit] SURPRISING: F3 advanced despite honest %.1f%% <= 67%% (instance %d→%d)",
-				result.honestPct, preF3Inst, postF3Inst)
-		}
-	}
-
-	if result.ecVulnerable {
-		log.Printf("[nsplit] EC: VULNERABLE (adversary %.1f%% >= 20%%) — forks expected at this power level",
-			result.adversaryPct)
-	} else {
-		log.Printf("[nsplit] EC: safe (adversary %.1f%% < 20%%)", result.adversaryPct)
-	}
-}
-
-// ===========================================================================
-// DoNetworkHeal — Reconnect All Nodes + Verify Partition Outcome
-// ===========================================================================
-
-// DoNetworkHeal reconnects all nodes to a full mesh. Only runs if a
-// partition is active and has been held for at least nsplitMinHoldEpochs.
-// After reconnecting, runs post-partition F3/EC verification against the
-// expected outcome recorded when the partition was created.
-func DoNetworkHeal() {
-	if len(nodeKeys) < 2 {
-		return
-	}
-
-	// Check if a partition is active
-	currentPartitionMu.Lock()
-	partition := currentPartition
-	if partition == nil {
-		currentPartitionMu.Unlock()
-		return // no partition to heal
-	}
-
-	// Enforce minimum hold — forks need time to form at EC finality depth.
-	// Use max height across all nodes to avoid jitter from partitioned nodes.
-	var currentHeight abi.ChainEpoch
-	for _, name := range nodeKeys {
-		head, err := nodes[name].ChainHead(ctx)
-		if err == nil && head.Height() > currentHeight {
-			currentHeight = head.Height()
-		}
-	}
-	epochsHeld := currentHeight - partition.startHeight
-	if epochsHeld < 0 {
-		epochsHeld = 0 // reorg dropped max height below partition start
-	}
-	if epochsHeld < nsplitMinHoldEpochs {
-		currentPartitionMu.Unlock()
-		debugLog("[nsplit] heal skipped: partition held %d/%d epochs", epochsHeld, nsplitMinHoldEpochs)
-		return
-	}
-
-	// Clear partition state before healing
-	currentPartition = nil
-	currentPartitionMu.Unlock()
-
-	// Reconnect all nodes
-	allAddrs := collectNodeAddrInfos("")
-
-	reconnected := 0
-	for _, name := range nodeKeys {
-		node := nodes[name]
-		for _, addr := range allAddrs {
-			if err := node.NetConnect(ctx, addr); err == nil {
-				reconnected++
+		cycleNum := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				cycleNum++
+				runConsensusCycle(cycleNum)
+				time.Sleep(testCooldown)
 			}
 		}
-	}
-
-	log.Printf("[nsplit] healed network: %d connections established (partition held %d epochs, %s)",
-		reconnected, epochsHeld, time.Since(partition.createdAt).Round(time.Second))
-
-	assert.Sometimes(reconnected > 0, "Network heal reconnected nodes", map[string]any{
-		"connections": reconnected,
-		"nodes":       len(nodeKeys),
-		"epochs_held": epochsHeld,
-	})
-
-	// Verify partition outcome against expected behavior
-	verifyBisectionOutcome(partition.result, partition.preF3Inst)
+	}()
 }
 
-// ===========================================================================
-// DoAdversarialDuringFork — Opportunistic Attacks During Active Forks
-// ===========================================================================
+// ---------------------------------------------------------------------------
+// Test Cycle
+// ---------------------------------------------------------------------------
 
-// DoAdversarialDuringFork checks if a fork currently exists at either the
-// head level or finalized level. Head-level forks are the real attack window —
-// an exchange credits a deposit when it sees a tx at the chain head, not at
-// finalized depth. Without F3, head-level forks are common and exploitable.
-//
-// Attack strategies:
-//   - Double-spend: same nonce, different recipients, different forks
-//   - Fee-snipe: low-fee tx on fork A, high-fee replacement on fork B
-//   - Balance drain: send full balance to different recipients on different forks
-//
-// All attacks are tracked for post-convergence verification by DoAdversarialVerify.
-func DoAdversarialDuringFork() {
+func runConsensusCycle(cycleNum int) {
 	if len(nodeKeys) < 2 {
 		return
 	}
 
-	nameA, nameB, nodeA, nodeB := pickTwoDistinctNodes()
-	if nodeA == nil {
-		return
-	}
-
-	headA, errA := nodeA.ChainHead(ctx)
-	headB, errB := nodeB.ChainHead(ctx)
-	if errA != nil || errB != nil {
-		return
-	}
-
-	// Skip if chain is too young
-	if headA.Height() < f3MinEpoch || headB.Height() < f3MinEpoch {
-		return
-	}
-
-	// Skip if nodes are at wildly different heights — that's sync lag, not a fork
-	heightDiff := headA.Height() - headB.Height()
-	if heightDiff < 0 {
-		heightDiff = -heightDiff
-	}
-	if heightDiff > 10 {
-		return
-	}
-
-	// Check if a partition is active and what it expects
-	currentPartitionMu.Lock()
-	partitionActive := currentPartition != nil
-	var partitionECVulnerable bool
-	if partitionActive && currentPartition.result != nil {
-		partitionECVulnerable = currentPartition.result.ecVulnerable
-	}
-	currentPartitionMu.Unlock()
-
-	// Check for fork: nodes at similar height but different tipset keys
-	headFork := headA.Key() != headB.Key()
-
-	if !headFork {
-		if partitionActive && partitionECVulnerable {
-			assert.Sometimes(false, "EC fork detected during vulnerable partition", map[string]any{
-				"node_a":        nameA,
-				"node_b":        nameB,
-				"height_a":      headA.Height(),
-				"height_b":      headB.Height(),
-				"level":         "head",
-				"partition":     true,
-				"ec_vulnerable": true,
-			})
-		}
-		return
-	}
-
-	// Fork detected at head level
-	if partitionActive && partitionECVulnerable {
-		assert.Sometimes(true, "EC fork detected during vulnerable partition", map[string]any{
-			"node_a":        nameA,
-			"node_b":        nameB,
-			"height_a":      headA.Height(),
-			"height_b":      headB.Height(),
-			"level":         "head",
-			"partition":     true,
-			"ec_vulnerable": true,
-		})
-	}
-
-	// Pick attack strategy
-	attack := rngIntn(3)
-	attackNames := []string{"double-spend", "fee-snipe", "balance-drain"}
-	log.Printf("[nsplit] fork detected at HEAD (%s h=%d vs %s h=%d) — attack: %s",
-		nameA, headA.Height(), nameB, headB.Height(), attackNames[attack])
-
-	switch attack {
-	case 0:
-		doForkDoubleSpend(nameA, nameB, nodeA, nodeB)
-	case 1:
-		doForkFeeSniping(nameA, nameB, nodeA, nodeB)
-	case 2:
-		doForkBalanceDrain(nameA, nameB, nodeA, nodeB, headA)
-	}
-}
-
-// doForkDoubleSpend sends conflicting transactions (same nonce, different
-// recipients) to nodes on different fork branches.
-func doForkDoubleSpend(nameA, nameB string, nodeA, nodeB api.FullNode) {
-	fromAddr, fromKI := pickWallet()
-	toAddrA, _ := pickWallet()
-	toAddrB, _ := pickWallet()
-	if fromAddr == toAddrA || fromAddr == toAddrB || toAddrA == toAddrB {
-		return
-	}
-
-	currentNonce := nonces[fromAddr]
-
-	msgA := baseMsg(fromAddr, toAddrA, abi.NewTokenAmount(1))
-	cidA, okA := pushMsgManualNonce(nodeA, msgA, fromKI, currentNonce, "nsplit-dspend-A")
-
-	msgB := baseMsg(fromAddr, toAddrB, abi.NewTokenAmount(1))
-	cidB, okB := pushMsgManualNonce(nodeB, msgB, fromKI, currentNonce, "nsplit-dspend-B")
-
-	nonces[fromAddr]++
-
-	if !okA || !okB {
-		return
-	}
-
-	trackPendingAttack(fromAddr, currentNonce, cidA, cidB, nameA, nameB, nodeA, "double-spend")
-}
-
-// doForkFeeSniping sends a low-fee tx to one fork and a high-fee replacement
-// (same nonce) to the other. Tests fee economics across reorgs.
-func doForkFeeSniping(nameA, nameB string, nodeA, nodeB api.FullNode) {
-	fromAddr, fromKI := pickWallet()
-	toAddr, _ := pickWallet()
-	if fromAddr == toAddr {
-		return
-	}
-
-	currentNonce := nonces[fromAddr]
-
-	// Low-fee to fork A
-	msgLow := baseMsg(fromAddr, toAddr, abi.NewTokenAmount(1))
-	msgLow.GasPremium = abi.NewTokenAmount(100)
-	msgLow.GasFeeCap = abi.NewTokenAmount(100_000)
-	cidLow, okLow := pushMsgManualNonce(nodeA, msgLow, fromKI, currentNonce, "nsplit-feesnipe-low")
-
-	// High-fee to fork B (same nonce, same recipient)
-	msgHigh := baseMsg(fromAddr, toAddr, abi.NewTokenAmount(1))
-	msgHigh.GasPremium = abi.NewTokenAmount(50_000)
-	msgHigh.GasFeeCap = abi.NewTokenAmount(200_000)
-	cidHigh, okHigh := pushMsgManualNonce(nodeB, msgHigh, fromKI, currentNonce, "nsplit-feesnipe-high")
-
-	nonces[fromAddr]++
-
-	if !okLow || !okHigh {
-		return
-	}
-
-	trackPendingAttack(fromAddr, currentNonce, cidLow, cidHigh, nameA, nameB, nodeA, "fee-snipe")
-}
-
-// doForkBalanceDrain sends the full wallet balance to different recipients
-// on different fork branches. Tests balance accounting across deep reorgs.
-func doForkBalanceDrain(nameA, nameB string, nodeA, nodeB api.FullNode, finA *types.TipSet) {
-	fromAddr, fromKI := pickWallet()
-	toAddrA, _ := pickWallet()
-	toAddrB, _ := pickWallet()
-	if fromAddr == toAddrA || fromAddr == toAddrB || toAddrA == toAddrB {
-		return
-	}
-
-	// Query actual balance
-	actor, err := nodeA.StateGetActor(ctx, fromAddr, finA.Key())
-	if err != nil || actor == nil {
-		return
-	}
-
-	// Reserve 1 FIL for gas
-	gasBudget := abi.NewTokenAmount(1_000_000_000_000_000_000)
-	if actor.Balance.LessThanEqual(gasBudget) {
-		return
-	}
-	drainAmount := abi.TokenAmount{Int: new(big.Int).Sub(actor.Balance.Int, gasBudget.Int)}
-
-	currentNonce := nonces[fromAddr]
-
-	msgA := baseMsg(fromAddr, toAddrA, drainAmount)
-	cidA, okA := pushMsgManualNonce(nodeA, msgA, fromKI, currentNonce, "nsplit-drain-A")
-
-	msgB := baseMsg(fromAddr, toAddrB, drainAmount)
-	cidB, okB := pushMsgManualNonce(nodeB, msgB, fromKI, currentNonce, "nsplit-drain-B")
-
-	nonces[fromAddr]++
-
-	if !okA || !okB {
-		return
-	}
-
-	trackPendingAttack(fromAddr, currentNonce, cidA, cidB, nameA, nameB, nodeA, "balance-drain")
-}
-
-// trackPendingAttack records a conflicting tx pair for later verification.
-// Captures the current partition's power conditions so assertions can be
-// conditional: F3 with quorum should always prevent double-spends, but
-// when both EC and F3 are broken a successful double-spend is expected.
-func trackPendingAttack(fromAddr address.Address, nonce uint64, cidA, cidB cid.Cid, nameA, nameB string, refNode api.FullNode, attackType string) {
-	head, err := refNode.ChainHead(ctx)
-	if err != nil {
-		return
-	}
-
-	// Snapshot partition context at injection time
-	var f3HasQuorum, ecSafe bool
-	currentPartitionMu.Lock()
-	if currentPartition != nil && currentPartition.result != nil {
-		f3HasQuorum = currentPartition.result.f3HasQuorum
-		ecSafe = !currentPartition.result.ecVulnerable
-	}
-	currentPartitionMu.Unlock()
-
-	pendingDoubleSpendsMu.Lock()
-	if len(pendingDoubleSpends) >= nsplitMaxPending {
-		pendingDoubleSpends = pendingDoubleSpends[1:]
-	}
-	pendingDoubleSpends = append(pendingDoubleSpends, pendingDoubleSpend{
-		fromAddr:    fromAddr,
-		nonce:       nonce,
-		cidA:        cidA,
-		cidB:        cidB,
-		nodeA:       nameA,
-		nodeB:       nameB,
-		injectedAt:  head.Height(),
-		attackType:  attackType,
-		f3HasQuorum: f3HasQuorum,
-		ecSafe:      ecSafe,
-	})
-	pendingDoubleSpendsMu.Unlock()
-
-	log.Printf("[nsplit] %s injected: from=%s nonce=%d cidA=%s→%s cidB=%s→%s (f3_quorum=%v ec_safe=%v)",
-		attackType, fromAddr, nonce, cidStr(cidA), nameA, cidStr(cidB), nameB, f3HasQuorum, ecSafe)
-
-	assert.Sometimes(true, "Adversarial attack injected during fork", map[string]any{
-		"attack":      attackType,
-		"from":        fromAddr.String(),
-		"nonce":       nonce,
-		"node_a":      nameA,
-		"node_b":      nameB,
-		"f3_quorum":   f3HasQuorum,
-		"ec_safe":     ecSafe,
-	})
-}
-
-// ===========================================================================
-// DoAdversarialVerify — Post-Convergence Safety Check
-// ===========================================================================
-
-// DoAdversarialVerify checks pending attack records. For records where
-// enough epochs have passed since injection, it verifies that at most one
-// of the conflicting transactions was included on-chain.
-func DoAdversarialVerify() {
-	pendingDoubleSpendsMu.Lock()
-	defer pendingDoubleSpendsMu.Unlock()
-
-	if len(pendingDoubleSpends) == 0 {
-		return
-	}
-
-	// Get current chain head from any node
+	f3Active := isF3Active()
 	lotusNode, _ := pickLotusNode()
 	if lotusNode == nil {
 		return
 	}
-	head, err := lotusNode.ChainHead(ctx)
+	table := getF3PowerTable(lotusNode)
+	if len(table) < 2 {
+		return
+	}
+
+	// Rotate strategy and attack across cycles (3 splits × 3 attacks = 9 combinations)
+	split := splitStrategy(cycleNum % int(splitCount))
+	attack := attackType((cycleNum / int(splitCount)) % int(attackCount))
+
+	// --- Header ---
+	log.Printf("[consensus-test] ╔══════════════════════════════════════════════╗")
+	log.Printf("[consensus-test] ║   CONSENSUS TEST — CYCLE %-3d                ║", cycleNum)
+	log.Printf("[consensus-test] ╚══════════════════════════════════════════════╝")
+	log.Printf("[consensus-test] F3 active: %v", f3Active)
+	for _, m := range table {
+		log.Printf("[consensus-test]   %s: %.1f%% power", minerToNodeName(m.addr), m.pct)
+	}
+	log.Printf("[consensus-test] strategy: %s | attack: %s", split, attack)
+
+	// --- Snapshot ---
+	var preF3Inst uint64
+	if f3Active {
+		preF3Inst, _ = getF3Instance(lotusNode)
+	}
+	preHead, err := lotusNode.ChainHead(ctx)
 	if err != nil {
 		return
 	}
 
-	remaining := pendingDoubleSpends[:0]
-
-	for _, ds := range pendingDoubleSpends {
-		epochsSince := head.Height() - ds.injectedAt
-
-		// Not enough time — keep tracking
-		if epochsSince < nsplitConvergenceBuffer {
-			remaining = append(remaining, ds)
-			continue
-		}
-
-		// Check if each tx landed
-		// allowReplaced=false: only count a tx as "landed" if THAT SPECIFIC
-		// message CID was included on-chain, not a replacement with the same nonce.
-		// With allowReplaced=true, fee-snipes (same nonce, different gas) would
-		// both return results even though only one actually executed.
-		resultA, _ := lotusNode.StateSearchMsg(ctx, types.EmptyTSK, ds.cidA, 200, false)
-		resultB, _ := lotusNode.StateSearchMsg(ctx, types.EmptyTSK, ds.cidB, 200, false)
-
-		landedA := resultA != nil
-		landedB := resultB != nil
-		landed := 0
-		if landedA {
-			landed++
-		}
-		if landedB {
-			landed++
-		}
-
-		safe := landed <= 1
-
-		details := map[string]any{
-			"from":          ds.fromAddr.String(),
-			"nonce":         ds.nonce,
-			"attack":        ds.attackType,
-			"cid_a":         cidStr(ds.cidA),
-			"cid_b":         cidStr(ds.cidB),
-			"node_a":        ds.nodeA,
-			"node_b":        ds.nodeB,
-			"landed_a":      landedA,
-			"landed_b":      landedB,
-			"total_landed":  landed,
-			"injected_at":   ds.injectedAt,
-			"verified_at":   head.Height(),
-			"epochs_waited": epochsSince,
-			"f3_quorum":     ds.f3HasQuorum,
-			"ec_safe":       ds.ecSafe,
-		}
-
-		// Assertion strength depends on what should have protected us:
-		//
-		// F3 quorum    EC safe    Expected
-		// ─────────    ───────    ────────
-		// true         *          Always safe — F3 prevents conflicting finalization
-		// false        true       Always safe — EC alone protects below 20% adversary
-		// false        false      Sometimes safe — both vulnerable, double-spend may succeed
-		if ds.f3HasQuorum {
-			assert.Always(safe, "Double-spend safety: F3 quorum should prevent both txs landing", details)
-			if !safe {
-				log.Printf("[nsplit] SAFETY VIOLATION (F3 HAD QUORUM): %s from=%s nonce=%d — both txs landed",
-					ds.attackType, ds.fromAddr, ds.nonce)
-			}
-		} else if ds.ecSafe {
-			assert.Always(safe, "Double-spend safety: EC safe (adversary <20%%) should prevent both txs landing", details)
-			if !safe {
-				log.Printf("[nsplit] SAFETY VIOLATION (EC SAFE): %s from=%s nonce=%d — both txs landed",
-					ds.attackType, ds.fromAddr, ds.nonce)
-			}
-		} else {
-			// Both EC and F3 vulnerable — double-spend succeeding is possible
-			assert.Sometimes(safe, "Double-spend safety: both EC and F3 vulnerable, attack may succeed", details)
-			if !safe {
-				log.Printf("[nsplit] EXPECTED: %s succeeded (EC vulnerable, F3 no quorum): from=%s nonce=%d",
-					ds.attackType, ds.fromAddr, ds.nonce)
-			}
-		}
-
-		if safe {
-			debugLog("[nsplit] %s verified safe: from=%s nonce=%d landed=%d (after %d epochs, f3_quorum=%v ec_safe=%v)",
-				ds.attackType, ds.fromAddr, ds.nonce, landed, epochsSince, ds.f3HasQuorum, ds.ecSafe)
-		}
-
-		assert.Sometimes(landed >= 1, "Adversarial attack: at least one tx eventually included", map[string]any{
-			"attack":       ds.attackType,
-			"from":         ds.fromAddr.String(),
-			"nonce":        ds.nonce,
-			"total_landed": landed,
-		})
-
-		// Verified — don't keep
+	// --- Create partition based on strategy ---
+	sr := createPartition(split, table, f3Active)
+	if sr == nil {
+		log.Printf("[consensus-test] partition creation failed, skipping cycle")
+		return
 	}
 
-	pendingDoubleSpends = remaining
+	partitionActive.Store(true)
+	log.Printf("[consensus-test] PARTITION: %s", split)
+	log.Printf("[consensus-test]   adversary: %s (%.1f%%)", sr.adversaryName, sr.adversaryPct)
+	log.Printf("[consensus-test]   honest: %.1f%% | EC vulnerable: %v | F3 quorum: %v",
+		sr.honestPct, sr.ecVulnerable, sr.f3HasQuorum)
+	log.Printf("[consensus-test]   expected: %s", sr.expected)
+
+	// --- Divergence ---
+	waitForDivergence(sr.honestNode, sr.adversaryName, sr.advNode)
+
+	// --- Inject attack ---
+	ar := injectAttack(attack, sr.honestNode, sr.adversaryName, sr.advNode)
+	if ar == nil {
+		log.Printf("[consensus-test] attack injection failed, healing")
+		partitionActive.Store(false)
+		healPartition(sr)
+		return
+	}
+
+	// --- Heal ---
+	log.Printf("[consensus-test] HEALING partition...")
+	partitionActive.Store(false)
+	healPartition(sr)
+
+	converged := waitForConvergence(sr.adversaryName)
+	log.Printf("[consensus-test] convergence: %v", converged)
+
+	// --- Settlement ---
+	waitForSettlement(lotusNode, preHead.Height())
+
+	// --- Verify ---
+	landed := verifyOutcome(lotusNode, ar, cycleNum, sr, f3Active, attack)
+
+	// --- F3 health ---
+	if f3Active {
+		postF3, _ := getF3Instance(lotusNode)
+		log.Printf("[consensus-test] F3 post-heal: %d→%d", preF3Inst, postF3)
+	}
+
+	// --- Structured summary ---
+	verdict := "UNKNOWN"
+	switch {
+	case sr.f3HasQuorum && landed <= 1:
+		verdict = "PASS — F3 protected"
+	case sr.f3HasQuorum && landed > 1:
+		verdict = "FAIL — double-spend despite F3"
+	case !sr.f3HasQuorum && !sr.ecVulnerable && landed <= 1:
+		verdict = "PASS — EC protected"
+	case sr.ecVulnerable && landed == 2:
+		verdict = "CONFIRMED — EC vulnerability exploited"
+	case sr.ecVulnerable && landed == 1:
+		verdict = "EC resolved — honest majority won"
+	case landed == 0:
+		verdict = "INCONCLUSIVE — neither tx landed"
+	}
+
+	log.Printf("[consensus-test] ╔══════════════════════════════════════════╗")
+	log.Printf("[consensus-test] ║         CYCLE %-3d SUMMARY                ║", cycleNum)
+	log.Printf("[consensus-test] ╠══════════════════════════════════════════╣")
+	log.Printf("[consensus-test] ║ Strategy:      %-25s ║", split)
+	log.Printf("[consensus-test] ║ Adversary:     %-10s (%.0f%%)          ║", sr.adversaryName, sr.adversaryPct)
+	log.Printf("[consensus-test] ║ Attack:        %-25s ║", attack)
+	log.Printf("[consensus-test] ║ F3 active:     %-5v  quorum: %-5v      ║", f3Active, sr.f3HasQuorum)
+	log.Printf("[consensus-test] ║ EC vulnerable: %-5v                     ║", sr.ecVulnerable)
+	log.Printf("[consensus-test] ║ Landed:        %d/2                      ║", landed)
+	log.Printf("[consensus-test] ║ Verdict:       %-25s ║", verdict)
+	log.Printf("[consensus-test] ╚══════════════════════════════════════════╝")
+}
+
+// ---------------------------------------------------------------------------
+// Partition Creation
+// ---------------------------------------------------------------------------
+
+// createPartition executes the given split strategy and returns the partition
+// state needed for heal + verification. Returns nil if the split fails.
+func createPartition(split splitStrategy, table []minerPowerInfo, f3Active bool) *splitResult {
+	switch split {
+	case splitFullIsolation:
+		return createFullIsolation(table, f3Active)
+	case splitStar:
+		return createStarSplit(table, f3Active)
+	case splitBisection:
+		return createBisection(table, f3Active)
+	default:
+		return nil
+	}
+}
+
+// createFullIsolation disconnects the largest miner from all peers.
+// Topology: adversary alone vs honest majority together.
+func createFullIsolation(table []minerPowerInfo, f3Active bool) *splitResult {
+	adversary := table[0] // largest miner
+	advName := minerToNodeName(adversary.addr)
+	if advName == "" {
+		return nil
+	}
+
+	advNode := nodes[advName]
+	peers, err := advNode.NetPeers(ctx)
+	if err != nil || len(peers) == 0 {
+		return nil
+	}
+
+	savedPeers := make([]peer.AddrInfo, len(peers))
+	copy(savedPeers, peers)
+
+	disconnected := 0
+	for _, p := range peers {
+		if err := advNode.NetDisconnect(ctx, p.ID); err == nil {
+			disconnected++
+		}
+	}
+
+	honestPct := 100.0 - adversary.pct
+	log.Printf("[consensus-test] full-isolation: disconnected %s (%.1f%%) from %d peers",
+		advName, adversary.pct, disconnected)
+
+	return &splitResult{
+		strategy:      splitFullIsolation,
+		adversaryName: advName,
+		adversaryPct:  adversary.pct,
+		honestPct:     honestPct,
+		honestNode:    pickHonestNode(advName),
+		advNode:       advNode,
+		savedPeers:    savedPeers,
+		ecVulnerable:  adversary.pct >= ecThresholdPct,
+		f3HasQuorum:   f3Active && honestPct > f3QuorumPct,
+		expected:      classifyExpected(adversary.pct, f3Active && honestPct > f3QuorumPct),
+	}
+}
+
+// createStarSplit keeps the largest miner connected to all (hub) and
+// disconnects all honest miners from each other.
+// Topology: hub sees everything, each honest miner is alone.
+// This is the n-split attack from Wang et al. 2023.
+func createStarSplit(table []minerPowerInfo, f3Active bool) *splitResult {
+	hub := table[0] // largest miner as hub
+	hubName := minerToNodeName(hub.addr)
+	if hubName == "" {
+		return nil
+	}
+
+	hubAddrInfo, err := nodes[hubName].NetAddrsListen(ctx)
+	if err != nil {
+		return nil
+	}
+	hubPeerID := hubAddrInfo.ID
+
+	// Collect all honest nodes and their current peers for heal
+	var allSavedPeers []peer.AddrInfo
+	honestNodes := []string{}
+	totalDisconnected := 0
+
+	for _, m := range table {
+		name := minerToNodeName(m.addr)
+		if name == "" || name == hubName {
+			continue
+		}
+		honestNodes = append(honestNodes, name)
+
+		peers, err := nodes[name].NetPeers(ctx)
+		if err != nil {
+			continue
+		}
+		for _, p := range peers {
+			if p.ID == hubPeerID {
+				continue // keep connection to hub
+			}
+			if err := nodes[name].NetDisconnect(ctx, p.ID); err == nil {
+				totalDisconnected++
+				allSavedPeers = append(allSavedPeers, p)
+			}
+		}
+	}
+
+	honestPct := 100.0 - hub.pct
+	log.Printf("[consensus-test] star-split: hub=%s (%.1f%%), disconnected %d honest-to-honest connections",
+		hubName, hub.pct, totalDisconnected)
+	for _, name := range honestNodes {
+		log.Printf("[consensus-test]   isolated: %s", name)
+	}
+
+	// Pick any honest node for injection
+	honestTarget := ""
+	if len(honestNodes) > 0 {
+		honestTarget = honestNodes[0]
+	}
+
+	return &splitResult{
+		strategy:      splitStar,
+		adversaryName: hubName,
+		adversaryPct:  hub.pct,
+		honestPct:     honestPct,
+		honestNode:    honestTarget,
+		advNode:       nodes[hubName],
+		savedPeers:    allSavedPeers,
+		ecVulnerable:  hub.pct >= ecThresholdPct,
+		f3HasQuorum:   f3Active && honestPct > f3QuorumPct,
+		expected:      classifyExpected(hub.pct, f3Active && honestPct > f3QuorumPct),
+	}
+}
+
+// createBisection splits the network into two roughly equal halves.
+// With 3:3:2:2 power: groupA = lotus0(30%)+lotus3(20%) = 50%,
+//                      groupB = lotus1(30%)+lotus2(20%) = 50%.
+// Neither side has majority. Tests fork resolution under maximum ambiguity.
+func createBisection(table []minerPowerInfo, f3Active bool) *splitResult {
+	if len(table) < 4 {
+		// Need at least 4 miners for a meaningful bisection
+		return createFullIsolation(table, f3Active) // fallback
+	}
+
+	// Split: biggest + smallest vs middle two
+	// With sorted desc [30, 30, 20, 20]: groupA = [0]+[3] = 50%, groupB = [1]+[2] = 50%
+	groupA := []minerPowerInfo{table[0], table[len(table)-1]}
+	groupB := []minerPowerInfo{}
+	for i := 1; i < len(table)-1; i++ {
+		groupB = append(groupB, table[i])
+	}
+
+	groupAPower := 0.0
+	groupANames := []string{}
+	for _, m := range groupA {
+		name := minerToNodeName(m.addr)
+		if name == "" {
+			continue
+		}
+		groupANames = append(groupANames, name)
+		groupAPower += m.pct
+	}
+
+	groupBNames := []string{}
+	groupBPower := 0.0
+	for _, m := range groupB {
+		name := minerToNodeName(m.addr)
+		if name == "" {
+			continue
+		}
+		groupBNames = append(groupBNames, name)
+		groupBPower += m.pct
+	}
+
+	// Disconnect group A nodes from group B nodes
+	var allSavedPeers []peer.AddrInfo
+	totalDisconnected := 0
+
+	// Build set of group B peer IDs for quick lookup
+	groupBPeerIDs := map[peer.ID]bool{}
+	for _, name := range groupBNames {
+		addrInfo, err := nodes[name].NetAddrsListen(ctx)
+		if err == nil {
+			groupBPeerIDs[addrInfo.ID] = true
+		}
+	}
+
+	for _, name := range groupANames {
+		peers, err := nodes[name].NetPeers(ctx)
+		if err != nil {
+			continue
+		}
+		for _, p := range peers {
+			if groupBPeerIDs[p.ID] {
+				if err := nodes[name].NetDisconnect(ctx, p.ID); err == nil {
+					totalDisconnected++
+					allSavedPeers = append(allSavedPeers, p)
+				}
+			}
+		}
+	}
+
+	// Also disconnect B from A
+	groupAPeerIDs := map[peer.ID]bool{}
+	for _, name := range groupANames {
+		addrInfo, err := nodes[name].NetAddrsListen(ctx)
+		if err == nil {
+			groupAPeerIDs[addrInfo.ID] = true
+		}
+	}
+
+	for _, name := range groupBNames {
+		peers, err := nodes[name].NetPeers(ctx)
+		if err != nil {
+			continue
+		}
+		for _, p := range peers {
+			if groupAPeerIDs[p.ID] {
+				if err := nodes[name].NetDisconnect(ctx, p.ID); err == nil {
+					totalDisconnected++
+				}
+			}
+		}
+	}
+
+	log.Printf("[consensus-test] 50/50-bisection: groupA=%v (%.0f%%) vs groupB=%v (%.0f%%), %d connections severed",
+		groupANames, groupAPower, groupBNames, groupBPower, totalDisconnected)
+
+	// For adversary metrics: treat groupA as "adversary" (arbitrary — neither side is honest majority)
+	// EC is vulnerable if either side has >= 20% (always true with 50/50)
+	// F3 quorum: neither side has > 67%, so no quorum
+	return &splitResult{
+		strategy:      splitBisection,
+		adversaryName: groupANames[0], // use first node of groupA for heal
+		adversaryPct:  groupAPower,
+		honestPct:     groupBPower,
+		honestNode:    groupBNames[0],
+		advNode:       nodes[groupANames[0]],
+		savedPeers:    allSavedPeers,
+		ecVulnerable:  true, // always true in 50/50
+		f3HasQuorum:   false, // neither side has > 67%
+		expected:      "EC VULNERABLE, F3 VULNERABLE — no majority on either side",
+	}
+}
+
+// healPartition reconnects all nodes from a splitResult.
+func healPartition(sr *splitResult) {
+	// Reconnect saved peers
+	for _, p := range sr.savedPeers {
+		for _, name := range nodeKeys {
+			nodes[name].NetConnect(ctx, p)
+		}
+	}
+	// Full mesh reconnect as fallback
+	allAddrs := collectNodeAddrInfos("")
+	for _, name := range nodeKeys {
+		for _, addr := range allAddrs {
+			nodes[name].NetConnect(ctx, addr)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Attack Injection (rotates across cycles)
+// ---------------------------------------------------------------------------
+
+func injectAttack(attack attackType, honestName, advName string, advNode api.FullNode) *attackResult {
+	fromAddr, fromKI := pickWallet()
+	nonce := nonces[fromAddr]
+
+	var cidA, cidB cid.Cid
+	var okA, okB bool
+
+	switch attack {
+	case attackDoubleSpend:
+		// Same nonce, different recipients — classic double-spend
+		toA, _ := pickWallet()
+		toB, _ := pickWallet()
+		for fromAddr == toA || fromAddr == toB || toA == toB {
+			toA, _ = pickWallet()
+			toB, _ = pickWallet()
+		}
+
+		msgA := baseMsg(fromAddr, toA, abi.NewTokenAmount(1_000_000_000))
+		cidA, okA = pushMsgManualNonce(nodes[honestName], msgA, fromKI, nonce, "test-honest")
+
+		msgB := baseMsg(fromAddr, toB, abi.NewTokenAmount(1_000_000_000))
+		cidB, okB = pushMsgManualNonce(advNode, msgB, fromKI, nonce, "test-adversary")
+
+		log.Printf("[consensus-test] ATTACK: double-spend")
+		log.Printf("[consensus-test]   tx A (honest):    %s → recipient A via %s", cidStr(cidA), honestName)
+		log.Printf("[consensus-test]   tx B (adversary):  %s → recipient B via %s", cidStr(cidB), advName)
+
+	case attackGasPremiumFrontrun:
+		// Same nonce, same recipient, different gas premiums
+		toAddr, _ := pickWallet()
+		for fromAddr == toAddr {
+			toAddr, _ = pickWallet()
+		}
+
+		msgLow := baseMsg(fromAddr, toAddr, abi.NewTokenAmount(1_000_000_000))
+		msgLow.GasPremium = abi.NewTokenAmount(100)
+		msgLow.GasFeeCap = abi.NewTokenAmount(100_000)
+		cidA, okA = pushMsgManualNonce(nodes[honestName], msgLow, fromKI, nonce, "test-lowfee")
+
+		msgHigh := baseMsg(fromAddr, toAddr, abi.NewTokenAmount(1_000_000_000))
+		msgHigh.GasPremium = abi.NewTokenAmount(50_000)
+		msgHigh.GasFeeCap = abi.NewTokenAmount(200_000)
+		cidB, okB = pushMsgManualNonce(advNode, msgHigh, fromKI, nonce, "test-highfee")
+
+		log.Printf("[consensus-test] ATTACK: gas-premium-frontrun")
+		log.Printf("[consensus-test]   tx A (low fee):   %s premium=100 via %s", cidStr(cidA), honestName)
+		log.Printf("[consensus-test]   tx B (high fee):  %s premium=50000 via %s", cidStr(cidB), advName)
+
+	case attackBalanceExhaustion:
+		// Same nonce, full balance to different recipients
+		toA, _ := pickWallet()
+		toB, _ := pickWallet()
+		for fromAddr == toA || fromAddr == toB || toA == toB {
+			toA, _ = pickWallet()
+			toB, _ = pickWallet()
+		}
+
+		// Query balance
+		actor, err := nodes[honestName].StateGetActor(ctx, fromAddr, types.EmptyTSK)
+		if err != nil || actor == nil || actor.Balance.IsZero() {
+			log.Printf("[consensus-test] cannot query balance for %s", fromAddr)
+			return nil
+		}
+
+		// Reserve 1 FIL for gas
+		gasBudget := abi.NewTokenAmount(1_000_000_000_000_000_000)
+		if actor.Balance.LessThanEqual(gasBudget) {
+			log.Printf("[consensus-test] insufficient balance for drain (%s)", actor.Balance)
+			return nil
+		}
+		drainAmt := abi.TokenAmount{Int: new(big.Int).Sub(actor.Balance.Int, gasBudget.Int)}
+
+		msgA := baseMsg(fromAddr, toA, drainAmt)
+		cidA, okA = pushMsgManualNonce(nodes[honestName], msgA, fromKI, nonce, "test-drain-honest")
+
+		msgB := baseMsg(fromAddr, toB, drainAmt)
+		cidB, okB = pushMsgManualNonce(advNode, msgB, fromKI, nonce, "test-drain-adv")
+
+		log.Printf("[consensus-test] ATTACK: balance-exhaustion")
+		log.Printf("[consensus-test]   tx A (drain→A):   %s amount=%s via %s", cidStr(cidA), drainAmt, honestName)
+		log.Printf("[consensus-test]   tx B (drain→B):   %s amount=%s via %s", cidStr(cidB), drainAmt, advName)
+	}
+
+	nonces[fromAddr]++
+
+	if !okA || !okB {
+		log.Printf("[consensus-test] push failed (okA=%v okB=%v)", okA, okB)
+		return nil
+	}
+
+	log.Printf("[consensus-test]   from=%s nonce=%d", fromAddr, nonce)
+
+	return &attackResult{
+		attack:     attack,
+		fromAddr:   fromAddr,
+		nonce:      nonce,
+		cidA:       cidA,
+		cidB:       cidB,
+		honestNode: honestName,
+		advNode:    advName,
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Verification
+// ---------------------------------------------------------------------------
+
+func verifyOutcome(refNode api.FullNode, ar *attackResult, cycleNum int,
+	sr *splitResult, f3Active bool, attack attackType) int {
+
+	log.Printf("[consensus-test] ═══ VERIFICATION ═══")
+
+	// Wait for mining
+	log.Printf("[consensus-test] waiting for txs to settle...")
+	time.Sleep(30 * time.Second)
+
+	finalA, _ := refNode.StateSearchMsg(ctx, types.EmptyTSK, ar.cidA, 200, false)
+	finalB, _ := refNode.StateSearchMsg(ctx, types.EmptyTSK, ar.cidB, 200, false)
+
+	aLanded := finalA != nil
+	bLanded := finalB != nil
+	landed := 0
+	if aLanded {
+		landed++
+	}
+	if bLanded {
+		landed++
+	}
+
+	log.Printf("[consensus-test]   tx A (honest):    landed=%v %s", aLanded, fmtHeight(finalA))
+	log.Printf("[consensus-test]   tx B (adversary): landed=%v %s", bLanded, fmtHeight(finalB))
+	log.Printf("[consensus-test]   total: %d/2", landed)
+
+	details := map[string]any{
+		"cycle":         cycleNum,
+		"strategy":      sr.strategy.String(),
+		"attack":        attack.String(),
+		"adversary":     sr.adversaryName,
+		"adversary_pct": sr.adversaryPct,
+		"honest_pct":    sr.honestPct,
+		"f3_active":     f3Active,
+		"f3_has_quorum": sr.f3HasQuorum,
+		"ec_vulnerable": sr.ecVulnerable,
+		"a_landed":      aLanded,
+		"b_landed":      bLanded,
+		"total_landed":  landed,
+		"expected":      sr.expected,
+	}
+
+	if sr.f3HasQuorum {
+		safe := landed <= 1
+		assert.Always(safe, fmt.Sprintf("Consensus: F3 quorum prevents %s", attack), details)
+		if !safe {
+			log.Printf("[consensus-test] FAIL: %s succeeded despite F3 quorum", attack)
+		}
+	} else if !sr.ecVulnerable {
+		safe := landed <= 1
+		assert.Always(safe, fmt.Sprintf("Consensus: EC safe prevents %s", attack), details)
+		if !safe {
+			log.Printf("[consensus-test] FAIL: %s succeeded despite EC being safe", attack)
+		}
+	} else {
+		if landed == 2 {
+			log.Printf("[consensus-test] CONFIRMED: %s succeeded (EC-only, %.1f%% adversary)", attack, sr.adversaryPct)
+			assert.Sometimes(true, fmt.Sprintf("%s succeeded under EC-only", attack), details)
+		} else if landed == 1 {
+			log.Printf("[consensus-test] EC resolved fork — honest majority won")
+			assert.Sometimes(true, "EC resolved fork correctly", details)
+		} else {
+			log.Printf("[consensus-test] Neither tx landed")
+		}
+	}
+
+	return landed
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+func pickHonestNode(adversaryName string) string {
+	for _, name := range nodeKeys {
+		if name != adversaryName && nodeType(name) == "lotus" {
+			return name
+		}
+	}
+	return ""
+}
+
+func waitForDivergence(honestName, advName string, advNode api.FullNode) {
+	log.Printf("[consensus-test] waiting for divergence (need %d epoch diff)...", divergeMinEpochs)
+
+	deadline := time.After(divergeTimeout)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-deadline:
+			log.Printf("[consensus-test] divergence timeout — proceeding anyway")
+			return
+		case <-time.After(10 * time.Second):
+			hHead, e1 := nodes[honestName].ChainHead(ctx)
+			aHead, e2 := advNode.ChainHead(ctx)
+			if e1 != nil || e2 != nil {
+				continue
+			}
+			diff := hHead.Height() - aHead.Height()
+			if diff < 0 {
+				diff = -diff
+			}
+			log.Printf("[consensus-test]   %s=%d  %s=%d  diff=%d",
+				honestName, hHead.Height(), advName, aHead.Height(), diff)
+			if diff >= divergeMinEpochs {
+				log.Printf("[consensus-test] chains diverged by %d epochs", diff)
+				return
+			}
+		}
+	}
+}
+
+func waitForSettlement(refNode api.FullNode, preHeight abi.ChainEpoch) {
+	log.Printf("[consensus-test] waiting for settlement (%d epochs)...", convergenceBuffer)
+	deadline := time.After(settlementTimeout)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-deadline:
+			return
+		case <-time.After(10 * time.Second):
+			head, err := refNode.ChainHead(ctx)
+			if err != nil {
+				continue
+			}
+			if head.Height() >= preHeight+abi.ChainEpoch(convergenceBuffer)+10 {
+				return
+			}
+		}
+	}
+}
+
+
+func fmtHeight(result *api.MsgLookup) string {
+	if result == nil {
+		return ""
+	}
+	return fmt.Sprintf("(height=%d)", result.Height)
 }

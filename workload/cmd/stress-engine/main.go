@@ -256,17 +256,14 @@ func buildDeck() {
 		{"DoF3FinalityAgreement", "STRESS_WEIGHT_F3_AGREEMENT", DoF3FinalityAgreement, 3},
 	}
 
-	// Non-FOC stress vectors — skipped when FOC profile is active
+	// Non-FOC stress vectors — skipped when FOC profile is active.
+	// These run as deck background activity while the consensus integration
+	// test lifecycle runs in a separate goroutine.
 	stress := []weightedAction{
 		// Power table manipulation
 		{"DoPowerAwareSlash", "STRESS_WEIGHT_POWER_SLASH", DoPowerAwareSlash, 0},
-		// N-split attack vectors (EC/F3 threshold testing)
-		{"DoNetworkBisection", "STRESS_WEIGHT_BISECTION", DoNetworkBisection, 3},
-		{"DoNetworkHeal", "STRESS_WEIGHT_HEAL", DoNetworkHeal, 2},
-		{"DoAdversarialDuringFork", "STRESS_WEIGHT_ADVERSARIAL_FORK", DoAdversarialDuringFork, 4},
-		{"DoAdversarialVerify", "STRESS_WEIGHT_ADVERSARIAL_VERIFY", DoAdversarialVerify, 2},
 		// Background chain activity (creates state changes for forks to reconcile)
-		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 1},
+		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 2},
 		{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 1},
 		{"DoNonceRace", "STRESS_WEIGHT_NONCE_RACE", doNonceRace, 1},
 		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 1},
@@ -343,9 +340,9 @@ func main() {
 		"deck":    len(deck),
 	})
 
-	// Start background fork monitor — runs independently of the deck so it
-	// can observe forks while DoReorgChaos partitions are active.
-	startForkMonitor()
+	// Background goroutines — run independently of the deck
+	startForkMonitor()             // observes forks during partitions
+	startConsensusTestLifecycle()   // structured EC/F3 integration test cycles
 
 	log.Println("[engine] entering main loop")
 
