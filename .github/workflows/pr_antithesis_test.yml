@@ -26,7 +26,6 @@ jobs:
       curio: ${{ steps.filter.outputs.curio }}
       drand: ${{ steps.filter.outputs.drand }}
       workload: ${{ steps.filter.outputs.workload }}
-      hegel_workload: ${{ steps.filter.outputs.hegel_workload }}
       filwizard: ${{ steps.filter.outputs.filwizard }}
       curio_or_lotus_changed: ${{ steps.curio-check.outputs.changed }}
       endpoints: ${{ steps.endpoints.outputs.matrix }}
@@ -46,7 +45,6 @@ jobs:
               - 'drand/**'
             workload:
               - 'workload/**'
-            hegel_workload:
               - 'hegel-workload/**'
             filwizard:
               - 'filwizard/**'
@@ -209,42 +207,8 @@ jobs:
       - name: Build and push workload
         uses: docker/build-push-action@v5
         with:
-          context: ./workload
+          context: .
           file: ./workload/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-  build-hegel-workload:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.hegel_workload == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: us-central1-docker.pkg.dev
-          username: _json_key
-          password: ${{ secrets.ANTITHESIS_GAR_KEY }}
-      - name: Extract metadata for hegel-workload
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/hegel-workload
-          tags: |
-            type=sha
-            pr-${{ github.event.pull_request.number }}
-            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-filecoin') && 'smoke' || '' }}
-            ${{ contains(github.event.pull_request.labels.*.name, 'antithesis-test-foc') && 'smoke-foc' || '' }}
-      - name: Build and push hegel-workload
-        uses: docker/build-push-action@v5
-        with:
-          context: ./hegel-workload
-          file: ./hegel-workload/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -365,7 +329,6 @@ jobs:
       - build-forest
       - build-drand
       - build-workload
-      - build-hegel-workload
       - build-filwizard
       - build-curio
       - build-config
@@ -389,7 +352,6 @@ jobs:
           FOREST_CHANGED: ${{ needs.detect-changes.outputs.forest }}
           DRAND_CHANGED: ${{ needs.detect-changes.outputs.drand }}
           WORKLOAD_CHANGED: ${{ needs.detect-changes.outputs.workload }}
-          HEGEL_WORKLOAD_CHANGED: ${{ needs.detect-changes.outputs.hegel_workload }}
           FILWIZARD_CHANGED: ${{ needs.detect-changes.outputs.filwizard }}
           CURIO_OR_LOTUS_CHANGED: ${{ needs.detect-changes.outputs.curio_or_lotus_changed }}
         run: |
@@ -425,12 +387,6 @@ jobs:
             WORKLOAD_REF="workload:latest"
           fi
 
-          if [[ "$HEGEL_WORKLOAD_CHANGED" == "true" ]]; then
-            HEGEL_WORKLOAD_REF="hegel-workload:${SMOKE_TAG}"
-          else
-            HEGEL_WORKLOAD_REF="hegel-workload:latest"
-          fi
-
           if [[ "$FILWIZARD_CHANGED" == "true" ]]; then
             FILWIZARD_REF="filwizard:${SMOKE_TAG}"
           else
@@ -446,7 +402,7 @@ jobs:
           CONFIG_REF="config:${SMOKE_TAG}"
 
           # curio and filwizard are only used by the filecoin-foc endpoint
-          IMAGES="${DRAND_REF};${FOREST_REF};${LOTUS_REF};${WORKLOAD_REF};${HEGEL_WORKLOAD_REF}"
+          IMAGES="${DRAND_REF};${FOREST_REF};${LOTUS_REF};${WORKLOAD_REF}"
           if [[ "$NOTEBOOK" == "filecoin-foc" ]]; then
             IMAGES="${IMAGES};${CURIO_REF};${FILWIZARD_REF}"
           fi
