@@ -37,6 +37,11 @@ on:
         required: true
         default: 'latest'
         description: The workload image tag used for the test run
+      hegel_workload:
+        type: string
+        required: true
+        default: 'latest'
+        description: The hegel-workload image tag used for the test run
       config:
         type: string
         required: true
@@ -83,7 +88,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};curio:${{ inputs.curio }}
+          images: drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};hegel-workload:${{ inputs.hegel_workload }};curio:${{ inputs.curio }}
           config_image: config:${{ github.event.inputs.config }}
           description: "Manual Upgrade Test"
           email_recipients: ${{ github.event.inputs.emails }}

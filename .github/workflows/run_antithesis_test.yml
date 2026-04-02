@@ -55,6 +55,11 @@ on:
         required: true
         default: 'latest'
         description: The workload image tag used for the test run
+      hegel_workload:
+        type: string
+        required: true
+        default: 'latest'
+        description: The hegel-workload image tag used for the test run
       filwizard:
         type: string
         required: true
@@ -112,7 +117,7 @@ jobs:
       - name: Build images list
         id: images
         run: |
-          IMAGES="drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};curio:${{ inputs.curio }}"
+          IMAGES="drand:${{ inputs.drand }};forest:${{ inputs.forest }};lotus:${{ inputs.lotus }};workload:${{ inputs.workload }};hegel-workload:${{ inputs.hegel_workload }};curio:${{ inputs.curio }}"
           if [ -n "${{ inputs.lotus_0_tag }}" ] && [ "${{ inputs.lotus_0_tag }}" != "${{ inputs.lotus }}" ]; then
             IMAGES="${IMAGES};lotus:${{ inputs.lotus_0_tag }}"
           fi
@@ -170,7 +175,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest;hegel-workload:latest
           config_image: config:latest
           description: "Nightly Profile: 12 hr balanced full-coverage run"
           additional_parameters: |-
@@ -195,7 +200,7 @@ jobs:
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest;hegel-workload:latest;curio:latest;filwizard:latest
           config_image: config:latest
           description: "FOC Profile: 12 hr Curio PDP lifecycle run"
           additional_parameters: |-
