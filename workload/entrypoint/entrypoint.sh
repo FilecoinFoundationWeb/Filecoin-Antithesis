@@ -13,6 +13,52 @@ log_info "Generating pre-funded genesis wallets..."
 /opt/antithesis/genesis-prep --count 100 --out /shared/configs
 log_info "Genesis wallet generation complete."
 
+# ── 1b. Ensure Antithesis output directory exists ──
+mkdir -p "${ANTITHESIS_OUTPUT_DIR:-/tmp/antithesis}"
+
+# ── 1c. Wait for node multiaddr files ──
+DEVGEN_DIR="${DEVGEN_DIR:-/root/devgen}"
+IFS=',' read -ra NODES <<< "${STRESS_NODES:-lotus0}"
+log_info "Waiting for node multiaddr files..."
+MAX_WAIT=300
+WAITED=0
+FOUND=false
+while [ "$WAITED" -lt "$MAX_WAIT" ]; do
+    for node in "${NODES[@]}"; do
+        node=$(echo "$node" | tr -d ' ')
+        ADDR_FILE="${DEVGEN_DIR}/${node}/${node}-ipv4addr"
+        if [ -f "$ADDR_FILE" ] && [ -s "$ADDR_FILE" ]; then
+            log_info "Found multiaddr for ${node}"
+            FOUND=true
+            break
+        fi
+    done
+    if [ "$FOUND" = true ]; then
+        break
+    fi
+    sleep 5
+    WAITED=$((WAITED + 5))
+done
+if [ "$FOUND" = false ]; then
+    log_warn "No multiaddr files found after ${MAX_WAIT}s, continuing anyway..."
+fi
+
+# ── 1d. Wait for network name ──
+NETWORK_FILE="${DEVGEN_DIR}/lotus0/network_name"
+log_info "Waiting for network name at ${NETWORK_FILE}..."
+WAITED=0
+while [ "$WAITED" -lt "$MAX_WAIT" ]; do
+    if [ -f "$NETWORK_FILE" ] && [ -s "$NETWORK_FILE" ]; then
+        log_info "Network name: $(cat "$NETWORK_FILE")"
+        break
+    fi
+    sleep 5
+    WAITED=$((WAITED + 5))
+done
+
+# ── 1e. Allow nodes to finish connecting ──
+sleep 10
+
 # ── 2. Time sync ──
 log_info "Synchronizing system time..."
 if ntpdate -q pool.ntp.org &>/dev/null; then
@@ -122,4 +168,9 @@ if [ "${FUZZER_ENABLED:-1}" = "1" ]; then
     FUZZER_PID=$!
 fi
 
-wait -n $STRESS_PID ${FUZZER_PID:-}
+# ── 8. Launch hegel workload ──
+log_info "Launching hegel workload..."
+/usr/local/bin/hegel-workload &
+HEGEL_PID=$!
+
+wait -n $STRESS_PID ${FUZZER_PID:-} $HEGEL_PID
