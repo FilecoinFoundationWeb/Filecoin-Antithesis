@@ -177,8 +177,8 @@ func remainingPowerPct(table []minerPowerInfo, target address.Address) float64 {
 // ===========================================================================
 
 var (
-	f3LastInstance uint64
-	f3LastCheckAt  time.Time
+	f3LastInstance = make(map[string]uint64)
+	f3LastCheckAt  = make(map[string]time.Time)
 	f3LastCheckMu  sync.Mutex
 )
 
@@ -462,47 +462,40 @@ func DoPowerAwareSlash() {
 // ===========================================================================
 
 func DoF3FinalityMonitor() {
-	// Query ALL lotus nodes and take the MAX instance. This avoids false
-	// regressions from querying a partitioned/lagging node — the highest
-	// instance across any node is the true F3 progress watermark.
-	var inst uint64
-	var found bool
-	for _, name := range nodeKeys {
-		if nodeType(name) != "lotus" {
-			continue
-		}
-		nodeInst, ok := getF3Instance(nodes[name])
-		if ok && nodeInst > inst {
-			inst = nodeInst
-			found = true
-		}
-	}
-	if !found {
+	// Pick a lotus node (forest may not support F3 API)
+	lotusNode, nodeName := pickLotusNode()
+	if lotusNode == nil {
 		return
 	}
 
 	f3LastCheckMu.Lock()
 	defer f3LastCheckMu.Unlock()
 
-	// Phase 1: record baseline and return
-	if f3LastCheckAt.IsZero() {
-		f3LastInstance = inst
-		f3LastCheckAt = time.Now()
-		debugLog("[f3-monitor] baseline recorded: instance=%d", inst)
+	inst, ok := getF3Instance(lotusNode)
+	if !ok {
 		return
 	}
 
-	// Phase 2: check only if enough time has passed
-	if time.Since(f3LastCheckAt) < 15*time.Second {
+	// Phase 1: record baseline for this node and return
+	if f3LastCheckAt[nodeName].IsZero() {
+		f3LastInstance[nodeName] = inst
+		f3LastCheckAt[nodeName] = time.Now()
+		debugLog("[f3-monitor] baseline recorded: node=%s instance=%d", nodeName, inst)
 		return
 	}
 
-	prevInst := f3LastInstance
-	f3LastInstance = inst
-	f3LastCheckAt = time.Now()
+	// Phase 2: check only if enough time has passed for this node
+	if time.Since(f3LastCheckAt[nodeName]) < 15*time.Second {
+		return
+	}
 
-	// Safety: F3 instance should never regress
+	prevInst := f3LastInstance[nodeName]
+	f3LastInstance[nodeName] = inst
+	f3LastCheckAt[nodeName] = time.Now()
+
+	// Safety: F3 instance should never regress on the same node
 	assert.Always(inst >= prevInst, "F3 instance never regresses", map[string]any{
+		"node":     nodeName,
 		"previous": prevInst,
 		"current":  inst,
 	})
@@ -510,12 +503,13 @@ func DoF3FinalityMonitor() {
 	// Liveness: F3 should be making progress
 	advanced := inst > prevInst
 	assert.Sometimes(advanced, "F3 is making progress", map[string]any{
+		"node":     nodeName,
 		"previous": prevInst,
 		"current":  inst,
 	})
 
 	if advanced {
-		debugLog("[f3-monitor] F3 instance %d → %d", prevInst, inst)
+		debugLog("[f3-monitor] %s F3 instance %d → %d", nodeName, prevInst, inst)
 	}
 
 	// Cross-node consistency: check all lotus nodes
