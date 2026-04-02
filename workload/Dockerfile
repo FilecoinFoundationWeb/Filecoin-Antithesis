@@ -1,8 +1,15 @@
+# ── Stage 1: Build hegel-workload (Rust) ──
+FROM rust:1.86 AS rust-builder
+WORKDIR /build
+COPY hegel-workload/Cargo.toml hegel-workload/Cargo.lock ./
+COPY hegel-workload/src/ ./src/
+RUN cargo build --release --features antithesis
+
 FROM ubuntu:latest
 
 # Core dependencies only — no Foundry, no Rust, no pnpm, no Hardhat
 RUN apt-get update -y && \
-    apt-get install -y curl jq gcc ntpdate git && \
+    apt-get install -y curl jq gcc ntpdate git python3 python3-venv ca-certificates && \
     ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && \
     curl -OL "https://golang.org/dl/go1.23.2.linux-${ARCH}.tar.gz" && \
     tar -C /usr/local -xzf "go1.23.2.linux-${ARCH}.tar.gz" && \
@@ -12,8 +19,11 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/go"
 ENV PATH="$GOPATH/bin:$PATH"
 
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
 WORKDIR /opt/antithesis
-COPY . .
+COPY workload/ .
 
 # Build Go binaries
 RUN go mod download
@@ -28,6 +38,8 @@ RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') \
     go build -o ./foc-sidecar ./cmd/foc-sidecar
 RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') \
     go build -o ./protocol-fuzzer ./cmd/protocol-fuzzer
+
+COPY --from=rust-builder /build/target/release/hegel-workload /usr/local/bin/hegel-workload
 
 RUN chmod +x ./entrypoint/entrypoint.sh
 
