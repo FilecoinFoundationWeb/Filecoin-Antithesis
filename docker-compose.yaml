@@ -144,21 +144,42 @@ services:
       - STRESS_WEIGHT_STATE_ROOT=4 # cross-node state root match (Sometimes)
       - STRESS_WEIGHT_STATE_AUDIT=3 # full state tree audit
       - STRESS_WEIGHT_F3_MONITOR=2 # passive F3 health monitor
+      - STRESS_WEIGHT_F3_AGREEMENT=3 # cross-node F3 certificate consistency
+      - STRESS_WEIGHT_REORG=0 # power-aware reorg testing (disabled — consensus lifecycle handles partitions)
+      - STRESS_WEIGHT_POWER_SLASH=4 # power-aware miner slashing
+      # - STRESS_WEIGHT_QUORUM_STALL=0  # deliberate F3 stall (opt-in, destructive)
       - FUZZER_ENABLED=0 # protocol fuzzer off for consensus threshold testing
       #
-      # --- Non-FOC stress vectors (consensus-focused) ---
-      #
-      # Consensus integration test (background lifecycle, not deck)
+      # --- Consensus integration test (background lifecycle, not deck) ---
       - STRESS_CONSENSUS_TEST=1 # enable structured EC/F3 safety proof lifecycle
-      # Power table manipulation
-      - STRESS_WEIGHT_POWER_SLASH=4 # power-aware miner slashing (may break F3 quorum)
+      #
+      # --- Non-FOC stress vectors ---
+      #
+      # EVM contract stress
+      - STRESS_WEIGHT_DEPLOY=1 # Init actor & state tree growth via EAM.CreateExternal
+      - STRESS_WEIGHT_CONTRACT_CALL=1 # deep recursion, delegatecall, external recursive calls
+      - STRESS_WEIGHT_SELFDESTRUCT=0 # actor destruction state consistency across nodes
+      - STRESS_WEIGHT_CONTRACT_RACE=2 # conflicting txs to diff nodes — state divergence during forks
       # Background chain activity (deck — runs between test cycles)
       - STRESS_WEIGHT_TRANSFER=2 # FIL transfers (state changes for forks to reconcile)
       - STRESS_WEIGHT_GAS_WAR=1 # mempool replacement across forks
       - STRESS_WEIGHT_NONCE_RACE=1 # gas-premium race across different nodes
       - STRESS_WEIGHT_HEAVY_COMPUTE=1 # intra-node state recomputation verification
+      # Resource stress (disabled)
+      - STRESS_WEIGHT_MAX_BLOCK_GAS=0 # maxes out block gas
+      - STRESS_WEIGHT_LOG_BLASTER=0 # receipt storage, bloom filters, event indexing
+      - STRESS_WEIGHT_MEMORY_BOMB=0 # FVM memory accounting
+      - STRESS_WEIGHT_STORAGE_SPAM=0 # state trie (HAMT), SplitStore
+      # Nonce/ordering chaos
+      - STRESS_WEIGHT_MSG_ORDERING=1 # cross-node message replacement/mempool ordering
+      - STRESS_WEIGHT_NONCE_BOMBARD=0 # N+x gap handling & out-of-order execution
+      - STRESS_WEIGHT_ADVERSARIAL=0 # double-spends (handled by consensus lifecycle)
+      # Gas pressure (disabled)
+      - STRESS_WEIGHT_GAS_EXHAUST=0 # high-gas call competing with small msgs
       # Cross-node consistency
       - STRESS_WEIGHT_RECEIPT_AUDIT=4 # asserts receipt fields match across every node
+      - STRESS_WEIGHT_ACTOR_MIGRATION=1 # burst-creates & deletes actors, stresses HAMT during forks
+      - STRESS_WEIGHT_ACTOR_LIFECYCLE=1 # full actor lifecycle
       # --- FOC (Filecoin On-Chain Cloud) vectors ---
       # All FOC vectors require the `foc` compose profile to be active.
       # The lifecycle state machine must reach "Ready" before steady-state
