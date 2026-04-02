@@ -50,6 +50,22 @@ const (
 	f3QuorumPct = 67.0
 )
 
+// isF3Active returns true if F3 is actually running on at least one lotus node.
+// Checks F3GetProgress — if all nodes return errors (e.g. "f3 is disabled"),
+// F3 is not active regardless of what the power table says about quorum.
+func isF3Active() bool {
+	for _, name := range nodeKeys {
+		if nodeType(name) != "lotus" {
+			continue
+		}
+		_, ok := getF3Instance(nodes[name])
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
 // bisectionResult carries the power analysis from a partition for condition-specific assertions.
 type bisectionResult struct {
 	strategy      string  // "star", "bilateral", "isolation"
@@ -252,11 +268,13 @@ func doStarSplit() *bisectionResult {
 
 	// Log security analysis
 	ecVulnerable := hubMiner.pct >= ecThresholdPct
-	f3HasQuorum := totalHonest > f3QuorumPct
+	// F3 quorum requires BOTH sufficient honest power AND F3 actually running
+	f3Active := isF3Active()
+	f3HasQuorum := f3Active && totalHonest > f3QuorumPct
 
 	expected := classifyExpected(hubMiner.pct, f3HasQuorum)
 	log.Printf("[nsplit] EC threshold: vulnerable=%v (%.1f%% vs 20%%)", ecVulnerable, hubMiner.pct)
-	log.Printf("[nsplit] F3 quorum: honest has quorum=%v (%.1f%% honest, need >67%%)", f3HasQuorum, totalHonest)
+	log.Printf("[nsplit] F3 active: %v | quorum=%v (%.1f%% honest, need >67%%)", f3Active, f3HasQuorum, totalHonest)
 	log.Printf("[nsplit] expected: %s", expected)
 
 	assert.Sometimes(totalDisconnected > 0, "N-split star topology created", map[string]any{
@@ -346,7 +364,8 @@ func doFullIsolation() *bisectionResult {
 
 	honestPct := 100.0 - victimPower
 	ecVulnerable := victimPower >= ecThresholdPct
-	f3HasQuorum := honestPct > f3QuorumPct
+	f3Active := isF3Active()
+	f3HasQuorum := f3Active && honestPct > f3QuorumPct
 
 	expected := classifyExpected(victimPower, f3HasQuorum)
 
@@ -354,7 +373,7 @@ func doFullIsolation() *bisectionResult {
 	log.Printf("[nsplit] isolated: %s (%.1f%% power)", victimName, victimPower)
 	log.Printf("[nsplit] honest power: %.1f%%", honestPct)
 	log.Printf("[nsplit] EC threshold: vulnerable=%v (%.1f%% vs 20%%)", ecVulnerable, victimPower)
-	log.Printf("[nsplit] F3 quorum: honest has quorum=%v (%.1f%% honest, need >67%%)", f3HasQuorum, honestPct)
+	log.Printf("[nsplit] F3 active: %v | quorum=%v (%.1f%% honest, need >67%%)", f3Active, f3HasQuorum, honestPct)
 	log.Printf("[nsplit] expected: %s", expected)
 	log.Printf("[nsplit] disconnected %d peers", disconnected)
 
@@ -824,8 +843,12 @@ func DoAdversarialVerify() {
 		}
 
 		// Check if each tx landed
-		resultA, _ := lotusNode.StateSearchMsg(ctx, types.EmptyTSK, ds.cidA, 200, true)
-		resultB, _ := lotusNode.StateSearchMsg(ctx, types.EmptyTSK, ds.cidB, 200, true)
+		// allowReplaced=false: only count a tx as "landed" if THAT SPECIFIC
+		// message CID was included on-chain, not a replacement with the same nonce.
+		// With allowReplaced=true, fee-snipes (same nonce, different gas) would
+		// both return results even though only one actually executed.
+		resultA, _ := lotusNode.StateSearchMsg(ctx, types.EmptyTSK, ds.cidA, 200, false)
+		resultB, _ := lotusNode.StateSearchMsg(ctx, types.EmptyTSK, ds.cidB, 200, false)
 
 		landedA := resultA != nil
 		landedB := resultB != nil
