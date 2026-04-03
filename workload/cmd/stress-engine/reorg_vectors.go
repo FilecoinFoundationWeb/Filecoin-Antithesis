@@ -6,6 +6,7 @@ import (
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/filecoin-project/go-state-types/abi"
+	"github.com/filecoin-project/lotus/api"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -113,12 +114,36 @@ func DoReorgChaos() {
 		savedPeers := make([]peer.AddrInfo, len(peers))
 		copy(savedPeers, peers)
 
-		// === PARTITION: disconnect victim from all peers ===
+		// === PARTITION: disconnect + block victim from all peers ===
 		partitionActive.Store(true)
 		disconnected := 0
+		blockPeerIDs := make([]peer.ID, 0, len(peers))
 		for _, p := range peers {
 			if err := victim.NetDisconnect(ctx, p.ID); err == nil {
 				disconnected++
+			}
+			blockPeerIDs = append(blockPeerIDs, p.ID)
+		}
+
+		// Block on victim so peers can't reconnect
+		if err := victim.NetBlockAdd(ctx, api.NetBlockList{Peers: blockPeerIDs}); err != nil {
+			log.Printf("[reorg-chaos] cycle %d: NetBlockAdd on victim failed: %v", cycle+1, err)
+		}
+
+		// Block victim on each other node (both directions)
+		victimAddrInfo, _ := victim.NetAddrsListen(ctx)
+		for _, p := range knownPeers {
+			// knownPeers excludes victim, so these are all other nodes
+			for _, name := range nodeKeys {
+				if name == victimName {
+					continue
+				}
+				ai, err := nodes[name].NetAddrsListen(ctx)
+				if err == nil && ai.ID == p.ID {
+					nodes[name].NetBlockAdd(ctx, api.NetBlockList{Peers: []peer.ID{victimAddrInfo.ID}})
+					nodes[name].NetDisconnect(ctx, victimAddrInfo.ID)
+					break
+				}
 			}
 		}
 
@@ -126,23 +151,33 @@ func DoReorgChaos() {
 		postPeers, _ := victim.NetPeers(ctx)
 		isolated := len(postPeers) == 0
 
-		log.Printf("[reorg-chaos] cycle %d/%d: SPLIT %s (disconnected %d/%d, isolated=%v)",
-			cycle+1, numCycles, victimName, disconnected, len(peers), isolated)
+		log.Printf("[reorg-chaos] cycle %d/%d: SPLIT %s (disconnected %d/%d, blocked=%d, isolated=%v)",
+			cycle+1, numCycles, victimName, disconnected, len(peers), len(blockPeerIDs), isolated)
 
 		// === MINE: wait for 1-3 epochs on the main partition ===
 		blocksToWait := rngIntn(3) + 1
 		waitForEpochsOnOther(victimName, blocksToWait)
 
-		// === HEAL: reconnect victim to all saved peers + known nodes ===
+		// === HEAL: unblock + reconnect victim ===
+		// Remove blocks on victim
+		victim.NetBlockRemove(ctx, api.NetBlockList{Peers: blockPeerIDs})
+		// Remove victim block on all other nodes
+		for _, name := range nodeKeys {
+			if name == victimName {
+				continue
+			}
+			nodes[name].NetBlockRemove(ctx, api.NetBlockList{Peers: []peer.ID{victimAddrInfo.ID}})
+		}
+
+		// Reconnect
 		reconnected := 0
 		for _, p := range savedPeers {
 			if err := victim.NetConnect(ctx, p); err == nil {
 				reconnected++
 			}
 		}
-		// Also try known node addresses as fallback
 		for _, p := range knownPeers {
-			victim.NetConnect(ctx, p) // best-effort
+			victim.NetConnect(ctx, p)
 		}
 
 		partitionActive.Store(false)
@@ -194,8 +229,9 @@ func DoReorgChaos() {
 
 // waitForConvergence polls all nodes' finalized tipset heights until the
 // spread is within reorgConvergeMaxSpread or the timeout expires.
-// Tracks whether the slowest node is making progress — if heights are
-// advancing (e.g. Forest syncing), it keeps waiting rather than timing out.
+// Tolerates individual node errors — checks convergence among responding
+// nodes (requires at least 2). Tracks whether the slowest responding node
+// is making progress to avoid premature timeout during sync.
 func waitForConvergence(victimName string) bool {
 	deadline := time.Now().Add(reorgConvergeTimeout)
 	prevMinH := abi.ChainEpoch(0)
@@ -204,17 +240,16 @@ func waitForConvergence(victimName string) bool {
 
 	for time.Now().Before(deadline) {
 		var minH, maxH abi.ChainEpoch
-		first := true
-		allReachable := true
+		responded := 0
 		for _, name := range nodeKeys {
 			ts, err := nodes[name].ChainGetFinalizedTipSet(ctx)
 			if err != nil {
-				allReachable = false
-				break
+				debugLog("[reorg-chaos] ChainGetFinalizedTipSet failed for %s: %v", name, err)
+				continue
 			}
-			if first {
+			responded++
+			if responded == 1 {
 				minH, maxH = ts.Height(), ts.Height()
-				first = false
 			}
 			if ts.Height() < minH {
 				minH = ts.Height()
@@ -224,8 +259,15 @@ func waitForConvergence(victimName string) bool {
 			}
 		}
 
-		if allReachable && (maxH-minH) <= reorgConvergeMaxSpread {
-			log.Printf("[reorg-chaos] converged: spread=%d epochs (victim=%s)", maxH-minH, victimName)
+		if responded < 2 {
+			debugLog("[reorg-chaos] only %d nodes responded, retrying...", responded)
+			time.Sleep(reorgConvergePollRate)
+			continue
+		}
+
+		if (maxH - minH) <= reorgConvergeMaxSpread {
+			log.Printf("[reorg-chaos] converged: spread=%d epochs, %d/%d nodes responded (victim=%s)",
+				maxH-minH, responded, len(nodeKeys), victimName)
 			return true
 		}
 
@@ -237,15 +279,14 @@ func waitForConvergence(victimName string) bool {
 			stallCount++
 		}
 
-		// If no progress for maxStallPolls consecutive polls, give up early
 		if stallCount >= maxStallPolls {
-			log.Printf("[reorg-chaos] convergence stalled: no progress for %d polls (victim=%s, spread=%d)",
-				stallCount, victimName, maxH-minH)
+			log.Printf("[reorg-chaos] convergence stalled: no progress for %d polls (victim=%s, spread=%d, responded=%d/%d)",
+				stallCount, victimName, maxH-minH, responded, len(nodeKeys))
 			return false
 		}
 
-		log.Printf("[reorg-chaos] waiting for convergence: spread=%d, minH=%d (victim=%s)",
-			maxH-minH, minH, victimName)
+		log.Printf("[reorg-chaos] waiting for convergence: spread=%d, minH=%d, responded=%d/%d (victim=%s)",
+			maxH-minH, minH, responded, len(nodeKeys), victimName)
 		time.Sleep(reorgConvergePollRate)
 	}
 	log.Printf("[reorg-chaos] convergence timeout after %s", reorgConvergeTimeout)

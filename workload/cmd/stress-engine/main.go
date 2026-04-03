@@ -269,6 +269,8 @@ func buildDeck() {
 		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 1},
 		// Cross-node consistency
 		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
+		// Shallow reorg chaos — partition a node, let others mine, heal, verify convergence
+		{"DoReorgChaos", "STRESS_WEIGHT_REORG_CHAOS", DoReorgChaos, 0},
 	}
 
 	// Build actions list: consensus always, stress only when FOC is not active

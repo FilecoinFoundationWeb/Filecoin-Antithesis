@@ -95,6 +95,13 @@ func (a attackType) String() string {
 	}
 }
 
+// blockedPeer records a peer that was blocked on a specific node,
+// so healPartition can remove the exact blocklist entries it added.
+type blockedPeer struct {
+	onNode string  // node name where the block was added
+	peerID peer.ID // blocked peer ID
+}
+
 // splitResult carries the partition state for heal + verification.
 type splitResult struct {
 	strategy      splitStrategy
@@ -103,7 +110,8 @@ type splitResult struct {
 	honestPct     float64
 	honestNode    string           // a node on the honest side (for injection)
 	advNode       api.FullNode     // adversary's API handle
-	savedPeers    []peer.AddrInfo  // for healing
+	savedPeers    []peer.AddrInfo  // for healing (reconnect)
+	blocked       []blockedPeer    // for healing (unblock)
 	ecVulnerable  bool
 	f3HasQuorum   bool
 	expected      string
@@ -322,10 +330,23 @@ func createPartition(split splitStrategy, table []minerPowerInfo, f3Active bool)
 	}
 }
 
-// createFullIsolation disconnects the largest miner from all peers.
+// fullIsolationIdx rotates which miner gets isolated across cycles.
+// Cycle 0 → table[0] (40%), cycle 3 → table[1] (30%), cycle 6 → table[2] (20%), etc.
+// This ensures we test both "F3 has quorum" (small adversary) and
+// "F3 vulnerable" (large adversary) scenarios.
+var fullIsolationIdx int
+
+// createFullIsolation disconnects one miner from all peers.
 // Topology: adversary alone vs honest majority together.
+// Rotates the target across cycles so we cover all power postures:
+//   - Isolate 40%: honest=60%, F3 quorum=false → EC+F3 both vulnerable
+//   - Isolate 30%: honest=70%, F3 quorum=true  → F3 should protect
+//   - Isolate 20%: honest=80%, F3 quorum=true  → F3 should protect
+//   - Isolate 10%: honest=90%, F3 quorum=true  → F3 should protect
 func createFullIsolation(table []minerPowerInfo, f3Active bool) *splitResult {
-	adversary := table[0] // largest miner
+	idx := fullIsolationIdx % len(table)
+	fullIsolationIdx++
+	adversary := table[idx]
 	advName := minerToNodeName(adversary.addr)
 	if advName == "" {
 		return nil
@@ -340,6 +361,9 @@ func createFullIsolation(table []minerPowerInfo, f3Active bool) *splitResult {
 	savedPeers := make([]peer.AddrInfo, len(peers))
 	copy(savedPeers, peers)
 
+	// Disconnect and block all peers on the adversary node.
+	// Also block the adversary on each honest node (both directions).
+	var blocked []blockedPeer
 	disconnected := 0
 	for _, p := range peers {
 		if err := advNode.NetDisconnect(ctx, p.ID); err == nil {
@@ -347,8 +371,36 @@ func createFullIsolation(table []minerPowerInfo, f3Active bool) *splitResult {
 		}
 	}
 
+	// Block all peers on adversary
+	blockPeerIDs := make([]peer.ID, 0, len(peers))
+	for _, p := range peers {
+		blockPeerIDs = append(blockPeerIDs, p.ID)
+	}
+	if err := advNode.NetBlockAdd(ctx, api.NetBlockList{Peers: blockPeerIDs}); err != nil {
+		log.Printf("[consensus-test] NetBlockAdd on %s failed: %v", advName, err)
+	} else {
+		for _, pid := range blockPeerIDs {
+			blocked = append(blocked, blockedPeer{onNode: advName, peerID: pid})
+		}
+	}
+
+	// Block adversary on each honest node
+	advAddrInfo, _ := advNode.NetAddrsListen(ctx)
+	for _, name := range nodeKeys {
+		if name == advName || nodeType(name) != "lotus" {
+			continue
+		}
+		if err := nodes[name].NetBlockAdd(ctx, api.NetBlockList{Peers: []peer.ID{advAddrInfo.ID}}); err != nil {
+			log.Printf("[consensus-test] NetBlockAdd(%s) on %s failed: %v", advName, name, err)
+		} else {
+			blocked = append(blocked, blockedPeer{onNode: name, peerID: advAddrInfo.ID})
+		}
+		// Also disconnect existing connection from honest→adversary
+		nodes[name].NetDisconnect(ctx, advAddrInfo.ID)
+	}
+
 	honestPct := 100.0 - adversary.pct
-	log.Printf("[consensus-test] full-isolation: disconnected %s (%.1f%%) from %d peers",
+	log.Printf("[consensus-test] full-isolation: disconnected+blocked %s (%.1f%%) from %d peers",
 		advName, adversary.pct, disconnected)
 
 	return &splitResult{
@@ -359,80 +411,120 @@ func createFullIsolation(table []minerPowerInfo, f3Active bool) *splitResult {
 		honestNode:    pickHonestNode(advName),
 		advNode:       advNode,
 		savedPeers:    savedPeers,
+		blocked:       blocked,
 		ecVulnerable:  adversary.pct >= ecThresholdPct,
 		f3HasQuorum:   f3Active && honestPct > f3QuorumPct,
 		expected:      classifyExpected(adversary.pct, f3Active && honestPct > f3QuorumPct),
 	}
 }
 
-// createStarSplit keeps the largest miner connected to all (hub) and
-// disconnects all honest miners from each other.
-// Topology: hub sees everything, each honest miner is alone.
-// This is the n-split attack from Wang et al. 2023.
+// createStarSplit implements the n-split attack from Wang et al. 2023.
+// Every node is fully isolated from every other node — each miner mines
+// alone on its own fork. The adversary (largest miner at 40%) has more
+// power than any individual honest miner (30%, 20%, 10%), even though
+// total honest power (60%) exceeds the adversary.
+//
+// This is the core insight of the n-split attack: fragmenting honest
+// power into N solo partitions lets a minority adversary outmine each
+// fragment individually.
 func createStarSplit(table []minerPowerInfo, f3Active bool) *splitResult {
-	hub := table[0] // largest miner as hub
-	hubName := minerToNodeName(hub.addr)
-	if hubName == "" {
+	adversary := table[0] // largest miner
+	advName := minerToNodeName(adversary.addr)
+	if advName == "" {
 		return nil
 	}
 
-	hubAddrInfo, err := nodes[hubName].NetAddrsListen(ctx)
-	if err != nil {
-		return nil
-	}
-	hubPeerID := hubAddrInfo.ID
-
-	// Collect all honest nodes and their current peers for heal
-	var allSavedPeers []peer.AddrInfo
-	honestNodes := []string{}
-	totalDisconnected := 0
-
+	// Gather all node names and peer IDs
+	allNames := []string{}
+	peerIDs := map[string]peer.ID{} // nodeName -> peerID
 	for _, m := range table {
 		name := minerToNodeName(m.addr)
-		if name == "" || name == hubName {
+		if name == "" {
 			continue
 		}
-		honestNodes = append(honestNodes, name)
+		allNames = append(allNames, name)
+		addrInfo, err := nodes[name].NetAddrsListen(ctx)
+		if err == nil {
+			peerIDs[name] = addrInfo.ID
+		}
+	}
 
+	// Isolate every node from every other node
+	var allSavedPeers []peer.AddrInfo
+	var blocked []blockedPeer
+	totalDisconnected := 0
+
+	for _, name := range allNames {
+		// Build block list: all other nodes
+		var toBlock []peer.ID
+		for _, otherName := range allNames {
+			if otherName == name {
+				continue
+			}
+			if pid, ok := peerIDs[otherName]; ok {
+				toBlock = append(toBlock, pid)
+			}
+		}
+
+		// Disconnect all peers
 		peers, err := nodes[name].NetPeers(ctx)
 		if err != nil {
 			continue
 		}
 		for _, p := range peers {
-			if p.ID == hubPeerID {
-				continue // keep connection to hub
-			}
 			if err := nodes[name].NetDisconnect(ctx, p.ID); err == nil {
 				totalDisconnected++
 				allSavedPeers = append(allSavedPeers, p)
 			}
 		}
+
+		// Block all other nodes
+		if len(toBlock) > 0 {
+			if err := nodes[name].NetBlockAdd(ctx, api.NetBlockList{Peers: toBlock}); err != nil {
+				log.Printf("[consensus-test] NetBlockAdd on %s failed: %v", name, err)
+			} else {
+				for _, pid := range toBlock {
+					blocked = append(blocked, blockedPeer{onNode: name, peerID: pid})
+				}
+			}
+		}
 	}
 
-	honestPct := 100.0 - hub.pct
-	log.Printf("[consensus-test] star-split: hub=%s (%.1f%%), disconnected %d honest-to-honest connections",
-		hubName, hub.pct, totalDisconnected)
-	for _, name := range honestNodes {
-		log.Printf("[consensus-test]   isolated: %s", name)
+	honestPct := 100.0 - adversary.pct
+	log.Printf("[consensus-test] n-split: %d nodes fully isolated, disconnected %d + blocked %d connections",
+		len(allNames), totalDisconnected, len(blocked))
+	for _, name := range allNames {
+		pct := 0.0
+		for _, m := range table {
+			if minerToNodeName(m.addr) == name {
+				pct = m.pct
+				break
+			}
+		}
+		log.Printf("[consensus-test]   solo: %s (%.1f%%)", name, pct)
 	}
 
-	// Pick any honest node for injection
+	// Pick first honest node for attack injection
 	honestTarget := ""
-	if len(honestNodes) > 0 {
-		honestTarget = honestNodes[0]
+	for _, name := range allNames {
+		if name != advName {
+			honestTarget = name
+			break
+		}
 	}
 
 	return &splitResult{
 		strategy:      splitStar,
-		adversaryName: hubName,
-		adversaryPct:  hub.pct,
+		adversaryName: advName,
+		adversaryPct:  adversary.pct,
 		honestPct:     honestPct,
 		honestNode:    honestTarget,
-		advNode:       nodes[hubName],
+		advNode:       nodes[advName],
 		savedPeers:    allSavedPeers,
-		ecVulnerable:  hub.pct >= ecThresholdPct,
-		f3HasQuorum:   f3Active && honestPct > f3QuorumPct,
-		expected:      classifyExpected(hub.pct, f3Active && honestPct > f3QuorumPct),
+		blocked:       blocked,
+		ecVulnerable:  adversary.pct >= ecThresholdPct,
+		f3HasQuorum:   false, // no node has >67% alone — F3 cannot reach quorum
+		expected:      classifyExpected(adversary.pct, false),
 	}
 }
 
@@ -476,19 +568,33 @@ func createBisection(table []minerPowerInfo, f3Active bool) *splitResult {
 		groupBPower += m.pct
 	}
 
-	// Disconnect group A nodes from group B nodes
+	// Disconnect and block group A nodes from group B nodes (and vice versa)
 	var allSavedPeers []peer.AddrInfo
+	var blocked []blockedPeer
 	totalDisconnected := 0
 
-	// Build set of group B peer IDs for quick lookup
+	// Build peer ID lists for each group
 	groupBPeerIDs := map[peer.ID]bool{}
+	var groupBPeerList []peer.ID
 	for _, name := range groupBNames {
 		addrInfo, err := nodes[name].NetAddrsListen(ctx)
 		if err == nil {
 			groupBPeerIDs[addrInfo.ID] = true
+			groupBPeerList = append(groupBPeerList, addrInfo.ID)
 		}
 	}
 
+	groupAPeerIDs := map[peer.ID]bool{}
+	var groupAPeerList []peer.ID
+	for _, name := range groupANames {
+		addrInfo, err := nodes[name].NetAddrsListen(ctx)
+		if err == nil {
+			groupAPeerIDs[addrInfo.ID] = true
+			groupAPeerList = append(groupAPeerList, addrInfo.ID)
+		}
+	}
+
+	// Disconnect + block: A nodes block all B peers
 	for _, name := range groupANames {
 		peers, err := nodes[name].NetPeers(ctx)
 		if err != nil {
@@ -502,17 +608,18 @@ func createBisection(table []minerPowerInfo, f3Active bool) *splitResult {
 				}
 			}
 		}
-	}
-
-	// Also disconnect B from A
-	groupAPeerIDs := map[peer.ID]bool{}
-	for _, name := range groupANames {
-		addrInfo, err := nodes[name].NetAddrsListen(ctx)
-		if err == nil {
-			groupAPeerIDs[addrInfo.ID] = true
+		if len(groupBPeerList) > 0 {
+			if err := nodes[name].NetBlockAdd(ctx, api.NetBlockList{Peers: groupBPeerList}); err != nil {
+				log.Printf("[consensus-test] NetBlockAdd on %s failed: %v", name, err)
+			} else {
+				for _, pid := range groupBPeerList {
+					blocked = append(blocked, blockedPeer{onNode: name, peerID: pid})
+				}
+			}
 		}
 	}
 
+	// Disconnect + block: B nodes block all A peers
 	for _, name := range groupBNames {
 		peers, err := nodes[name].NetPeers(ctx)
 		if err != nil {
@@ -525,10 +632,19 @@ func createBisection(table []minerPowerInfo, f3Active bool) *splitResult {
 				}
 			}
 		}
+		if len(groupAPeerList) > 0 {
+			if err := nodes[name].NetBlockAdd(ctx, api.NetBlockList{Peers: groupAPeerList}); err != nil {
+				log.Printf("[consensus-test] NetBlockAdd on %s failed: %v", name, err)
+			} else {
+				for _, pid := range groupAPeerList {
+					blocked = append(blocked, blockedPeer{onNode: name, peerID: pid})
+				}
+			}
+		}
 	}
 
-	log.Printf("[consensus-test] 50/50-bisection: groupA=%v (%.0f%%) vs groupB=%v (%.0f%%), %d connections severed",
-		groupANames, groupAPower, groupBNames, groupBPower, totalDisconnected)
+	log.Printf("[consensus-test] 50/50-bisection: groupA=%v (%.0f%%) vs groupB=%v (%.0f%%), %d disconnected, %d blocked",
+		groupANames, groupAPower, groupBNames, groupBPower, totalDisconnected, len(blocked))
 
 	// For adversary metrics: treat groupA as "adversary" (arbitrary — neither side is honest majority)
 	// EC is vulnerable if either side has >= 20% (always true with 50/50)
@@ -541,21 +657,28 @@ func createBisection(table []minerPowerInfo, f3Active bool) *splitResult {
 		honestNode:    groupBNames[0],
 		advNode:       nodes[groupANames[0]],
 		savedPeers:    allSavedPeers,
+		blocked:       blocked,
 		ecVulnerable:  true, // always true in 50/50
 		f3HasQuorum:   false, // neither side has > 67%
 		expected:      "EC VULNERABLE, F3 VULNERABLE — no majority on either side",
 	}
 }
 
-// healPartition reconnects all nodes from a splitResult.
+// healPartition removes blocklist entries and reconnects all nodes.
 func healPartition(sr *splitResult) {
-	// Reconnect saved peers
-	for _, p := range sr.savedPeers {
-		for _, name := range nodeKeys {
-			nodes[name].NetConnect(ctx, p)
+	// Step 1: Remove all blocklist entries added during partition
+	// Group by node to batch removals
+	nodeBlocked := map[string][]peer.ID{}
+	for _, bp := range sr.blocked {
+		nodeBlocked[bp.onNode] = append(nodeBlocked[bp.onNode], bp.peerID)
+	}
+	for nodeName, peerIDs := range nodeBlocked {
+		if err := nodes[nodeName].NetBlockRemove(ctx, api.NetBlockList{Peers: peerIDs}); err != nil {
+			log.Printf("[consensus-test] NetBlockRemove on %s failed: %v", nodeName, err)
 		}
 	}
-	// Full mesh reconnect as fallback
+
+	// Step 2: Reconnect all nodes (full mesh)
 	allAddrs := collectNodeAddrInfos("")
 	for _, name := range nodeKeys {
 		for _, addr := range allAddrs {

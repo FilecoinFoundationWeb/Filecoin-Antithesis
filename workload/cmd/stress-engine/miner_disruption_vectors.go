@@ -297,14 +297,29 @@ func submitConsensusFault(lotusNode api.FullNode, lotusName string, target addre
 		return false
 	}
 
-	// Mark miner as slashed optimistically — the power table will filter it
-	// immediately. If the tx fails on-chain, the miner keeps producing blocks
-	// but our power calculations will be conservative (treating them as gone).
+	// Wait for on-chain confirmation before marking slashed.
+	// Without this, a failed tx leaves the power table filter thinking the
+	// miner is gone, causing n-split to miscalculate adversary percentages.
+	result := waitForMsg(lotusNode, msgCid, "power-slash")
+	if result == nil {
+		log.Printf("[power-slash] slash tx %s did not land on-chain for %s", cidStr(msgCid), target)
+		return false
+	}
+	if result.Receipt.ExitCode != 0 {
+		log.Printf("[power-slash] slash tx %s reverted (exit=%d) for %s", cidStr(msgCid), result.Receipt.ExitCode, target)
+		return false
+	}
+
 	slashedMinersMu.Lock()
 	slashedMiners[target] = true
 	slashedMinersMu.Unlock()
 
-	log.Printf("[power-slash] slash submitted for %s (cid=%s), marked as slashed", target, cidStr(msgCid))
+	// Invalidate power cache so next query reflects the slash
+	powerCacheMu.Lock()
+	powerCacheEpoch = 0
+	powerCacheMu.Unlock()
+
+	log.Printf("[power-slash] slash confirmed for %s (cid=%s, height=%d)", target, cidStr(msgCid), result.Height)
 	return true
 }
 
