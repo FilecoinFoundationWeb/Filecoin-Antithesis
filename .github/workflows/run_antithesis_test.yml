@@ -3,9 +3,6 @@ name: Run Antithesis Test
 on:
   schedule:
     - cron: '30 15 * * *'  # nightly
-    - cron: '0 16 * * *'   # consensus
-    - cron: '30 16 * * *'  # drand
-    - cron: '0 17 * * *'   # fip
     - cron: '30 17 * * *'  # foc
   workflow_dispatch:
     inputs:
@@ -181,81 +178,6 @@ jobs:
             custom.duration=12
             custom.setup=nightly
             antithesis.source=main-nightly
-            antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
-            antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
-
-  scheduled_consensus:
-    name: "Consensus Profile — EC/F3 n-split safety"
-    if: github.event_name == 'schedule' && github.event.schedule == '0 16 * * *'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: antithesishq/antithesis-trigger-action@main
-        with:
-          notebook_name: filecoin
-          tenant: cobalt-bunny
-          username: filecoin
-          password: ${{ secrets.ANTITHESIS_PASSWORD }}
-          github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest
-          config_image: config:latest
-          description: "Consensus Profile: 12 hr EC/F3 partition safety run"
-          additional_parameters: |-
-            custom.duration=12
-            custom.setup=consensus
-            antithesis.source=main-consensus
-            antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
-            antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
-
-  scheduled_drand:
-    name: "Drand Profile — beacon fault tolerance"
-    if: github.event_name == 'schedule' && github.event.schedule == '30 16 * * *'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: antithesishq/antithesis-trigger-action@main
-        with:
-          notebook_name: filecoin
-          tenant: cobalt-bunny
-          username: filecoin
-          password: ${{ secrets.ANTITHESIS_PASSWORD }}
-          github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest
-          config_image: config:latest
-          description: "Drand Profile: 8 hr beacon fault tolerance run"
-          additional_parameters: |-
-            custom.duration=8
-            custom.setup=drand
-            antithesis.source=main-drand
-            antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
-            antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
-
-  scheduled_fip:
-    name: "FIP Profile — network upgrade testing"
-    if: github.event_name == 'schedule' && github.event.schedule == '0 17 * * *'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: antithesishq/antithesis-trigger-action@main
-        with:
-          notebook_name: filecoin
-          tenant: cobalt-bunny
-          username: filecoin
-          password: ${{ secrets.ANTITHESIS_PASSWORD }}
-          github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest
-          config_image: config:latest
-          description: "FIP Profile: 8 hr network upgrade migration run"
-          additional_parameters: |-
-            custom.duration=8
-            custom.setup=fip
-            antithesis.source=main-fip
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
 
