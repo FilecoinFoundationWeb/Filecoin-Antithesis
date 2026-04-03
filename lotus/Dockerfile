@@ -38,6 +38,10 @@ WORKDIR /lotus_instrumented/customer/
 # deleting original source code
 RUN rm -rf /lotus
 
+# install Rust toolchain (required by filecoin-ffi to build filcrypto from source)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
 # install runtime binaries (lotus-shed used in curio) (not using: 2k-lotus-worker)
 RUN make 2k-lotus 2k-lotus-miner 2k-lotus-seed 2k-lotus-shed
 
