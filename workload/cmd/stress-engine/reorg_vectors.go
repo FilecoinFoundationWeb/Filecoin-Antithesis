@@ -114,6 +114,7 @@ func DoReorgChaos() {
 		copy(savedPeers, peers)
 
 		// === PARTITION: disconnect victim from all peers ===
+		partitionActive.Store(true)
 		disconnected := 0
 		for _, p := range peers {
 			if err := victim.NetDisconnect(ctx, p.ID); err == nil {
@@ -144,6 +145,7 @@ func DoReorgChaos() {
 			victim.NetConnect(ctx, p) // best-effort
 		}
 
+		partitionActive.Store(false)
 		log.Printf("[reorg-chaos] cycle %d/%d: HEAL %s (reconnected %d/%d)",
 			cycle+1, numCycles, victimName, reconnected, len(savedPeers))
 

@@ -621,6 +621,13 @@ func forkMonitorTick() {
 		return
 	}
 
+	// Skip while a partition is intentionally active — forks are expected
+	// during n-split cycles and DoReorgChaos. We'll re-check once healed.
+	if partitionActive.Load() {
+		debugLog("[fork-monitor] partition active, skipping tick")
+		return
+	}
+
 	// Get min chain head across all nodes — skip nodes that error
 	// (a partitioned node's RPC may still work, returning its stale head)
 	minHead := abi.ChainEpoch(0)

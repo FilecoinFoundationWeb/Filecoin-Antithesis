@@ -292,6 +292,8 @@ func buildDeck() {
 			weightedAction{"DoFOCTransfer", "STRESS_WEIGHT_FOC_TRANSFER", DoFOCTransfer, 1},
 			weightedAction{"DoFOCSettle", "STRESS_WEIGHT_FOC_SETTLE", DoFOCSettle, 1},
 			weightedAction{"DoFOCWithdraw", "STRESS_WEIGHT_FOC_WITHDRAW", DoFOCWithdraw, 1},
+			// Shallow reorg chaos — exercises Curio's chain-tracking under reorgs
+			weightedAction{"DoReorgChaos", "STRESS_WEIGHT_REORG_CHAOS", DoReorgChaos, 1},
 			// Destructive — weight 0 by default (opt-in)
 			weightedAction{"DoFOCDeletePiece", "STRESS_WEIGHT_FOC_DELETE_PIECE", DoFOCDeletePiece, 0},
 			weightedAction{"DoFOCDeleteDataSet", "STRESS_WEIGHT_FOC_DELETE_DS", DoFOCDeleteDataSet, 0},
@@ -341,8 +343,12 @@ func main() {
 	})
 
 	// Background goroutines — run independently of the deck
-	startForkMonitor()             // observes forks during partitions
-	startConsensusTestLifecycle()   // structured EC/F3 integration test cycles
+	startForkMonitor() // observes forks during partitions
+	if focCfg == nil {
+		startConsensusTestLifecycle() // structured EC/F3 integration test cycles (skip in FOC — disrupts Curio)
+	} else {
+		log.Println("[init] FOC active — skipping consensus test lifecycle (n-split partitions)")
+	}
 
 	log.Println("[engine] entering main loop")
 
