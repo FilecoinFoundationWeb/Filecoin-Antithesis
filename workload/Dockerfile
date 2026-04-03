@@ -41,6 +41,11 @@ RUN GOARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') \
 
 COPY --from=rust-builder /build/target/release/hegel-workload /usr/local/bin/hegel-workload
 
+# Pre-install hegel-core so the workload doesn't need internet access at runtime.
+# HEGEL_SERVER_COMMAND tells hegeltest to use this binary instead of downloading.
+RUN uv venv .hegel/venv && uv pip install --python .hegel/venv/bin/python hegel-core==0.2.3
+ENV HEGEL_SERVER_COMMAND="/opt/antithesis/.hegel/venv/bin/hegel"
+
 RUN chmod +x ./entrypoint/entrypoint.sh
 
 ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]
