@@ -63,6 +63,11 @@ func pickReorgVictim() (victimName string, powerPct float64) {
 }
 
 func DoReorgChaos() {
+	// Skip if n-split consensus test already has a partition active
+	if partitionActive.Load() {
+		debugLog("[reorg-chaos] skipping — partition already active")
+		return
+	}
 	if len(nodeKeys) < 2 {
 		return
 	}

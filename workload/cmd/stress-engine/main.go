@@ -257,18 +257,37 @@ func buildDeck() {
 	}
 
 	// Non-FOC stress vectors — skipped when FOC profile is active.
-	// These run as deck background activity while the consensus integration
-	// test lifecycle runs in a separate goroutine.
+	// All weights are overridable via STRESS_WEIGHT_* env vars from the profile .env.
 	stress := []weightedAction{
 		// Power table manipulation
 		{"DoPowerAwareSlash", "STRESS_WEIGHT_POWER_SLASH", DoPowerAwareSlash, 0},
-		// Background chain activity (creates state changes for forks to reconcile)
+		// Background chain activity
 		{"DoTransferMarket", "STRESS_WEIGHT_TRANSFER", DoTransferMarket, 2},
 		{"DoGasWar", "STRESS_WEIGHT_GAS_WAR", DoGasWar, 1},
 		{"DoNonceRace", "STRESS_WEIGHT_NONCE_RACE", doNonceRace, 1},
 		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 1},
 		// Cross-node consistency
 		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
+		// EVM contract stress
+		{"DoDeployContracts", "STRESS_WEIGHT_DEPLOY", DoDeployContracts, 1},
+		{"DoContractCall", "STRESS_WEIGHT_CONTRACT_CALL", DoContractCall, 1},
+		{"DoSelfDestructCycle", "STRESS_WEIGHT_SELFDESTRUCT", DoSelfDestructCycle, 0},
+		{"DoConflictingContractCalls", "STRESS_WEIGHT_CONTRACT_RACE", DoConflictingContractCalls, 1},
+		{"DoMaxBlockGas", "STRESS_WEIGHT_MAX_BLOCK_GAS", DoMaxBlockGas, 0},
+		{"DoLogBlaster", "STRESS_WEIGHT_LOG_BLASTER", DoLogBlaster, 0},
+		{"DoMemoryBomb", "STRESS_WEIGHT_MEMORY_BOMB", DoMemoryBomb, 0},
+		{"DoStorageSpam", "STRESS_WEIGHT_STORAGE_SPAM", DoStorageSpam, 0},
+		// Mempool / adversarial
+		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 0},
+		// Cross-node divergence
+		{"DoMessageOrderingAttack", "STRESS_WEIGHT_MSG_ORDERING", DoMessageOrderingAttack, 1},
+		{"DoNonceBombard", "STRESS_WEIGHT_NONCE_BOMBARD", DoNonceBombard, 0},
+		{"DoGasExhaustionEdge", "STRESS_WEIGHT_GAS_EXHAUST", DoGasExhaustionEdge, 0},
+		// State tree stress
+		{"DoActorMigrationStress", "STRESS_WEIGHT_ACTOR_MIGRATION", DoActorMigrationStress, 1},
+		{"DoActorLifecycleStress", "STRESS_WEIGHT_ACTOR_LIFECYCLE", DoActorLifecycleStress, 1},
+		// Reorg chaos (guarded by partitionActive to avoid stomping n-split)
+		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
 	}
 
 	// Build actions list: consensus always, stress only when FOC is not active
@@ -293,7 +312,7 @@ func buildDeck() {
 			weightedAction{"DoFOCSettle", "STRESS_WEIGHT_FOC_SETTLE", DoFOCSettle, 1},
 			weightedAction{"DoFOCWithdraw", "STRESS_WEIGHT_FOC_WITHDRAW", DoFOCWithdraw, 1},
 			// Shallow reorg chaos — exercises Curio's chain-tracking under reorgs
-			weightedAction{"DoReorgChaos", "STRESS_WEIGHT_REORG_CHAOS", DoReorgChaos, 1},
+			weightedAction{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 1},
 			// Destructive — weight 0 by default (opt-in)
 			weightedAction{"DoFOCDeletePiece", "STRESS_WEIGHT_FOC_DELETE_PIECE", DoFOCDeletePiece, 0},
 			weightedAction{"DoFOCDeleteDataSet", "STRESS_WEIGHT_FOC_DELETE_DS", DoFOCDeleteDataSet, 0},
