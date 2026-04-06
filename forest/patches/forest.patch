@@ -87,17 +87,17 @@ diff --git a/src/rpc/methods/chain.rs b/src/rpc/methods/chain.rs
 index 35b9dfa..5fade36 100644
 --- a/src/rpc/methods/chain.rs
 +++ b/src/rpc/methods/chain.rs
-@@ -167,7 +167,7 @@ impl RpcMethod<0> for ChainGetFinalizedTipset {
+@@ -170,7 +170,7 @@ impl RpcMethod<0> for ChainGetFinalizedTipset {
          _: &http::Extensions,
      ) -> Result<Self::Ok, ServerError> {
          let head = ctx.chain_store().heaviest_tipset();
 -        let ec_finality_epoch = (head.epoch() - ctx.chain_config().policy.chain_finality).max(0);
 +        let ec_finality_epoch = (head.epoch() - 10).max(0);
- 
+
          // Either get the f3 finalized tipset or the ec finalized tipset
          match get_f3_finality_tipset(&ctx, ec_finality_epoch).await {
-@@ -1139,7 +1139,7 @@ impl ChainGetTipSetV2 {
- 
+@@ -1142,7 +1142,7 @@ impl ChainGetTipSetV2 {
+
      pub fn get_ec_finalized_tipset(ctx: &Ctx<impl Blockstore>) -> anyhow::Result<Tipset> {
          let head = ctx.chain_store().heaviest_tipset();
 -        let ec_finality_epoch = (head.epoch() - ctx.chain_config().policy.chain_finality).max(0);
