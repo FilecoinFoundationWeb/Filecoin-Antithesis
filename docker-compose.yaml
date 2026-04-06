@@ -225,6 +225,27 @@ services:
       - ./data/forest0:/root/devgen/forest0
       - ./data/curio:/root/devgen/curio
 
+  hegel-workload:
+    <<: [ *filecoin_service ]
+    image: workload:latest
+    container_name: hegel-workload
+    entrypoint: ["/opt/antithesis/entrypoint/entrypoint-hegel.sh"]
+    environment:
+      - STRESS_NODES=lotus0,lotus1,lotus2,lotus3
+      - STRESS_RPC_PORT=1234
+      - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
+      - STRESS_WAIT_HEIGHT=10
+      - RUST_LOG=info
+    volumes:
+      - ./shared/configs:/shared/configs
+      - ./shared:/shared
+      - ./data/lotus0:/root/devgen/lotus0
+      - ./data/lotus1:/root/devgen/lotus1
+      - ./data/lotus2:/root/devgen/lotus2
+      - ./data/lotus3:/root/devgen/lotus3
+      - ./data/forest0:/root/devgen/forest0
+      - ./data/curio:/root/devgen/curio
+
   lotus-miner0:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
     image: lotus:${LOTUS_MINER_0_TAG:-${LOTUS_TAG:-latest}}

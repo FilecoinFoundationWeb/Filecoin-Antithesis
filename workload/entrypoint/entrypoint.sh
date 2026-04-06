@@ -168,9 +168,4 @@ if [ "${FUZZER_ENABLED:-1}" = "1" ]; then
     FUZZER_PID=$!
 fi
 
-# ── 8. Launch hegel workload ──
-log_info "Launching hegel workload..."
-/usr/local/bin/hegel-workload &
-HEGEL_PID=$!
-
-wait -n $STRESS_PID ${FUZZER_PID:-} $HEGEL_PID
+wait -n $STRESS_PID ${FUZZER_PID:-}

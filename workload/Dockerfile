@@ -46,6 +46,6 @@ COPY --from=rust-builder /build/target/release/hegel-workload /usr/local/bin/heg
 RUN uv venv .hegel/venv && uv pip install --python .hegel/venv/bin/python hegel-core==0.2.3
 ENV HEGEL_SERVER_COMMAND="/opt/antithesis/.hegel/venv/bin/hegel"
 
-RUN chmod +x ./entrypoint/entrypoint.sh
+RUN chmod +x ./entrypoint/entrypoint.sh ./entrypoint/entrypoint-hegel.sh
 
 ENTRYPOINT ["/opt/antithesis/entrypoint/entrypoint.sh"]
