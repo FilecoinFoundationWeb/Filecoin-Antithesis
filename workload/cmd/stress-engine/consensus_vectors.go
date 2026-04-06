@@ -113,7 +113,85 @@ const (
 	consensusWalkEpochs = 5
 	finalizedMinHeight  = 5  // skip checks until finalized tipset is past this
 	f3MinEpoch          = 21 // minimum chain head height before finality-dependent checks run (must exceed EC finality depth 20)
+
+	// snapshotTTL controls how long a finalized-tipset snapshot is reused.
+	// Multiple consensus checks hitting the same deck tick share one fetch round.
+	snapshotTTL = 2 * time.Second
 )
+
+// ---------------------------------------------------------------------------
+// Finalized-tipset snapshot cache
+//
+// DoTipsetConsensus, DoStateRootComparison, DoHeadComparison, and DoStateAudit
+// all query ChainGetFinalizedTipSet on every node. This cache deduplicates
+// those calls within a short TTL window so a single deck tick cycle pays the
+// RPC cost once.
+// ---------------------------------------------------------------------------
+
+type nodeSnapshot struct {
+	finTs  *types.TipSet
+	height abi.ChainEpoch
+	key    types.TipSetKey
+	err    error
+}
+
+var (
+	snapCache   map[string]nodeSnapshot // nodeName -> snapshot
+	snapCacheMu sync.Mutex
+	snapCacheAt time.Time
+)
+
+// getFinalizedSnapshots returns a cached-or-fresh map of each node's finalized
+// tipset. Safe to call from any deck vector — concurrent callers within the
+// TTL window share the same result.
+func getFinalizedSnapshots() map[string]nodeSnapshot {
+	snapCacheMu.Lock()
+	defer snapCacheMu.Unlock()
+
+	if snapCache != nil && time.Since(snapCacheAt) < snapshotTTL {
+		return snapCache
+	}
+
+	snap := make(map[string]nodeSnapshot, len(nodeKeys))
+	for _, name := range nodeKeys {
+		ts, err := nodes[name].ChainGetFinalizedTipSet(ctx)
+		if err != nil {
+			snap[name] = nodeSnapshot{err: err}
+			continue
+		}
+		snap[name] = nodeSnapshot{
+			finTs:  ts,
+			height: ts.Height(),
+			key:    ts.Key(),
+		}
+	}
+	snapCache = snap
+	snapCacheAt = time.Now()
+	return snap
+}
+
+// snapshotMinHeight returns the minimum finalized height across all nodes
+// that responded successfully, plus the corresponding tipset key.
+// Returns 0 if fewer than 2 nodes responded.
+func snapshotMinHeight(snap map[string]nodeSnapshot) (abi.ChainEpoch, types.TipSetKey) {
+	minH := abi.ChainEpoch(0)
+	var minTsk types.TipSetKey
+	count := 0
+	for _, s := range snap {
+		if s.err != nil {
+			continue
+		}
+		count++
+		if count == 1 || s.height < minH {
+			minH = s.height
+			minTsk = s.key
+		}
+	}
+	if count < 2 {
+		return 0, types.EmptyTSK
+	}
+	return minH, minTsk
+}
 
 // allNodesPastEpoch returns true if the highest chain head across all nodes
 // is at or above minEpoch. Uses max height rather than requiring every node
@@ -134,24 +212,9 @@ func allNodesPastEpoch(minEpoch abi.ChainEpoch) bool {
 }
 
 // getFinalizedHeight returns the minimum finalized tipset height across nodes.
-// Returns 0 if any node fails. This is the safe boundary for state assertions.
+// Uses the shared snapshot cache. Returns 0 if fewer than 2 nodes responded.
 func getFinalizedHeight() (abi.ChainEpoch, types.TipSetKey) {
-	minHeight := abi.ChainEpoch(0)
-	var minTsk types.TipSetKey
-	first := true
-	for _, name := range nodeKeys {
-		ts, err := nodes[name].ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, err)
-			return 0, types.EmptyTSK
-		}
-		if first || ts.Height() < minHeight {
-			minHeight = ts.Height()
-			minTsk = ts.Key()
-			first = false
-		}
-	}
-	return minHeight, minTsk
+	return snapshotMinHeight(getFinalizedSnapshots())
 }
 
 // doTipsetConsensus checks that all nodes agree on the tipset at a finalized height.
@@ -163,67 +226,39 @@ func DoTipsetConsensus() {
 		return
 	}
 
-	finalizedHeight, _ := getFinalizedHeight()
+	snap := getFinalizedSnapshots()
+	finalizedHeight, _ := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight {
 		return
 	}
 
-	// Pick a random height within the finalized range
 	checkHeight := abi.ChainEpoch(rngIntn(int(finalizedHeight)) + 1)
-
-	// Query all nodes concurrently for tipset at this height
-	type result struct {
-		name      string
-		tipsetKey string
-		err       error
-	}
-
-	results := make(chan result, len(nodeKeys))
-	var wg sync.WaitGroup
-
-	for _, name := range nodeKeys {
-		wg.Add(1)
-		go func(nodeName string) {
-			defer wg.Done()
-			// Use finalized tipset as the anchor for lookback
-			finTs, err := nodes[nodeName].ChainGetFinalizedTipSet(ctx)
-			if err != nil {
-				results <- result{name: nodeName, err: err}
-				return
-			}
-			ts, err := nodes[nodeName].ChainGetTipSetByHeight(ctx, checkHeight, finTs.Key())
-			if err != nil {
-				results <- result{name: nodeName, err: err}
-				return
-			}
-			results <- result{name: nodeName, tipsetKey: ts.Key().String()}
-		}(name)
-	}
-
-	wg.Wait()
-	close(results)
 
 	tipsetKeys := make(map[string][]string) // key -> []nodeName
 	var errs int
-	for r := range results {
-		if r.err != nil {
-			log.Printf("[chain-monitor] tipset query failed for %s: %v", r.name, r.err)
+
+	for name, s := range snap {
+		if s.err != nil {
+			log.Printf("[chain-monitor] tipset query failed for %s: %v", name, s.err)
 			errs++
 			continue
 		}
-		tipsetKeys[r.tipsetKey] = append(tipsetKeys[r.tipsetKey], r.name)
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, s.key)
+		if err != nil {
+			log.Printf("[chain-monitor] ChainGetTipSetByHeight(%d) failed for %s: %v", checkHeight, name, err)
+			errs++
+			continue
+		}
+		tipsetKeys[ts.Key().String()] = append(tipsetKeys[ts.Key().String()], name)
 	}
 
-	responded := len(nodeKeys) - errs
+	responded := len(snap) - errs
 	if responded < 2 {
-		return // need at least 2 nodes to check consensus
+		return
 	}
 
 	consensusReached := len(tipsetKeys) == 1
 
-	// Sometimes, not Always: with shallow EC finality (head-20), transient
-	// forks are expected. Nodes should agree *eventually* (liveness), but
-	// point-in-time disagreement during active forks is normal.
 	assert.Sometimes(consensusReached, "All nodes agree on the same finalized tipset", map[string]any{
 		"height":         checkHeight,
 		"finalized_at":   finalizedHeight,
@@ -246,14 +281,14 @@ func DoHeightProgression() {
 	if !allNodesPastEpoch(f3MinEpoch) {
 		return
 	}
+	snap := getFinalizedSnapshots()
 	heights := make(map[string]abi.ChainEpoch)
-	for _, name := range nodeKeys {
-		finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, err)
+	for name, s := range snap {
+		if s.err != nil {
+			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, s.err)
 			continue
 		}
-		heights[name] = finTs.Height()
+		heights[name] = s.height
 	}
 
 	if len(heights) == 0 {
@@ -316,7 +351,7 @@ func DoPeerCount() {
 	}
 }
 
-// doHeadComparison queries ChainHead from all nodes and compares.
+// doHeadComparison queries finalized tipsets from all nodes and compares.
 // Simpler than full tipset consensus — just checks heads are close.
 func DoHeadComparison() {
 	if len(nodeKeys) < 2 {
@@ -332,17 +367,17 @@ func DoHeadComparison() {
 		key    string
 	}
 
+	snap := getFinalizedSnapshots()
 	var heads []headInfo
-	for _, name := range nodeKeys {
-		head, err := nodes[name].ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			log.Printf("[chain-monitor] ChainHead failed for %s: %v", name, err)
+	for name, s := range snap {
+		if s.err != nil {
+			log.Printf("[chain-monitor] ChainHead failed for %s: %v", name, s.err)
 			continue
 		}
 		heads = append(heads, headInfo{
 			name:   name,
-			height: head.Height(),
-			key:    head.Key().String(),
+			height: s.height,
+			key:    s.key.String(),
 		})
 	}
 
@@ -396,7 +431,8 @@ func DoStateRootComparison() {
 		return
 	}
 
-	finalizedHeight, _ := getFinalizedHeight()
+	snap := getFinalizedSnapshots()
+	finalizedHeight, _ := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight {
 		return
 	}
@@ -405,19 +441,22 @@ func DoStateRootComparison() {
 
 	// Collect parent state roots from all nodes at this finalized height
 	stateRoots := make(map[string][]string) // root -> []nodeName
-	for _, name := range nodeKeys {
-		finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, err)
-			return
+	for name, s := range snap {
+		if s.err != nil {
+			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, s.err)
+			continue
 		}
-		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, finTs.Key())
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, s.key)
 		if err != nil {
 			log.Printf("[chain-monitor] ChainGetTipSetByHeight(%d) failed for %s: %v", checkHeight, name, err)
-			return
+			continue
 		}
 		root := ts.ParentState().String()
 		stateRoots[root] = append(stateRoots[root], name)
+	}
+
+	if len(stateRoots) == 0 {
+		return
 	}
 
 	statesMatch := len(stateRoots) == 1
@@ -452,7 +491,8 @@ func DoStateAudit() {
 		return
 	}
 
-	finalizedHeight, _ := getFinalizedHeight()
+	snap := getFinalizedSnapshots()
+	finalizedHeight, _ := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight {
 		return
 	}
@@ -463,14 +503,13 @@ func DoStateAudit() {
 	stateRoots := make(map[string][]string)
 	var tipsetCids []cid.Cid
 
-	for _, name := range nodeKeys {
-		finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			return
+	for name, s := range snap {
+		if s.err != nil {
+			continue
 		}
-		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, finTs.Key())
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, s.key)
 		if err != nil {
-			return
+			continue
 		}
 		root := ts.ParentState().String()
 		stateRoots[root] = append(stateRoots[root], name)
@@ -478,6 +517,10 @@ func DoStateAudit() {
 		if len(tipsetCids) == 0 {
 			tipsetCids = ts.Cids()
 		}
+	}
+
+	if len(stateRoots) < 2 {
+		return
 	}
 
 	rootsMatch := len(stateRoots) == 1
