@@ -254,6 +254,7 @@ func buildDeck() {
 		{"DoStateAudit", "STRESS_WEIGHT_STATE_AUDIT", DoStateAudit, 5},
 		{"DoF3FinalityMonitor", "STRESS_WEIGHT_F3_MONITOR", DoF3FinalityMonitor, 2},
 		{"DoF3FinalityAgreement", "STRESS_WEIGHT_F3_AGREEMENT", DoF3FinalityAgreement, 3},
+		{"DoDrandBeaconAudit", "STRESS_WEIGHT_DRAND_BEACON_AUDIT", DoDrandBeaconAudit, 3},
 	}
 
 	// Non-FOC stress vectors — skipped when FOC profile is active.

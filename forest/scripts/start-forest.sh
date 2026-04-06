@@ -28,7 +28,7 @@ while true; do
 
     if [ $? -eq 0 ] && echo "$response" | jq -e '.public_key?' >/dev/null 2>&1; then
         # Forest expects drand config as {servers, chain_info, network_type}
-        formatted_json=$(jq --arg server "http://drand0" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$response")
+        formatted_json=$(jq '{ servers: ["http://drand0", "http://drand1", "http://drand2"], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$response")
         echo "formatted_json: $formatted_json"
         export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
         echo "forest${node_number}: Drand chain info ready"
