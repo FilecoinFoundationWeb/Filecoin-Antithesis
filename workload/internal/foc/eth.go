@@ -390,6 +390,24 @@ func ReadRailPaymentRate(ctx context.Context, node api.FullNode, filPayAddr []by
 	return new(big.Int).SetBytes(result[160:192])
 }
 
+// ReadAllowance calls allowance(owner, spender) on an ERC-20 token.
+func ReadAllowance(ctx context.Context, node api.FullNode, tokenAddr, ownerAddr, spenderAddr []byte) *big.Int {
+	calldata := BuildCalldata(SigAllowance, EncodeAddress(ownerAddr), EncodeAddress(spenderAddr))
+	result, err := EthCallUint256(ctx, node, tokenAddr, calldata)
+	if err != nil {
+		log.Printf("[foc] ReadAllowance failed: %v", err)
+		return big.NewInt(0)
+	}
+	return result
+}
+
+// ReadRailFull calls getRail(railId) and returns the full raw result (12 words / 384 bytes).
+// Layout: token|from|to|operator|paymentRate|arbiter|createdEpoch|endEpoch|...
+func ReadRailFull(ctx context.Context, node api.FullNode, filPayAddr []byte, railID uint64) ([]byte, error) {
+	calldata := BuildCalldata(SigGetRail, EncodeBigInt(new(big.Int).SetUint64(railID)))
+	return EthCallRaw(ctx, node, filPayAddr, calldata)
+}
+
 // EncodeBigInt ABI-encodes a *big.Int as a 32-byte big-endian uint256.
 func EncodeBigInt(n *big.Int) []byte {
 	buf := make([]byte, 32)

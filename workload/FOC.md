@@ -38,26 +38,30 @@ Contract logic executes deterministically inside FVM's WASM sandbox — unit tes
 ```
 workload/
 ├── cmd/
-│   ├── stress-engine/          # Main fuzz driver
-│   │   ├── main.go             # Init, deck building, main loop
-│   │   ├── foc_vectors.go      # FOC lifecycle + steady-state vectors
-│   │   ├── actions.go          # Non-FOC stress vectors (transfers, contracts, etc.)
-│   │   └── contracts.go        # Embedded EVM bytecodes
-│   ├── foc-sidecar/            # Independent safety monitor
-│   │   ├── main.go             # Polling loop
-│   │   ├── assertions.go       # 5 safety assertions (assert.Always)
-│   │   ├── events.go           # Event log parsing (DataSetCreated, RailCreated, etc.)
-│   │   └── state.go            # Thread-safe state tracking
-│   └── genesis-prep/           # Wallet generation (runs before stress-engine)
+│   ├── stress-engine/                  # Main fuzz driver
+│   │   ├── main.go                     # Init, deck building, main loop
+│   │   ├── foc_vectors.go              # FOC lifecycle + steady-state vectors
+│   │   ├── griefing_vectors.go         # Payment griefing probes (fee extraction, insolvency, replay)
+│   │   ├── foc_piece_security.go       # Piece lifecycle security scenario (8 phases)
+│   │   ├── foc_payment_security.go     # Rail/payment security scenario (7 phases)
+│   │   ├── foc_resilience.go           # Curio resilience + orphan rail scenario (3 phases)
+│   │   ├── actions.go                  # Non-FOC stress vectors (transfers, contracts, etc.)
+│   │   └── contracts.go                # Embedded EVM bytecodes
+│   ├── foc-sidecar/                    # Independent safety monitor
+│   │   ├── main.go                     # Polling loop
+│   │   ├── assertions.go               # Safety assertions (assert.Always + assert.Sometimes)
+│   │   ├── events.go                   # Event log parsing (DataSetCreated, RailCreated, etc.)
+│   │   └── state.go                    # Thread-safe state tracking
+│   └── genesis-prep/                   # Wallet generation (runs before stress-engine)
 │       └── main.go
 └── internal/
-    └── foc/                    # Shared FOC library
-        ├── config.go           # Parse /shared/environment.env + SP key
-        ├── eth.go              # EVM tx submission (SendEthTx, SendEthTxConfirmed, BuildCalldata)
-        ├── eip712.go           # EIP-712 typed data signing for FWSS
-        ├── curio.go            # Curio PDP HTTP API client (upload, create dataset, add pieces)
-        ├── commp.go            # PieceCIDv2 calculation (CommP)
-        └── selectors.go        # ABI function selectors for all contracts
+    └── foc/                            # Shared FOC library
+        ├── config.go                   # Parse /shared/environment.env + SP key
+        ├── eth.go                      # EVM tx submission + read helpers
+        ├── eip712.go                   # EIP-712 typed data signing for FWSS
+        ├── curio.go                    # Curio PDP HTTP API client
+        ├── commp.go                    # PieceCIDv2 calculation (CommP)
+        └── selectors.go               # ABI function selectors for all contracts
 ```
 
 ### Smart Contracts
@@ -164,6 +168,65 @@ Resets the lifecycle to `Init` on success. **Destructive** — disabled by defau
 
 ---
 
+## Security Scenarios
+
+Three scenario state machines test the full connected lifecycle with security edge cases. Each is a single deck entry that advances one phase per invocation. They use a dedicated secondary client wallet (set up by the griefing runtime) to avoid interfering with the primary FOC lifecycle.
+
+### Scenario 1: Piece Lifecycle Security (`foc_piece_security.go`, weight: 2)
+
+Tests the full piece add/delete/retrieve lifecycle with attack probes at each step.
+
+```
+Init → Added → Verified → DeleteScheduled → DeleteVerified → AttackPhase → Terminated → Cleanup
+```
+
+| Phase | What It Tests | Key Assertion |
+|-------|--------------|---------------|
+| **Init→Added** | Upload piece, add to dataset, verify `activePieceCount` increases | `Sometimes(countIncreased)` |
+| **Added→Verified** | Download piece, recompute CID, verify integrity | `Sometimes(cidMatch)` |
+| **Verified→DeleteScheduled** | Schedule deletion, immediately re-retrieve (**curio#1039** "prove deleted data" edge) | `Sometimes(retrievalClean)` |
+| **DeleteScheduled→DeleteVerified** | Verify piece count decreased, proving still advances | `Sometimes(countDecreased)`, `Sometimes(provingAdvances)` |
+| **DeleteVerified→AttackPhase** | Random attack (one per cycle): | |
+| | — **Nonce replay**: reuse addPieces nonce | `Sometimes(replayRejected)` |
+| | — **Cross-dataset injection**: sign for DS A, submit to DS B | `Sometimes(crossDSRejected)` |
+| | — **Double deletion**: delete same pieceID twice | `Sometimes(doubleFails)` |
+| | — **Nonexistent delete**: delete pieceID=999999 | `Sometimes(nonexistentFails)` |
+| **AttackPhase→Terminated** | Call `terminateService`, then immediately try `addPieces` (**post-termination race**) | `Sometimes(postTermAddRejected)` |
+| **Terminated→Cleanup** | Delete dataset, reset for next cycle | `Sometimes(cycleCompletes)` |
+
+### Scenario 2: Payment Rail Security (`foc_payment_security.go`, weight: 2)
+
+Tests the full payment rail lifecycle targeting audit findings.
+
+```
+Init → Settled → DoubleSettled → RailChecked → RateModified → Withdrawn → Refunded
+```
+
+| Phase | What It Tests | Audit Finding | Key Assertion |
+|-------|--------------|---------------|---------------|
+| **Init→Settled** | Settle rail, verify lockup ≤ before | **L01**: lockup after settlement | `Sometimes(lockupNoIncrease)` |
+| **Settled→DoubleSettled** | Settle same rail+epoch again | Double-settle idempotency | `Sometimes(noExtraDeduction)` |
+| **DoubleSettled→RailChecked** | Read all 3 rail IDs, verify cacheMiss+cdn rates=0 (no FILCDN/IPNI) | Rail config sanity | Logged for observability |
+| **RailChecked→RateModified** | `modifyRailPayment` twice, verify latest persists | **L06**: rate queue clearing | `Sometimes(latestRatePersists)` |
+| **RateModified→Withdrawn** | Withdraw all `available = funds - lockup` | **#288**: locked funds | `Sometimes(withdrawOK)` |
+| **Withdrawn→Refunded** | Attacker deposits to victim's account + refund | **L04**: unauthorized deposit | `Always(!primaryInflated)` |
+
+### Scenario 3: Curio Resilience (`foc_resilience.go`, weight: 1)
+
+Tests Curio HTTP API resilience and orphan rail economics.
+
+```
+Init → OrphanCreated → OrphanChecked → (back to Init)
+```
+
+| Phase | What It Tests | Risks DB Item | Key Assertion |
+|-------|--------------|---------------|---------------|
+| **Init** | Send 7 malformed HTTP requests, verify Curio survives | Network-wide Curio crash (Sev2) | `Always(curioPingOK)` |
+| **OrphanCreated** | Create empty dataset (no pieces), snapshot funds | Upload failures + orphan rails | — |
+| **OrphanChecked** | Verify empty dataset doesn't accumulate charges, cleanup | Orphan rail billing | `Sometimes(noChargeForEmpty)` |
+
+---
+
 ## Assertions
 
 The Antithesis SDK provides three assertion types:
@@ -193,20 +256,21 @@ All stress-engine assertions use `assert.Sometimes` because individual transacti
 
 ### Sidecar Assertions (`assertions.go`)
 
-Sidecar assertions use `assert.Always` for safety invariants that must hold on every poll cycle. These run independently of the stress-engine against finalized chain state (30-epoch finality window).
+Sidecar assertions run independently against finalized chain state (30-epoch finality window).
 
 | Assertion Message | Type | Function | What It Validates |
 |-------------------|------|----------|-------------------|
-| `"Rail-to-dataset reverse mapping is consistent"` | Always | checkRailToDataset | `railToDataSet(pdpRailId)` returns the expected `dataSetId` for every tracked dataset. Detects rail/dataset mapping corruption. |
-| `"FilecoinPay holds sufficient USDFC (solvency)"` | Always | checkFilecoinPaySolvency | `balanceOf(FilecoinPay)` >= sum of all tracked `accounts.funds + accounts.lockup`. Detects insolvency / phantom balance creation. |
-| `"Provider ID matches registry for dataset"` | Always | checkProviderIDConsistency | `addressToProviderId(sp)` matches the `providerId` from the `DataSetCreated` event. Detects registry corruption or SP impersonation. |
-| `"Active proofset is live on-chain"` | Always | checkProofSetLiveness | Every non-deleted dataset has `dataSetLive() == true`. Detects unexpected dataset termination or proof failure. |
-| `"Deleted proofset is not live"` | Always | checkDeletedDataSetNotLive | Every deleted dataset has `dataSetLive() == false`. Detects zombie datasets that survive deletion. |
-
-| `"Proving period advances (challenge epoch changed)"` | Sometimes | checkProvingAdvancement | `getNextChallengeEpoch` changes over time for active datasets. Confirms proving pipeline is running. |
-| `"Dataset proof submitted (proven epoch advanced)"` | Sometimes | checkProvingAdvancement | `getDataSetLastProvenEpoch` advances. Confirms Curio is submitting proofs. |
-| `"Active piece count does not exceed leaf count"` | Always | checkPieceAccountingConsistency | `getActivePieceCount <= getDataSetLeafCount`. Detects piece accounting corruption. |
-| `"Active dataset rail has non-zero payment rate"` | Always | checkRateConsistency | Datasets with pieces must have `paymentRate > 0` on their PDP rail. Detects rate miscalculation. |
+| `"Rail-to-dataset reverse mapping is consistent"` | Always | checkRailToDataset | `railToDataSet(pdpRailId)` returns expected `dataSetId`. Detects mapping corruption. |
+| `"FilecoinPay holds sufficient USDFC (solvency)"` | Always | checkFilecoinPaySolvency | `balanceOf(FilecoinPay)` >= sum of all `accounts.funds`. Detects insolvency. |
+| `"Provider ID matches registry for dataset"` | Always | checkProviderIDConsistency | `addressToProviderId(sp)` matches `DataSetCreated` event. |
+| `"Active proofset is live on-chain"` | Always | checkProofSetLiveness | Non-deleted datasets have `dataSetLive() == true`. |
+| `"Deleted proofset is not live"` | Always | checkDeletedDataSetNotLive | Deleted datasets have `dataSetLive() == false`. |
+| `"Proving period advances"` | Sometimes | checkProvingAdvancement | `getNextChallengeEpoch` changes over time. |
+| `"Dataset proof submitted"` | Sometimes | checkProvingAdvancement | `getDataSetLastProvenEpoch` advances. |
+| `"Active piece count ≤ leaf count"` | Always | checkPieceAccountingConsistency | Detects piece accounting corruption. |
+| `"Active dataset rail has non-zero payment rate"` | Always | checkRateConsistency | Datasets with pieces must have `paymentRate > 0`. |
+| `"Lockup never exceeds funds for any payer"` | Always | checkLockupNeverExceedsFunds | **Audit L01**: `lockup ≤ funds` for every tracked payer. Fundamental accounting invariant. |
+| `"Deleted dataset rail has endEpoch set"` | Sometimes | checkDeletedDatasetRailTerminated | **#288**: Deleted dataset rails must be terminated. Detects zombie rails. |
 
 ### Event Tracking
 
@@ -320,6 +384,10 @@ When the FOC profile is active, non-FOC stress vectors (EVM contracts, nonce cha
 | `STRESS_WEIGHT_FOC_WITHDRAW` | `2` | Steady-state | Withdraw USDFC from FilecoinPay |
 | `STRESS_WEIGHT_FOC_DELETE_PIECE` | `1` | Destructive | Schedule piece deletion from proofset |
 | `STRESS_WEIGHT_FOC_DELETE_DS` | `0` | Destructive | Delete entire dataset + reset lifecycle |
+| `STRESS_WEIGHT_PDP_GRIEFING` | `8` | Adversarial | Payment griefing: fee extraction, insolvency, cross-payer replay, burst |
+| `STRESS_WEIGHT_FOC_PIECE_SECURITY` | `2` | Security | Piece lifecycle: add/delete/retrieve + nonce replay, cross-DS, double-delete |
+| `STRESS_WEIGHT_FOC_PAYMENT_SECURITY` | `2` | Security | Rail lifecycle: settlement lockup (L01), rate change (L06), unauthorized deposit (L04), withdrawal (#288) |
+| `STRESS_WEIGHT_FOC_RESILIENCE` | `1` | Security | Curio HTTP resilience + orphan rail billing |
 
 ---
 

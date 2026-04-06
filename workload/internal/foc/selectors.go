@@ -29,6 +29,7 @@ var (
 	SigModifyRailPayment = CalcSelector("modifyRailPayment(uint256,uint256,uint256)")
 
 	SigGetRail           = CalcSelector("getRail(uint256)")
+	SigAllowance         = CalcSelector("allowance(address,address)")
 
 	// ServiceProviderRegistry
 	SigAddrToProvId = CalcSelector("addressToProviderId(address)")

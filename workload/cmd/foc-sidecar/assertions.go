@@ -306,6 +306,74 @@ func checkPieceAccountingConsistency(ctx context.Context, node api.FullNode, cfg
 	}
 }
 
+// checkLockupNeverExceedsFunds verifies that for every tracked payer,
+// lockup never exceeds funds. This is a fundamental accounting invariant
+// of FilecoinPay — if lockup > funds, the contract is in an inconsistent state.
+// (Audit L01 continuous monitoring)
+func checkLockupNeverExceedsFunds(ctx context.Context, node api.FullNode, cfg *foc.Config, state *SidecarState) {
+	if cfg.USDFCAddr == nil || cfg.FilPayAddr == nil {
+		return
+	}
+
+	payers := state.GetTrackedPayers()
+	for _, payer := range payers {
+		funds := foc.ReadAccountFunds(ctx, node, cfg.FilPayAddr, cfg.USDFCAddr, payer)
+		lockup := foc.ReadAccountLockup(ctx, node, cfg.FilPayAddr, cfg.USDFCAddr, payer)
+
+		if funds == nil || lockup == nil {
+			continue
+		}
+
+		consistent := lockup.Cmp(funds) <= 0
+
+		assert.Always(consistent, "Lockup never exceeds funds for any payer", map[string]any{
+			"payer":  fmt.Sprintf("0x%x", payer),
+			"funds":  funds.String(),
+			"lockup": lockup.String(),
+		})
+
+		if !consistent {
+			log.Printf("[lockup-invariant] VIOLATION: payer=%x lockup=%s > funds=%s", payer, lockup, funds)
+		}
+	}
+}
+
+// checkDeletedDatasetRailTerminated verifies that for every deleted dataset,
+// the associated PDP rail has an endEpoch set (rail is terminated).
+// If a deleted dataset's rail has endEpoch=0, it's a zombie rail still
+// consuming lockup — funds are stuck. (#288 continuous monitoring)
+func checkDeletedDatasetRailTerminated(ctx context.Context, node api.FullNode, cfg *foc.Config, state *SidecarState) {
+	if cfg.FilPayAddr == nil {
+		return
+	}
+
+	datasets := state.GetDatasets()
+	for _, ds := range datasets {
+		if !ds.Deleted || ds.PDPRailID == 0 {
+			continue
+		}
+
+		railData, err := foc.ReadRailFull(ctx, node, cfg.FilPayAddr, ds.PDPRailID)
+		if err != nil || len(railData) < 256 {
+			continue
+		}
+
+		// endEpoch is at word index 7 (bytes 224-256) in the getRail return tuple
+		endEpoch := new(big.Int).SetBytes(railData[224:256])
+		terminated := endEpoch.Sign() > 0
+
+		assert.Sometimes(terminated, "Deleted dataset rail has endEpoch set", map[string]any{
+			"dataSetId": ds.DataSetID,
+			"pdpRailId": ds.PDPRailID,
+			"endEpoch":  endEpoch.String(),
+		})
+
+		if !terminated {
+			log.Printf("[deleted-rail] dataset %d rail %d has endEpoch=0 after deletion — zombie rail", ds.DataSetID, ds.PDPRailID)
+		}
+	}
+}
+
 // checkRateConsistency verifies that active datasets with pieces have a
 // non-zero payment rate on their PDP rail.
 func checkRateConsistency(ctx context.Context, node api.FullNode, cfg *foc.Config, state *SidecarState) {

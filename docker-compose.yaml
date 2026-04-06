@@ -204,6 +204,10 @@ services:
       #
       # ADVERSARIAL: economic security + griefing probes
       - STRESS_WEIGHT_PDP_GRIEFING=8 # fee extraction, insolvency, replay, burst attacks
+      # SECURITY SCENARIOS: piece lifecycle, payment rail, resilience
+      - STRESS_WEIGHT_FOC_PIECE_SECURITY=2 # piece lifecycle + attack probes (nonce replay, cross-DS, double-delete)
+      - STRESS_WEIGHT_FOC_PAYMENT_SECURITY=2 # rail settlement + audit L01/L04/L06/#288
+      - STRESS_WEIGHT_FOC_RESILIENCE=1 # Curio HTTP stress + orphan rail billing
       #
       - CURIO_PDP_URL=http://curio:80
 
