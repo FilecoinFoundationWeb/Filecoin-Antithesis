@@ -33,7 +33,7 @@ index 32e34106c..dc8e01860 100644
  	OpportunisticGraftScoreThreshold = 3.5
  )
 diff --git a/src/libp2p/gossip_params.rs b/src/libp2p/gossip_params.rs
-index 26298991e..5873e3cd1 100644
+index 38822868c..55aa20dd6 100644
 --- a/src/libp2p/gossip_params.rs
 +++ b/src/libp2p/gossip_params.rs
 @@ -45,7 +45,7 @@ fn build_msg_topic_config() -> TopicScoreParams {
@@ -84,21 +84,15 @@ index 26298991e..5873e3cd1 100644
          opportunistic_graft_threshold: 3.5,
      }
 diff --git a/src/rpc/methods/chain.rs b/src/rpc/methods/chain.rs
-index 35b9dfa..5fade36 100644
+index 620ab0086..8177746ba 100644
 --- a/src/rpc/methods/chain.rs
 +++ b/src/rpc/methods/chain.rs
-@@ -1076,12 +1076,12 @@ impl ChainGetTipSetV2 {
-         // Latest F3 finalized tipset is older than EC finality, falling back to EC finality
--        if head.epoch() > f3_finalized_head.epoch() + ctx.chain_config().policy.chain_finality {
-+        if head.epoch() > f3_finalized_head.epoch() + 20 {
-             Self::get_ec_finalized_tipset(ctx)
-         } else {
-             Ok(f3_finalized_head)
-         }
-     }
-
+@@ -1082,7 +1082,7 @@ impl ChainGetTipSetV2 {
+ 
      pub fn get_ec_finalized_tipset(ctx: &Ctx<impl Blockstore>) -> anyhow::Result<Tipset> {
          let head = ctx.chain_store().heaviest_tipset();
 -        let ec_finality_epoch = (head.epoch() - ctx.chain_config().policy.chain_finality).max(0);
 +        let ec_finality_epoch = (head.epoch() - 20).max(0);
          Ok(ctx.chain_index().tipset_by_height(
+             ec_finality_epoch,
+             head,

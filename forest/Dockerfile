@@ -1,7 +1,7 @@
 FROM docker.io/rust:1.81-bookworm AS builder
 
 # Pin forest to a specific branch
-ARG GIT_COMMIT=""
+ARG GIT_COMMIT="d0dc5b83e776a9df14371dd4e26179526b8696b2"
 ARG LOCAL_BUILD=1
 # Step 1: Install dependencies
 RUN apt-get update && \
@@ -21,12 +21,7 @@ RUN git clone https://github.com/chainsafe/forest /forest
 
 WORKDIR /forest
 
-# Use provided commit or default to latest main
-RUN if [ -n "${GIT_COMMIT}" ]; then \
-        git checkout ${GIT_COMMIT}; \
-    else \
-        echo "No GIT_COMMIT specified, using latest main"; \
-    fi
+RUN git checkout ${GIT_COMMIT}
 
 COPY ./patches/forest.patch ./forest.patch
 RUN git apply forest.patch
