@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/hex"
+	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 
@@ -109,43 +112,109 @@ func DoHeavyCompute() {
 const (
 	consensusWalkEpochs = 5
 	finalizedMinHeight  = 5  // skip checks until finalized tipset is past this
-	f3MinEpoch          = 10 // minimum chain head height on all nodes before F3 checks run
+	f3MinEpoch          = 21 // minimum chain head height before finality-dependent checks run (must exceed EC finality depth 20)
+
+	// snapshotTTL controls how long a finalized-tipset snapshot is reused.
+	// Multiple consensus checks hitting the same deck tick share one fetch round.
+	snapshotTTL = 2 * time.Second
 )
 
-// allNodesPastEpoch returns true only if every node's chain head is at or above minEpoch.
-func allNodesPastEpoch(minEpoch abi.ChainEpoch) bool {
-	for _, name := range nodeKeys {
-		head, err := nodes[name].ChainHead(ctx)
-		if err != nil {
-			return false
-		}
-		if head.Height() < minEpoch {
-			return false
-		}
-	}
-	return true
+// ---------------------------------------------------------------------------
+// Finalized-tipset snapshot cache
+//
+// DoTipsetConsensus, DoStateRootComparison, DoHeadComparison, and DoStateAudit
+// all query ChainGetFinalizedTipSet on every node. This cache deduplicates
+// those calls within a short TTL window so a single deck tick cycle pays the
+// RPC cost once.
+// ---------------------------------------------------------------------------
+
+type nodeSnapshot struct {
+	finTs  *types.TipSet
+	height abi.ChainEpoch
+	key    types.TipSetKey
+	err    error
 }
 
+var (
+	snapCache   map[string]nodeSnapshot // nodeName -> snapshot
+	snapCacheMu sync.Mutex
+	snapCacheAt time.Time
+)
 
-// getFinalizedHeight returns the minimum finalized tipset height across nodes.
-// Returns 0 if any node fails. This is the safe boundary for state assertions.
-func getFinalizedHeight() (abi.ChainEpoch, types.TipSetKey) {
-	minHeight := abi.ChainEpoch(0)
-	var minTsk types.TipSetKey
-	first := true
+// getFinalizedSnapshots returns a cached-or-fresh map of each node's finalized
+// tipset. Safe to call from any deck vector — concurrent callers within the
+// TTL window share the same result.
+func getFinalizedSnapshots() map[string]nodeSnapshot {
+	snapCacheMu.Lock()
+	defer snapCacheMu.Unlock()
+
+	if snapCache != nil && time.Since(snapCacheAt) < snapshotTTL {
+		return snapCache
+	}
+
+	snap := make(map[string]nodeSnapshot, len(nodeKeys))
 	for _, name := range nodeKeys {
 		ts, err := nodes[name].ChainGetFinalizedTipSet(ctx)
 		if err != nil {
-			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, err)
-			return 0, types.EmptyTSK
+			snap[name] = nodeSnapshot{err: err}
+			continue
 		}
-		if first || ts.Height() < minHeight {
-			minHeight = ts.Height()
-			minTsk = ts.Key()
-			first = false
+		snap[name] = nodeSnapshot{
+			finTs:  ts,
+			height: ts.Height(),
+			key:    ts.Key(),
 		}
 	}
-	return minHeight, minTsk
+	snapCache = snap
+	snapCacheAt = time.Now()
+	return snap
+}
+
+// snapshotMinHeight returns the minimum finalized height across all nodes
+// that responded successfully, plus the corresponding tipset key.
+// Returns 0 if fewer than 2 nodes responded.
+func snapshotMinHeight(snap map[string]nodeSnapshot) (abi.ChainEpoch, types.TipSetKey) {
+	minH := abi.ChainEpoch(0)
+	var minTsk types.TipSetKey
+	count := 0
+	for _, s := range snap {
+		if s.err != nil {
+			continue
+		}
+		count++
+		if count == 1 || s.height < minH {
+			minH = s.height
+			minTsk = s.key
+		}
+	}
+	if count < 2 {
+		return 0, types.EmptyTSK
+	}
+	return minH, minTsk
+}
+
+// allNodesPastEpoch returns true if the highest chain head across all nodes
+// is at or above minEpoch. Uses max height rather than requiring every node
+// past the threshold — during EC reorgs without F3, nodes may temporarily
+// reorg to shorter chains, but the network has matured if any node reached it.
+func allNodesPastEpoch(minEpoch abi.ChainEpoch) bool {
+	var maxHeight abi.ChainEpoch
+	for _, name := range nodeKeys {
+		head, err := nodes[name].ChainHead(ctx)
+		if err != nil {
+			continue
+		}
+		if head.Height() > maxHeight {
+			maxHeight = head.Height()
+		}
+	}
+	return maxHeight >= minEpoch
+}
+
+// getFinalizedHeight returns the minimum finalized tipset height across nodes.
+// Uses the shared snapshot cache. Returns 0 if fewer than 2 nodes responded.
+func getFinalizedHeight() (abi.ChainEpoch, types.TipSetKey) {
+	return snapshotMinHeight(getFinalizedSnapshots())
 }
 
 // doTipsetConsensus checks that all nodes agree on the tipset at a finalized height.
@@ -157,65 +226,40 @@ func DoTipsetConsensus() {
 		return
 	}
 
-	finalizedHeight, _ := getFinalizedHeight()
+	snap := getFinalizedSnapshots()
+	finalizedHeight, _ := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight {
 		return
 	}
 
-	// Pick a random height within the finalized range
 	checkHeight := abi.ChainEpoch(rngIntn(int(finalizedHeight)) + 1)
-
-	// Query all nodes concurrently for tipset at this height
-	type result struct {
-		name      string
-		tipsetKey string
-		err       error
-	}
-
-	results := make(chan result, len(nodeKeys))
-	var wg sync.WaitGroup
-
-	for _, name := range nodeKeys {
-		wg.Add(1)
-		go func(nodeName string) {
-			defer wg.Done()
-			// Use finalized tipset as the anchor for lookback
-			finTs, err := nodes[nodeName].ChainGetFinalizedTipSet(ctx)
-			if err != nil {
-				results <- result{name: nodeName, err: err}
-				return
-			}
-			ts, err := nodes[nodeName].ChainGetTipSetByHeight(ctx, checkHeight, finTs.Key())
-			if err != nil {
-				results <- result{name: nodeName, err: err}
-				return
-			}
-			results <- result{name: nodeName, tipsetKey: ts.Key().String()}
-		}(name)
-	}
-
-	wg.Wait()
-	close(results)
 
 	tipsetKeys := make(map[string][]string) // key -> []nodeName
 	var errs int
-	for r := range results {
-		if r.err != nil {
-			log.Printf("[chain-monitor] tipset query failed for %s: %v", r.name, r.err)
+
+	for name, s := range snap {
+		if s.err != nil {
+			log.Printf("[chain-monitor] tipset query failed for %s: %v", name, s.err)
 			errs++
 			continue
 		}
-		tipsetKeys[r.tipsetKey] = append(tipsetKeys[r.tipsetKey], r.name)
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, s.key)
+		if err != nil {
+			log.Printf("[chain-monitor] ChainGetTipSetByHeight(%d) failed for %s: %v", checkHeight, name, err)
+			errs++
+			continue
+		}
+		tipsetKeys[ts.Key().String()] = append(tipsetKeys[ts.Key().String()], name)
 	}
 
-	responded := len(nodeKeys) - errs
+	responded := len(snap) - errs
 	if responded < 2 {
-		return // need at least 2 nodes to check consensus
+		return
 	}
 
 	consensusReached := len(tipsetKeys) == 1
 
-	assert.Always(consensusReached, "All nodes agree on the same finalized tipset", map[string]any{
+	assert.Sometimes(consensusReached, "All nodes agree on the same finalized tipset", map[string]any{
 		"height":         checkHeight,
 		"finalized_at":   finalizedHeight,
 		"tipset_keys":    tipsetKeys,
@@ -234,14 +278,17 @@ func DoTipsetConsensus() {
 // doHeightProgression checks that all nodes are advancing.
 // Ported from node-health.go CheckHeightProgression.
 func DoHeightProgression() {
+	if !allNodesPastEpoch(f3MinEpoch) {
+		return
+	}
+	snap := getFinalizedSnapshots()
 	heights := make(map[string]abi.ChainEpoch)
-	for _, name := range nodeKeys {
-		finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, err)
+	for name, s := range snap {
+		if s.err != nil {
+			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, s.err)
 			continue
 		}
-		heights[name] = finTs.Height()
+		heights[name] = s.height
 	}
 
 	if len(heights) == 0 {
@@ -304,7 +351,7 @@ func DoPeerCount() {
 	}
 }
 
-// doHeadComparison queries ChainHead from all nodes and compares.
+// doHeadComparison queries finalized tipsets from all nodes and compares.
 // Simpler than full tipset consensus — just checks heads are close.
 func DoHeadComparison() {
 	if len(nodeKeys) < 2 {
@@ -320,17 +367,17 @@ func DoHeadComparison() {
 		key    string
 	}
 
+	snap := getFinalizedSnapshots()
 	var heads []headInfo
-	for _, name := range nodeKeys {
-		head, err := nodes[name].ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			log.Printf("[chain-monitor] ChainHead failed for %s: %v", name, err)
+	for name, s := range snap {
+		if s.err != nil {
+			log.Printf("[chain-monitor] ChainHead failed for %s: %v", name, s.err)
 			continue
 		}
 		heads = append(heads, headInfo{
 			name:   name,
-			height: head.Height(),
-			key:    head.Key().String(),
+			height: s.height,
+			key:    s.key.String(),
 		})
 	}
 
@@ -363,7 +410,9 @@ func DoHeadComparison() {
 			nodeTipsets[h.name] = h.key
 		}
 
-		assert.Always(allMatch, "Nodes at the same height agree on the same tipset", map[string]any{
+		// Sometimes: transient forks with shallow EC finality (head-20) mean
+		// nodes may temporarily disagree on the tipset at a given height.
+		assert.Sometimes(allMatch, "Nodes at the same height agree on the same tipset", map[string]any{
 			"height":       height,
 			"nodes":        len(group),
 			"keys_match":   allMatch,
@@ -382,7 +431,8 @@ func DoStateRootComparison() {
 		return
 	}
 
-	finalizedHeight, _ := getFinalizedHeight()
+	snap := getFinalizedSnapshots()
+	finalizedHeight, _ := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight {
 		return
 	}
@@ -391,24 +441,30 @@ func DoStateRootComparison() {
 
 	// Collect parent state roots from all nodes at this finalized height
 	stateRoots := make(map[string][]string) // root -> []nodeName
-	for _, name := range nodeKeys {
-		finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, err)
-			return
+	for name, s := range snap {
+		if s.err != nil {
+			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, s.err)
+			continue
 		}
-		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, finTs.Key())
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, s.key)
 		if err != nil {
 			log.Printf("[chain-monitor] ChainGetTipSetByHeight(%d) failed for %s: %v", checkHeight, name, err)
-			return
+			continue
 		}
 		root := ts.ParentState().String()
 		stateRoots[root] = append(stateRoots[root], name)
 	}
 
+	if len(stateRoots) == 0 {
+		return
+	}
+
 	statesMatch := len(stateRoots) == 1
 
-	assert.Always(statesMatch, "Chain state is consistent across all nodes", map[string]any{
+	// Sometimes: with shallow EC finality, nodes on different fork branches
+	// will have different state roots at the same height. This is expected
+	// during transient forks and should resolve after convergence.
+	assert.Sometimes(statesMatch, "Chain state is consistent across all nodes", map[string]any{
 		"height":        checkHeight,
 		"finalized_at":  finalizedHeight,
 		"state_roots":   stateRoots,
@@ -435,7 +491,8 @@ func DoStateAudit() {
 		return
 	}
 
-	finalizedHeight, _ := getFinalizedHeight()
+	snap := getFinalizedSnapshots()
+	finalizedHeight, _ := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight {
 		return
 	}
@@ -446,14 +503,13 @@ func DoStateAudit() {
 	stateRoots := make(map[string][]string)
 	var tipsetCids []cid.Cid
 
-	for _, name := range nodeKeys {
-		finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			return
+	for name, s := range snap {
+		if s.err != nil {
+			continue
 		}
-		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, finTs.Key())
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, s.key)
 		if err != nil {
-			return
+			continue
 		}
 		root := ts.ParentState().String()
 		stateRoots[root] = append(stateRoots[root], name)
@@ -463,9 +519,15 @@ func DoStateAudit() {
 		}
 	}
 
+	if len(stateRoots) < 2 {
+		return
+	}
+
 	rootsMatch := len(stateRoots) == 1
 
-	assert.Always(rootsMatch, "State root is consistent after FVM execution", map[string]any{
+	// Sometimes: cross-node state root comparison during shallow EC finality
+	// will see divergence when nodes are on different fork branches.
+	assert.Sometimes(rootsMatch, "State root is consistent after FVM execution", map[string]any{
 		"height":        checkHeight,
 		"finalized_at":  finalizedHeight,
 		"unique_states": len(stateRoots),
@@ -542,4 +604,356 @@ func DoStateAudit() {
 	}
 
 	debugLog("  [chain-monitor] OK: state-audit height %d, roots match, msgs/receipts consistent", checkHeight)
+}
+
+// ===========================================================================
+// Fork Monitor — background convergence-based fork detection
+//
+// Runs as a background goroutine (not in the deck) so it can observe forks
+// while DoReorgChaos partitions are active. Polls every forkPollInterval,
+// detects disagreements, and asserts failure only when a fork PERSISTS past
+// a convergence window.
+//
+// ===========================================================================
+
+const (
+	// forkConvergenceBuffer is how many epochs the chain must advance past
+	// the detection point before we re-check. If nodes still disagree after
+	// this many epochs, it's a persistent fork (real bug).
+	forkConvergenceBuffer = 50
+
+	// forkPollInterval is how often the background goroutine checks for forks.
+	forkPollInterval = 5 * time.Second
+
+	// forkMaxTracked limits memory usage for tracked forks.
+	forkMaxTracked = 100
+)
+
+// trackedFork records a detected disagreement for later re-verification.
+type trackedFork struct {
+	height         abi.ChainEpoch    // height where disagreement was observed
+	detectedAtHead abi.ChainEpoch    // min chain head when first detected
+	tipsets        map[string]string // node -> tipset key (snapshot at detection)
+}
+
+// Global fork tracker — append-only during detection, pruned during verification.
+var (
+	trackedForks   []trackedFork
+	trackedForksMu sync.Mutex
+)
+
+// startForkMonitor launches the background fork detection goroutine.
+// Call once from main() after node connections are established.
+func startForkMonitor() {
+	go func() {
+		log.Println("[fork-monitor] background goroutine started")
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(forkPollInterval):
+				forkMonitorTick()
+			}
+		}
+	}()
+}
+
+// forkMonitorTick runs one detect+verify cycle.
+func forkMonitorTick() {
+	if len(nodeKeys) < 2 {
+		return
+	}
+
+	// Skip while a partition is intentionally active — forks are expected
+	// during n-split cycles and DoReorgChaos. We'll re-check once healed.
+	if partitionActive.Load() {
+		debugLog("[fork-monitor] partition active, skipping tick")
+		return
+	}
+
+	// Get min chain head across all nodes — skip nodes that error
+	// (a partitioned node's RPC may still work, returning its stale head)
+	minHead := abi.ChainEpoch(0)
+	heads := make(map[string]abi.ChainEpoch)
+	for _, name := range nodeKeys {
+		head, err := nodes[name].ChainHead(ctx)
+		if err != nil {
+			debugLog("[fork-monitor] ChainHead failed for %s: %v", name, err)
+			continue
+		}
+		heads[name] = head.Height()
+		if minHead == 0 || head.Height() < minHead {
+			minHead = head.Height()
+		}
+	}
+
+	if len(heads) < 2 {
+		debugLog("[fork-monitor] only %d nodes reachable, skipping", len(heads))
+		return
+	}
+
+	if minHead < f3MinEpoch {
+		debugLog("[fork-monitor] minHead=%d < f3MinEpoch=%d, skipping", minHead, f3MinEpoch)
+		return
+	}
+
+	debugLog("[fork-monitor] tick: heads=%v minHead=%d", heads, minHead)
+	detectForks(minHead)
+	verifyForks(minHead)
+}
+
+// detectForks queries nodes for tipsets at a recent height and records disagreements.
+func detectForks(minHead abi.ChainEpoch) {
+	// Check at a height within the EC finality window — this is where forks live.
+	// Use the finalized height (head-20) as the check point.
+	finalizedHeight, _ := getFinalizedHeight()
+	if finalizedHeight < finalizedMinHeight {
+		return
+	}
+
+	// Query all nodes for the tipset at the finalized height, each anchored
+	// to its own chain view.
+	nodeTipsets := make(map[string]string)
+	for _, name := range nodeKeys {
+		finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
+		if err != nil {
+			continue
+		}
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, finalizedHeight, finTs.Key())
+		if err != nil {
+			continue
+		}
+		nodeTipsets[name] = ts.Key().String()
+	}
+
+	if len(nodeTipsets) < 2 {
+		debugLog("[fork-monitor] only %d nodes returned tipsets at height %d, skipping", len(nodeTipsets), finalizedHeight)
+		return
+	}
+
+	// Check for disagreement
+	keys := make(map[string]bool)
+	for _, k := range nodeTipsets {
+		keys[k] = true
+	}
+
+	if len(keys) <= 1 {
+		// All agree — log and emit Sometimes for liveness tracking
+		debugLog("[fork-monitor] nodes agree at finalized height %d", finalizedHeight)
+		assert.Sometimes(true, "Fork monitor: nodes agree at finalized height", map[string]any{
+			"height": finalizedHeight,
+			"nodes":  len(nodeTipsets),
+		})
+		return
+	}
+
+	// Fork detected — record it
+	trackedForksMu.Lock()
+	defer trackedForksMu.Unlock()
+
+	// Don't duplicate — skip if we already track this height
+	for _, tf := range trackedForks {
+		if tf.height == finalizedHeight {
+			return
+		}
+	}
+
+	// Evict oldest if at capacity
+	if len(trackedForks) >= forkMaxTracked {
+		trackedForks = trackedForks[1:]
+	}
+
+	trackedForks = append(trackedForks, trackedFork{
+		height:         finalizedHeight,
+		detectedAtHead: minHead,
+		tipsets:        nodeTipsets,
+	})
+
+	log.Printf("[fork-monitor] fork detected at height %d (chain head=%d): %v",
+		finalizedHeight, minHead, nodeTipsets)
+}
+
+// verifyForks re-checks old forks that have had enough time to resolve.
+func verifyForks(minHead abi.ChainEpoch) {
+	trackedForksMu.Lock()
+	defer trackedForksMu.Unlock()
+
+	remaining := trackedForks[:0] // reuse backing array
+
+	for _, tf := range trackedForks {
+		epochsSinceDetection := minHead - tf.detectedAtHead
+
+		// Not enough time has passed — keep tracking
+		if epochsSinceDetection < forkConvergenceBuffer {
+			remaining = append(remaining, tf)
+			continue
+		}
+
+		// Re-query all nodes at the fork height, anchored to each node's
+		// finalized tipset (matching detectForks). Using ChainHead would
+		// false-positive when heads diverge above finalization.
+		nodeTipsets := make(map[string]string)
+		for _, name := range nodeKeys {
+			finTs, err := nodes[name].ChainGetFinalizedTipSet(ctx)
+			if err != nil {
+				continue
+			}
+			ts, err := nodes[name].ChainGetTipSetByHeight(ctx, tf.height, finTs.Key())
+			if err != nil {
+				continue
+			}
+			nodeTipsets[name] = ts.Key().String()
+		}
+
+		if len(nodeTipsets) < 2 {
+			remaining = append(remaining, tf)
+			continue
+		}
+
+		// Check if fork resolved
+		keys := make(map[string][]string) // tipsetKey -> []nodeName
+		for name, k := range nodeTipsets {
+			keys[k] = append(keys[k], name)
+		}
+
+		resolved := len(keys) == 1
+
+		if resolved {
+			log.Printf("[fork-monitor] fork at height %d RESOLVED after %d epochs",
+				tf.height, epochsSinceDetection)
+			// Don't keep — it resolved
+			continue
+		}
+
+		// Persistent fork — this is a real consensus bug
+		log.Printf("[fork-monitor] PERSISTENT FORK at height %d after %d epochs: %v",
+			tf.height, epochsSinceDetection, keys)
+
+		assert.Always(false, "Persistent consensus fork detected", map[string]any{
+			"fork_height":           tf.height,
+			"detected_at_head":      tf.detectedAtHead,
+			"verified_at_head":      minHead,
+			"epochs_since_detected": epochsSinceDetection,
+			"original_tipsets":      tf.tipsets,
+			"current_tipsets":       keys,
+			"nodes":                 nodeKeys,
+		})
+
+		// Keep tracking — might want to see it fire again
+		remaining = append(remaining, tf)
+	}
+
+	trackedForks = remaining
+}
+
+// ===========================================================================
+// DoF3FinalityAgreement — Cross-Node F3 Certificate Consistency
+//
+// Verifies that all nodes that finalized the same F3 instance agreed on the
+// SAME ECChain. Catches determinism bugs where validators reach the same
+// GPBFT round but finalize different state.
+
+// Safe to use assert.Always because:
+//   - During partitions where no side has >67% power, F3 produces no new
+//     certificates — there is nothing to disagree on.
+//   - During partitions where one side has >67% power, only that side
+//     produces certificates — the minority has no conflicting cert.
+//   - The only way two nodes both hold a certificate for instance N with
+//     different ECChain keys is a BFT-layer determinism bug.
+// ===========================================================================
+
+func DoF3FinalityAgreement() {
+	if len(nodeKeys) < 2 {
+		return
+	}
+	if !allNodesPastEpoch(f3MinEpoch) {
+		return
+	}
+
+	// Find the minimum F3 instance across all responsive lotus nodes.
+	// Every node at or past this instance must have a certificate for it.
+	var minInst uint64
+	respondedNodes := 0
+	for _, name := range nodeKeys {
+		if nodeType(name) != "lotus" {
+			continue
+		}
+		inst, ok := getF3Instance(nodes[name])
+		if !ok {
+			continue
+		}
+		respondedNodes++
+		if respondedNodes == 1 || inst < minInst {
+			minInst = inst
+		}
+	}
+	if respondedNodes < 2 || minInst < 2 {
+		return
+	}
+
+	// Pick a random already-finalized instance to audit (not the latest —
+	// check a settled one to avoid races with in-progress instances).
+	checkInst := uint64(rngIntn(int(minInst-1))) + 1
+
+	// Query each lotus node for the F3 certificate at this instance.
+	type nodeResult struct {
+		name     string
+		chainKey string // hex-encoded ECChain key digest
+		err      error
+	}
+
+	var results []nodeResult
+	for _, name := range nodeKeys {
+		if nodeType(name) != "lotus" {
+			continue
+		}
+		cert, err := nodes[name].F3GetCertificate(ctx, checkInst)
+		if err != nil {
+			results = append(results, nodeResult{name: name, err: err})
+			continue
+		}
+		if cert == nil || cert.ECChain.IsZero() {
+			results = append(results, nodeResult{name: name, err: fmt.Errorf("nil cert or zero chain")})
+			continue
+		}
+		key := cert.ECChain.Key()
+		results = append(results, nodeResult{name: name, chainKey: hex.EncodeToString(key[:])})
+	}
+
+	// Group by finalized ECChain key
+	chainKeys := map[string][]string{} // chain key hex -> node names
+	var errors int
+	for _, r := range results {
+		if r.err != nil {
+			errors++
+			continue
+		}
+		chainKeys[r.chainKey] = append(chainKeys[r.chainKey], r.name)
+	}
+
+	responded := len(results) - errors
+	if responded < 2 {
+		return
+	}
+
+	agreed := len(chainKeys) == 1
+
+	assert.Always(agreed, "F3 finality agreement: all nodes finalized same chain for instance", map[string]any{
+		"instance":        checkInst,
+		"unique_chains":   len(chainKeys),
+		"chain_map":       chainKeys,
+		"nodes_responded": responded,
+		"nodes_errored":   errors,
+	})
+
+	if !agreed {
+		log.Printf("[f3-agreement] FINALITY DISAGREEMENT at instance %d: %v", checkInst, chainKeys)
+	} else {
+		debugLog("[f3-agreement] instance %d: all %d nodes agree", checkInst, responded)
+	}
+
+	assert.Sometimes(agreed, "F3 finality agreement check ran successfully", map[string]any{
+		"instance":        checkInst,
+		"nodes_responded": responded,
+	})
 }

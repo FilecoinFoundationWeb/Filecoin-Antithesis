@@ -20,6 +20,16 @@ export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
+# F3 toggle: per-node override (LOTUS_N_F3_ENABLED) falls back to global (LOTUS_F3_ENABLED)
+per_node_f3="LOTUS_${node_number}_F3_ENABLED"
+if [ -n "${!per_node_f3:-}" ]; then
+    export LOTUS_F3_ENABLED="${!per_node_f3}"
+    echo "lotus${node_number}: F3 enabled=${LOTUS_F3_ENABLED} (per-node override)"
+else
+    export LOTUS_F3_ENABLED="${LOTUS_F3_ENABLED:-true}"
+    echo "lotus${node_number}: F3 enabled=${LOTUS_F3_ENABLED} (global default)"
+fi
+
 if [ ! -f "${LOTUS_DATA_DIR}/config.toml" ]; then
     INIT_MODE=true
 else
