@@ -143,61 +143,61 @@ services:
       - STRESS_FOREST_RPC_PORT=3456
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
       - STRESS_WAIT_HEIGHT=10
-      # --- Consensus / health-check vectors (zeroed for new-vector-only testing) ---
-      - STRESS_WEIGHT_TIPSET_CONSENSUS=0
-      - STRESS_WEIGHT_HEIGHT_PROGRESSION=0
-      - STRESS_WEIGHT_PEER_COUNT=0
-      - STRESS_WEIGHT_HEAD_COMPARISON=0
-      - STRESS_WEIGHT_STATE_ROOT=0
-      - STRESS_WEIGHT_STATE_AUDIT=0
-      - STRESS_WEIGHT_F3_MONITOR=0
-      - STRESS_WEIGHT_F3_AGREEMENT=0
-      - STRESS_WEIGHT_REORG=0
-      - STRESS_WEIGHT_POWER_SLASH=0
-      - FUZZER_ENABLED=0
-      - STRESS_CONSENSUS_TEST=0
+      # --- Consensus / health-check vectors (always active in both profiles) ---
+      - STRESS_WEIGHT_TIPSET_CONSENSUS=3 # cross-node tipset agreement (Sometimes)
+      - STRESS_WEIGHT_HEIGHT_PROGRESSION=2 # chain height advances
+      - STRESS_WEIGHT_PEER_COUNT=1 # node peer connectivity
+      - STRESS_WEIGHT_HEAD_COMPARISON=3 # cross-node chain head match (Sometimes)
+      - STRESS_WEIGHT_STATE_ROOT=4 # cross-node state root match (Sometimes)
+      - STRESS_WEIGHT_STATE_AUDIT=3 # full state tree audit
+      - STRESS_WEIGHT_F3_MONITOR=2 # passive F3 health monitor
+      - STRESS_WEIGHT_F3_AGREEMENT=3 # cross-node F3 certificate consistency
+      - STRESS_WEIGHT_REORG=0 # power-aware reorg testing (disabled — consensus lifecycle handles partitions)
+      - STRESS_WEIGHT_POWER_SLASH=0 # disabled for FOC — causes miner disruption
+      - FUZZER_ENABLED=0 # protocol fuzzer off
+      - STRESS_CONSENSUS_TEST=0 # n-split disabled for FOC — disrupts Curio
       #
-      # --- Non-FOC stress vectors (all zeroed) ---
-      - STRESS_WEIGHT_DEPLOY=0
-      - STRESS_WEIGHT_CONTRACT_CALL=0
-      - STRESS_WEIGHT_SELFDESTRUCT=0
-      - STRESS_WEIGHT_CONTRACT_RACE=0
-      - STRESS_WEIGHT_TRANSFER=0
-      - STRESS_WEIGHT_GAS_WAR=0
-      - STRESS_WEIGHT_NONCE_RACE=0
-      - STRESS_WEIGHT_HEAVY_COMPUTE=0
-      - STRESS_WEIGHT_MAX_BLOCK_GAS=0
-      - STRESS_WEIGHT_LOG_BLASTER=0
-      - STRESS_WEIGHT_MEMORY_BOMB=0
-      - STRESS_WEIGHT_STORAGE_SPAM=0
-      - STRESS_WEIGHT_MSG_ORDERING=0
-      - STRESS_WEIGHT_NONCE_BOMBARD=0
-      - STRESS_WEIGHT_ADVERSARIAL=0
-      - STRESS_WEIGHT_GAS_EXHAUST=0
-      - STRESS_WEIGHT_RECEIPT_AUDIT=0
-      - STRESS_WEIGHT_ACTOR_MIGRATION=0
-      - STRESS_WEIGHT_ACTOR_LIFECYCLE=0
-      # --- FOC vectors ---
-      # REQUIRED: lifecycle must reach Ready + griefing must set up secondary client
+      # --- Non-FOC stress vectors (skipped when FOC active, kept for reference) ---
+      - STRESS_WEIGHT_DEPLOY=1 # Init actor & state tree growth via EAM.CreateExternal
+      - STRESS_WEIGHT_CONTRACT_CALL=1 # deep recursion, delegatecall, external recursive calls
+      - STRESS_WEIGHT_SELFDESTRUCT=0 # actor destruction state consistency across nodes
+      - STRESS_WEIGHT_CONTRACT_RACE=2 # conflicting txs to diff nodes — state divergence during forks
+      - STRESS_WEIGHT_TRANSFER=2 # FIL transfers (state changes for forks to reconcile)
+      - STRESS_WEIGHT_GAS_WAR=1 # mempool replacement across forks
+      - STRESS_WEIGHT_NONCE_RACE=1 # gas-premium race across different nodes
+      - STRESS_WEIGHT_HEAVY_COMPUTE=1 # intra-node state recomputation verification
+      - STRESS_WEIGHT_MAX_BLOCK_GAS=0 # maxes out block gas
+      - STRESS_WEIGHT_LOG_BLASTER=0 # receipt storage, bloom filters, event indexing
+      - STRESS_WEIGHT_MEMORY_BOMB=0 # FVM memory accounting
+      - STRESS_WEIGHT_STORAGE_SPAM=0 # state trie (HAMT), SplitStore
+      - STRESS_WEIGHT_MSG_ORDERING=1 # cross-node message replacement/mempool ordering
+      - STRESS_WEIGHT_NONCE_BOMBARD=0 # N+x gap handling & out-of-order execution
+      - STRESS_WEIGHT_ADVERSARIAL=0 # double-spends (handled by consensus lifecycle)
+      - STRESS_WEIGHT_GAS_EXHAUST=0 # high-gas call competing with small msgs
+      - STRESS_WEIGHT_RECEIPT_AUDIT=4 # asserts receipt fields match across every node
+      - STRESS_WEIGHT_ACTOR_MIGRATION=1 # burst-creates & deletes actors, stresses HAMT during forks
+      - STRESS_WEIGHT_ACTOR_LIFECYCLE=1 # full actor lifecycle
+      # --- FOC (Filecoin On-Chain Cloud) vectors ---
+      # SETUP: drives the sequential state machine one step per pick
       - STRESS_WEIGHT_FOC_LIFECYCLE=6
-      # Minimum steady-state: need pieces uploaded/added for piece security scenario
-      - STRESS_WEIGHT_FOC_UPLOAD=2
-      - STRESS_WEIGHT_FOC_ADD_PIECES=2
-      - STRESS_WEIGHT_FOC_MONITOR=1 # keep one for observability
-      - STRESS_WEIGHT_FOC_RETRIEVE=0
-      - STRESS_WEIGHT_FOC_TRANSFER=0
-      - STRESS_WEIGHT_FOC_SETTLE=0
-      - STRESS_WEIGHT_FOC_WITHDRAW=0
-      - STRESS_WEIGHT_FOC_DELETE_PIECE=0
-      - STRESS_WEIGHT_FOC_DELETE_DS=0
+      # STEADY-STATE: only execute once lifecycle reaches Ready
+      - STRESS_WEIGHT_FOC_UPLOAD=4 # upload random data to Curio PDP API
+      - STRESS_WEIGHT_FOC_ADD_PIECES=3 # add uploaded pieces to on-chain proofset
+      - STRESS_WEIGHT_FOC_MONITOR=4 # query proofset health + USDFC balances
+      - STRESS_WEIGHT_FOC_RETRIEVE=2 # download piece and verify CID integrity
+      - STRESS_WEIGHT_FOC_TRANSFER=2 # ERC-20 USDFC transfer (client → deployer)
+      - STRESS_WEIGHT_FOC_SETTLE=2 # settle active payment rail
+      - STRESS_WEIGHT_FOC_WITHDRAW=2 # withdraw USDFC from FilecoinPay
+      # DESTRUCTIVE
+      - STRESS_WEIGHT_FOC_DELETE_PIECE=1 # schedule piece deletion from proofset
+      - STRESS_WEIGHT_FOC_DELETE_DS=0 # delete entire dataset + reset lifecycle
       - STRESS_WEIGHT_REORG_CHAOS=0 # disable — partitions lotus0 which stalls all FOC ops
-      #
-      # REQUIRED: griefing setup must complete before security scenarios fire
-      - STRESS_WEIGHT_PDP_GRIEFING=6
-      # *** NEW VECTORS UNDER TEST ***
-      - STRESS_WEIGHT_FOC_PIECE_SECURITY=4 # piece lifecycle + attack probes
-      - STRESS_WEIGHT_FOC_PAYMENT_SECURITY=4 # rail settlement + audit L01/L04/L06/#288
-      - STRESS_WEIGHT_FOC_RESILIENCE=3 # Curio HTTP stress + orphan rail
+      # ADVERSARIAL: griefing probes (cooldown after first dataset creation)
+      - STRESS_WEIGHT_PDP_GRIEFING=4 # fee extraction, insolvency, replay, burst attacks
+      # SECURITY: piece lifecycle, payment rail, resilience
+      - STRESS_WEIGHT_FOC_PIECE_SECURITY=2 # piece lifecycle + attack probes
+      - STRESS_WEIGHT_FOC_PAYMENT_SECURITY=2 # rail settlement + audit L01/L04/L06/#288
+      - STRESS_WEIGHT_FOC_RESILIENCE=1 # Curio HTTP stress + orphan rail
       #
       - CURIO_PDP_URL=http://curio:80
 
