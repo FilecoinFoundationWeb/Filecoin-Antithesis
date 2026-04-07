@@ -85,6 +85,11 @@ func resSnap() resRuntime {
 // DoFOCResilienceProbe — deck entry
 // ---------------------------------------------------------------------------
 
+// resMaxCycles limits how many resilience cycles run. Each cycle creates an
+// orphan dataset (~0.06 USDFC sybil fee) and runs an HTTP barrage. After a
+// few cycles the assertions are satisfied and further cycles just drain funds.
+const resMaxCycles = 2
+
 func DoFOCResilienceProbe() {
 	if focCfg == nil || focCfg.ClientKey == nil {
 		return
@@ -98,13 +103,17 @@ func DoFOCResilienceProbe() {
 		return
 	}
 
+	resSecMu.Lock()
+	if resSec.Cycles >= resMaxCycles {
+		resSecMu.Unlock()
+		return // resilience probes have run enough
+	}
+	state := resSec.State
+	resSecMu.Unlock()
+
 	if !foc.PingCurio(ctx) {
 		return
 	}
-
-	resSecMu.Lock()
-	state := resSec.State
-	resSecMu.Unlock()
 
 	switch state {
 	case resInit:
