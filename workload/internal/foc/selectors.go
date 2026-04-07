@@ -30,6 +30,10 @@ var (
 
 	SigGetRail           = CalcSelector("getRail(uint256)")
 	SigAllowance         = CalcSelector("allowance(address,address)")
+	SigTerminateRail     = CalcSelector("terminateRail(uint256)")
+	SigWithdrawTo        = CalcSelector("withdrawTo(address,address,uint256)")
+	SigSettleTerminatedRailNoValidation = CalcSelector("settleTerminatedRailWithoutValidation(uint256)")
+	SigModifyRailLockup  = CalcSelector("modifyRailLockup(uint256,uint256,uint256)")
 
 	// ServiceProviderRegistry
 	SigAddrToProvId = CalcSelector("addressToProviderId(address)")

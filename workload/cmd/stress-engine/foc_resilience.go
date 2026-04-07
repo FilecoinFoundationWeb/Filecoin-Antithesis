@@ -126,7 +126,7 @@ func resDoHTTPStress() {
 	base := foc.CurioBaseURL()
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	log.Printf("[resilience] starting HTTP stress barrage")
+	log.Printf("[foc-resilience] starting HTTP stress barrage")
 
 	type malformedReq struct {
 		name   string
@@ -163,13 +163,13 @@ func resDoHTTPStress() {
 
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Printf("[resilience] %s: connection error (may be fine): %v", r.name, err)
+			log.Printf("[foc-resilience] %s: connection error (may be fine): %v", r.name, err)
 			continue
 		}
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 
-		log.Printf("[resilience] %s: status=%d", r.name, resp.StatusCode)
+		log.Printf("[foc-resilience] %s: status=%d", r.name, resp.StatusCode)
 		accepted++
 	}
 
@@ -181,7 +181,7 @@ func resDoHTTPStress() {
 	})
 
 	if !pingOK {
-		log.Printf("[resilience] CRITICAL: Curio not reachable after HTTP stress barrage!")
+		log.Printf("[foc-resilience] CRITICAL: Curio not reachable after HTTP stress barrage!")
 		return
 	}
 
@@ -193,7 +193,7 @@ func resDoHTTPStress() {
 	resSec.HTTPBarrages++
 	resSecMu.Unlock()
 
-	log.Printf("[resilience] HTTP barrage complete, Curio alive. Creating orphan dataset...")
+	log.Printf("[foc-resilience] HTTP barrage complete, Curio alive. Creating orphan dataset...")
 
 	// Now create an empty dataset (orphan rail test)
 	if focCfg.SPKey == nil || focCfg.SPEthAddr == nil {
@@ -216,7 +216,7 @@ func resDoHTTPStress() {
 		metadataKeys, metadataValues,
 	)
 	if err != nil {
-		log.Printf("[resilience] EIP-712 signing failed: %v", err)
+		log.Printf("[foc-resilience] EIP-712 signing failed: %v", err)
 		return
 	}
 
@@ -225,17 +225,17 @@ func resDoHTTPStress() {
 
 	txHash, err := foc.CreateDataSetHTTP(ctx, recordKeeper, hex.EncodeToString(extraData))
 	if err != nil {
-		log.Printf("[resilience] orphan dataset creation failed: %v", err)
+		log.Printf("[foc-resilience] orphan dataset creation failed: %v", err)
 		return
 	}
 
 	onChainID, err := foc.WaitForDataSetCreation(ctx, txHash)
 	if err != nil {
-		log.Printf("[resilience] orphan dataset confirmation failed: %v", err)
+		log.Printf("[foc-resilience] orphan dataset confirmation failed: %v", err)
 		return
 	}
 
-	log.Printf("[resilience] orphan dataset created: onChainID=%d (no pieces will be added)", onChainID)
+	log.Printf("[foc-resilience] orphan dataset created: onChainID=%d (no pieces will be added)", onChainID)
 
 	resSecMu.Lock()
 	resSec.OrphanDSID = onChainID
@@ -270,7 +270,7 @@ func resDoOrphanCheck() {
 	// Read current funds
 	fundsNow := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, gs.ClientEth)
 
-	log.Printf("[resilience] orphan dataset %d: live=%v activePieces=%v funds=%v (before=%v)",
+	log.Printf("[foc-resilience] orphan dataset %d: live=%v activePieces=%v funds=%v (before=%v)",
 		s.OrphanDSID, live, activeCount, fundsNow, s.OrphanFundsBefore)
 
 	// Check: with zero pieces, client should not be losing funds to storage charges
@@ -305,7 +305,7 @@ func resDoOrphanCleanup() {
 		node := focNode()
 		dsIDBytes := foc.EncodeBigInt(big.NewInt(int64(s.OrphanDSID)))
 		live, _ := foc.EthCallBool(ctx, node, focCfg.PDPAddr, foc.BuildCalldata(foc.SigDataSetLive, dsIDBytes))
-		log.Printf("[resilience] orphan dataset %d live=%v (left for sidecar monitoring)", s.OrphanDSID, live)
+		log.Printf("[foc-resilience] orphan dataset %d live=%v (left for sidecar monitoring)", s.OrphanDSID, live)
 	}
 
 	resSecMu.Lock()
@@ -317,7 +317,7 @@ func resDoOrphanCleanup() {
 	resSec.OrphanFundsBefore = nil
 	resSecMu.Unlock()
 
-	log.Printf("[resilience] cycle %d complete (HTTP barrages=%d)", cycles, barrages)
+	log.Printf("[foc-resilience] cycle %d complete (HTTP barrages=%d)", cycles, barrages)
 	assert.Sometimes(true, "Resilience scenario cycle completes", map[string]any{
 		"cycles":       cycles,
 		"httpBarrages": barrages,
@@ -345,6 +345,6 @@ func hugeExtraDataPayload() []byte {
 
 func logResProgress() {
 	s := resSnap()
-	log.Printf("[resilience] state=%s cycles=%d httpBarrages=%d orphanDSID=%d",
+	log.Printf("[foc-resilience] state=%s cycles=%d httpBarrages=%d orphanDSID=%d",
 		s.State, s.Cycles, s.HTTPBarrages, s.OrphanDSID)
 }

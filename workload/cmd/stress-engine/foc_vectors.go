@@ -105,10 +105,17 @@ func requireReady() (focRuntime, bool) {
 	return s, s.State == focStateReady
 }
 
-// returnPiece puts a piece back on the uploaded queue (used on failure paths).
+// returnPiece puts a piece back on the uploaded queue (used on add failure paths).
 func returnPiece(p pieceRef) {
 	focStateMu.Lock()
 	focState.UploadedPieces = append(focState.UploadedPieces, p)
+	focStateMu.Unlock()
+}
+
+// returnDeletedPiece puts a piece back on the added queue (used on delete failure paths).
+func returnDeletedPiece(p pieceRef) {
+	focStateMu.Lock()
+	focState.AddedPieces = append(focState.AddedPieces, p)
 	focStateMu.Unlock()
 }
 
@@ -615,12 +622,18 @@ func DoFOCWithdraw() {
 	node := focNode()
 
 	funds := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, focCfg.ClientEthAddr)
-	if funds == nil || funds.Sign() == 0 {
+	lockup := foc.ReadAccountLockup(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, focCfg.ClientEthAddr)
+	if funds == nil || lockup == nil || funds.Sign() == 0 {
+		return
+	}
+
+	available := new(big.Int).Sub(funds, lockup)
+	if available.Sign() <= 0 {
 		return
 	}
 
 	pct := 1 + rngIntn(5)
-	amount := new(big.Int).Mul(funds, big.NewInt(int64(pct)))
+	amount := new(big.Int).Mul(available, big.NewInt(int64(pct)))
 	amount.Div(amount, big.NewInt(100))
 	if amount.Sign() == 0 {
 		return
@@ -633,7 +646,7 @@ func DoFOCWithdraw() {
 
 	ok := foc.SendEthTx(ctx, node, focCfg.ClientKey, focCfg.FilPayAddr, calldata, "foc-withdraw")
 
-	log.Printf("[foc-withdraw] amount=%s (of %s, %d%%) ok=%v", amount, funds, pct, ok)
+	log.Printf("[foc-withdraw] amount=%s (of available=%s, %d%%) ok=%v", amount, available, pct, ok)
 	assert.Sometimes(ok, "USDFC withdrawal from FilecoinPay succeeds", map[string]any{
 		"amount": amount.String(),
 	})
@@ -676,6 +689,7 @@ func DoFOCDeletePiece() {
 	)
 	if err != nil {
 		log.Printf("[foc-delete-piece] EIP-712 signing failed: %v", err)
+		returnDeletedPiece(piece)
 		return
 	}
 
@@ -690,6 +704,12 @@ func DoFOCDeletePiece() {
 	)
 
 	ok := foc.SendEthTx(ctx, node, focCfg.SPKey, focCfg.PDPAddr, calldata, "foc-delete-piece")
+
+	if !ok {
+		log.Printf("[foc-delete-piece] tx failed, returning piece to state: pieceID=%d cid=%s", piece.PieceID, piece.PieceCID)
+		returnDeletedPiece(piece)
+		return
+	}
 
 	log.Printf("[foc-delete-piece] pieceID=%d cid=%s ok=%v", piece.PieceID, piece.PieceCID, ok)
 	assert.Sometimes(ok, "piece deletion scheduled", map[string]any{
@@ -968,10 +988,3 @@ func padTo32(n int) int {
 	return ((n + 31) / 32) * 32
 }
 
-func buildCreateDataSetCalldata(fwssAddr []byte, extraData []byte) []byte {
-	return foc.BuildCalldata(foc.SigCreateDataSet,
-		foc.EncodeAddress(fwssAddr),
-		foc.EncodeBigInt(big.NewInt(64)),
-		encodeBytes(extraData),
-	)
-}

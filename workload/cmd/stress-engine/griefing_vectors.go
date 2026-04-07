@@ -11,6 +11,7 @@ import (
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/antithesishq/antithesis-sdk-go/random"
 	filbig "github.com/filecoin-project/go-state-types/big"
+	"github.com/filecoin-project/lotus/api"
 )
 
 // ===========================================================================
@@ -76,14 +77,9 @@ type griefRuntime struct {
 	DSCreated int
 	LastFunds *big.Int
 
-	// Extended state for additional probes
+	// Shared with piece-security and payment-security scenarios
 	LastOnChainDSID int       // most recent on-chain dataset ID
 	LastClientDSID  *big.Int  // most recent clientDataSetId (for EIP-712)
-	TermPending     bool      // terminateService called, waiting for delete
-	DeletedCount    int
-	SettledCount    int
-	WithdrawCount   int
-	UploadSessions  int
 }
 
 func griefSnap() griefRuntime {
@@ -140,7 +136,7 @@ func DoPDPGriefingProbe() {
 // doGriefInit picks the secondary client wallet and transfers USDFC from the primary client.
 func doGriefInit() {
 	if len(addrs) < 2 {
-		log.Printf("[sybil-fee-grief] not enough wallets in keystore")
+		log.Printf("[foc-griefing] not enough wallets in keystore")
 		return
 	}
 
@@ -153,33 +149,33 @@ func doGriefInit() {
 		griefRT.ClientKey = ki.PrivateKey
 		griefRT.ClientEth = foc.DeriveEthAddr(ki.PrivateKey)
 		addrs = addrs[:len(addrs)-1]
-		log.Printf("[sybil-fee-grief] secondary client: filAddr=%s ethAddr=0x%x (removed from wallet pool)", addr, griefRT.ClientEth)
+		log.Printf("[foc-griefing] secondary client: filAddr=%s ethAddr=0x%x (removed from wallet pool)", addr, griefRT.ClientEth)
 	}
 	clientEth := griefRT.ClientEth
 	griefMu.Unlock()
 
 	if clientEth == nil {
-		log.Printf("[sybil-fee-grief] failed to derive secondary client ETH address")
+		log.Printf("[foc-griefing] failed to derive secondary client ETH address")
 		return
 	}
 
 	node := focNode()
 
-	// Transfer 0.06 USDFC from primary client to secondary client
+	// Transfer 0.5 USDFC from primary client to secondary client
 	amount := big.NewInt(griefUSDFCDeposit)
 	calldata := foc.BuildCalldata(foc.SigTransfer,
 		foc.EncodeAddress(clientEth),
 		foc.EncodeBigInt(amount),
 	)
 
-	log.Printf("[sybil-fee-grief] state=Init → funding secondary client with USDFC")
+	log.Printf("[foc-griefing] state=Init → funding secondary client with USDFC")
 	ok := foc.SendEthTxConfirmed(ctx, node, focCfg.ClientKey, focCfg.USDFCAddr, calldata, "pdp-acct-fund")
 	if !ok {
-		log.Printf("[sybil-fee-grief] USDFC transfer failed, will retry")
+		log.Printf("[foc-griefing] USDFC transfer failed, will retry")
 		return
 	}
 
-	log.Printf("[sybil-fee-grief] secondary client funded")
+	log.Printf("[foc-griefing] secondary client funded")
 
 	griefMu.Lock()
 	griefRT.State = griefFunded
@@ -195,18 +191,18 @@ func doGriefCreateActor() {
 	s := griefSnap()
 	node := focNode()
 
-	log.Printf("[pdp-accounting] state=Funded → creating f4 actor via EVM transfer")
+	log.Printf("[foc-griefing] state=Funded → creating f4 actor via EVM transfer")
 
 	// Send 1 FIL from FOC client to secondary client's ETH address.
 	// This creates the f4 actor and funds it for gas on subsequent EVM transactions.
 	gasFund := filbig.NewInt(1_000_000_000_000_000_000) // 1 FIL
 	ok := foc.SendEthTxConfirmedWithValue(ctx, node, focCfg.ClientKey, s.ClientEth, gasFund, "pdp-acct-f4")
 	if !ok {
-		log.Printf("[pdp-accounting] f4 actor creation failed, will retry")
+		log.Printf("[foc-griefing] f4 actor creation failed, will retry")
 		return
 	}
 
-	log.Printf("[pdp-accounting] f4 actor created for ethAddr=0x%x", s.ClientEth)
+	log.Printf("[foc-griefing] f4 actor created for ethAddr=0x%x", s.ClientEth)
 
 	griefMu.Lock()
 	griefRT.State = griefActorCreated
@@ -224,14 +220,14 @@ func doGriefApprove() {
 		foc.EncodeBigInt(maxUint256),
 	)
 
-	log.Printf("[sybil-fee-grief] state=ActorCreated → approving FPV1")
+	log.Printf("[foc-griefing] state=ActorCreated → approving FPV1")
 	ok := foc.SendEthTxConfirmed(ctx, node, s.ClientKey, focCfg.USDFCAddr, calldata, "pdp-acct-approve")
 	if !ok {
-		log.Printf("[sybil-fee-grief] approve failed, will retry")
+		log.Printf("[foc-griefing] approve failed, will retry")
 		return
 	}
 
-	log.Printf("[sybil-fee-grief] FPV1 approved")
+	log.Printf("[foc-griefing] FPV1 approved")
 
 	griefMu.Lock()
 	griefRT.State = griefApproved
@@ -250,15 +246,15 @@ func doGriefDeposit() {
 		foc.EncodeBigInt(amount),
 	)
 
-	log.Printf("[sybil-fee-grief] state=Approved → depositing USDFC into FPV1")
+	log.Printf("[foc-griefing] state=Approved → depositing USDFC into FPV1")
 	ok := foc.SendEthTxConfirmed(ctx, node, s.ClientKey, focCfg.FilPayAddr, calldata, "pdp-acct-deposit")
 	if !ok {
-		log.Printf("[sybil-fee-grief] deposit failed, will retry")
+		log.Printf("[foc-griefing] deposit failed, will retry")
 		return
 	}
 
 	funds := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
-	log.Printf("[sybil-fee-grief] FPV1 funds after deposit: %s", funds)
+	log.Printf("[foc-griefing] FPV1 funds after deposit: %s", funds)
 
 	griefMu.Lock()
 	griefRT.State = griefDeposited
@@ -282,14 +278,14 @@ func doGriefApproveOperator() {
 		foc.EncodeBigInt(maxLockupPeriod),
 	)
 
-	log.Printf("[sybil-fee-grief] state=Deposited → approving FWSS as operator")
+	log.Printf("[foc-griefing] state=Deposited → approving FWSS as operator")
 	ok := foc.SendEthTxConfirmed(ctx, node, s.ClientKey, focCfg.FilPayAddr, calldata, "pdp-acct-op")
 	if !ok {
-		log.Printf("[sybil-fee-grief] operator approval failed, will retry")
+		log.Printf("[foc-griefing] operator approval failed, will retry")
 		return
 	}
 
-	log.Printf("[sybil-fee-grief] FWSS operator approved")
+	log.Printf("[foc-griefing] FWSS operator approved")
 
 	griefMu.Lock()
 	griefRT.State = griefOperatorOK
@@ -303,7 +299,7 @@ func doGriefArm() {
 
 	funds := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
 
-	log.Printf("[sybil-fee-grief] state=OperatorApproved → ready. initialFunds=%s", funds)
+	log.Printf("[foc-griefing] state=OperatorApproved → ready. initialFunds=%s", funds)
 	assert.Sometimes(true, "PDP secondary client setup completes", map[string]any{
 		"initialFunds": funds.String(),
 	})
@@ -318,19 +314,54 @@ func doGriefArm() {
 // Steady State — Probe Dispatcher
 // ---------------------------------------------------------------------------
 
+// griefCooldownEpochs controls how many epochs to wait between griefing
+// dispatch rounds. After running one probe, the dispatcher checks chain
+// height and skips until the cooldown has elapsed. This prevents the
+// griefing probes from continuously draining funds and starving other
+// scenarios. Default 200 epochs (~13 min at 4s blocks).
+var griefCooldownEpochs = int64(envInt("GRIEF_COOLDOWN_EPOCHS", 200))
+
+var griefLastDispatchEpoch int64
+
 func doGriefDispatch() {
+	node := focNode()
+	head, err := node.ChainHead(ctx)
+	if err != nil {
+		return
+	}
+	currentEpoch := int64(head.Height())
+
+	gs := griefSnap()
+
+	// First dispatch: create a dataset to set LastOnChainDSID.
+	// This unblocks piece-security and payment-security scenarios.
+	// Only runs once — the sybil fee assertion only needs one observation.
+	if gs.LastOnChainDSID == 0 {
+		log.Printf("[foc-griefing] creating initial dataset (epoch=%d)", currentEpoch)
+		probeEmptyDatasetFee()
+		griefLastDispatchEpoch = currentEpoch
+		return
+	}
+
+	// Enforce cooldown — skip if we dispatched recently
+	if griefLastDispatchEpoch > 0 && currentEpoch-griefLastDispatchEpoch < griefCooldownEpochs {
+		return
+	}
+	griefLastDispatchEpoch = currentEpoch
+
+	// After the initial dataset is created, only run probes that don't
+	// drain funds. EmptyDatasetFee and InsolvencyCreation consume USDFC
+	// which starves piece-security and payment-security scenarios.
 	type probe struct {
 		name string
 		fn   func()
 	}
 	probes := []probe{
-		{"EmptyDatasetFee", probeEmptyDatasetFee},
-		{"InsolvencyCreation", probeInsolvencyCreation},
 		{"CrossPayerReplay", probeCrossPayerReplay},
 		{"BurstCreation", probeBurstCreation},
 	}
 	pick := probes[rngIntn(len(probes))]
-	log.Printf("[pdp-griefing] dispatching: %s", pick.name)
+	log.Printf("[foc-griefing] dispatching: %s (epoch=%d, next after %d)", pick.name, currentEpoch, currentEpoch+griefCooldownEpochs)
 	pick.fn()
 }
 
@@ -342,7 +373,7 @@ func doGriefDispatch() {
 // that the client's USDFC balance in FPV1 decreases (fee extraction working).
 func probeEmptyDatasetFee() {
 	if !foc.PingCurio(ctx) {
-		log.Printf("[sybil-fee-grief] curio not reachable, skipping")
+		log.Printf("[foc-griefing] curio not reachable, skipping")
 		return
 	}
 
@@ -350,7 +381,7 @@ func probeEmptyDatasetFee() {
 	if focCfg.SPKey == nil || focCfg.SPEthAddr == nil {
 		focCfg.ReloadSPKey()
 		if focCfg.SPKey == nil {
-			log.Printf("[sybil-fee-grief] SP key not available, skipping")
+			log.Printf("[foc-griefing] SP key not available, skipping")
 			return
 		}
 	}
@@ -361,7 +392,7 @@ func probeEmptyDatasetFee() {
 	// 1. Snapshot client FPV1 funds BEFORE
 	fundsBefore := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
 	if fundsBefore == nil || fundsBefore.Sign() == 0 {
-		log.Printf("[sybil-fee-grief] client funds exhausted (%v), skipping", fundsBefore)
+		log.Printf("[foc-griefing] client funds exhausted (%v), skipping", fundsBefore)
 		return
 	}
 
@@ -377,7 +408,7 @@ func probeEmptyDatasetFee() {
 		metadataKeys, metadataValues,
 	)
 	if err != nil {
-		log.Printf("[sybil-fee-grief] EIP-712 signing failed: %v", err)
+		log.Printf("[foc-griefing] EIP-712 signing failed: %v", err)
 		return
 	}
 
@@ -385,17 +416,17 @@ func probeEmptyDatasetFee() {
 	recordKeeper := "0x" + hex.EncodeToString(focCfg.FWSSAddr)
 
 	// 3. Submit via Curio HTTP API
-	log.Printf("[sybil-fee-grief] creating dataset: clientDataSetId=%s", clientDataSetId)
+	log.Printf("[foc-griefing] creating dataset: clientDataSetId=%s", clientDataSetId)
 	txHash, err := foc.CreateDataSetHTTP(ctx, recordKeeper, hex.EncodeToString(extraData))
 	if err != nil {
-		log.Printf("[sybil-fee-grief] CreateDataSetHTTP failed: %v", err)
+		log.Printf("[foc-griefing] CreateDataSetHTTP failed: %v", err)
 		return
 	}
 
 	// 4. Wait for on-chain confirmation
 	onChainID, err := foc.WaitForDataSetCreation(ctx, txHash)
 	if err != nil {
-		log.Printf("[sybil-fee-grief] WaitForDataSetCreation failed: %v", err)
+		log.Printf("[foc-griefing] WaitForDataSetCreation failed: %v", err)
 		return
 	}
 
@@ -424,7 +455,7 @@ func probeEmptyDatasetFee() {
 	created := griefRT.DSCreated
 	griefMu.Unlock()
 
-	log.Printf("[pdp-griefing] dataset created: onChainID=%d fundsBefore=%s fundsAfter=%s delta=%s decreased=%v total=%d",
+	log.Printf("[foc-griefing] dataset created: onChainID=%d fundsBefore=%s fundsAfter=%s delta=%s decreased=%v total=%d",
 		onChainID, fundsBefore, fundsAfter, delta, fundsDecreased, created)
 
 	logGriefSPBalance()
@@ -445,7 +476,7 @@ func logGriefSPBalance() {
 	}
 
 	s := griefSnap()
-	log.Printf("[sybil-fee-grief] SP balance=%s datasetsCreated=%d", bal, s.DSCreated)
+	log.Printf("[foc-griefing] SP balance=%s datasetsCreated=%d", bal, s.DSCreated)
 }
 
 // ---------------------------------------------------------------------------
@@ -479,7 +510,7 @@ func probeInsolvencyCreation() {
 	available := new(big.Int).Sub(funds, lockup)
 	if available.Sign() <= 0 {
 		// Already insolvent — try to create
-		log.Printf("[pdp-griefing] client already insolvent (funds=%s lockup=%s), attempting create", funds, lockup)
+		log.Printf("[foc-griefing] client already insolvent (funds=%s lockup=%s), attempting create", funds, lockup)
 	} else {
 		// 2. Drain all available funds
 		calldata := foc.BuildCalldata(foc.SigWithdraw,
@@ -487,10 +518,10 @@ func probeInsolvencyCreation() {
 			foc.EncodeBigInt(available),
 		)
 
-		log.Printf("[pdp-griefing] draining client: withdrawing %s available USDFC", available)
+		log.Printf("[foc-griefing] draining client: withdrawing %s available USDFC", available)
 		ok := foc.SendEthTxConfirmed(ctx, node, s.ClientKey, focCfg.FilPayAddr, calldata, "pdp-griefing-drain")
 		if !ok {
-			log.Printf("[pdp-griefing] withdrawal failed, skipping insolvency test")
+			log.Printf("[foc-griefing] withdrawal failed, skipping insolvency test")
 			return
 		}
 
@@ -498,7 +529,7 @@ func probeInsolvencyCreation() {
 		funds = foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
 		lockup = foc.ReadAccountLockup(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
 		available = new(big.Int).Sub(funds, lockup)
-		log.Printf("[pdp-griefing] post-drain: funds=%s lockup=%s available=%s", funds, lockup, available)
+		log.Printf("[foc-griefing] post-drain: funds=%s lockup=%s available=%s", funds, lockup, available)
 	}
 
 	// 3. Attempt dataset creation while insolvent
@@ -512,19 +543,19 @@ func probeInsolvencyCreation() {
 		metadataKeys, metadataValues,
 	)
 	if err != nil {
-		log.Printf("[pdp-griefing] EIP-712 signing failed: %v", err)
+		log.Printf("[foc-griefing] EIP-712 signing failed: %v", err)
 		return
 	}
 
 	extraData := encodeCreateDataSetExtra(s.ClientEth, clientDataSetId, metadataKeys, metadataValues, sig)
 	recordKeeper := "0x" + hex.EncodeToString(focCfg.FWSSAddr)
 
-	log.Printf("[pdp-griefing] attempting dataset creation while insolvent (available=%s)", available)
+	log.Printf("[foc-griefing] attempting dataset creation while insolvent (available=%s)", available)
 	txHash, err := foc.CreateDataSetHTTP(ctx, recordKeeper, hex.EncodeToString(extraData))
 
 	if err != nil {
 		// HTTP-level rejection — Curio refused to submit the tx
-		log.Printf("[pdp-griefing] insolvent create rejected at HTTP: %v", err)
+		log.Printf("[foc-griefing] insolvent create rejected at HTTP: %v", err)
 		assert.Sometimes(true, "insolvent client dataset creation rejected", map[string]any{
 			"available": available.String(),
 			"error":     err.Error(),
@@ -534,13 +565,13 @@ func probeInsolvencyCreation() {
 		onChainID, waitErr := foc.WaitForDataSetCreation(ctx, txHash)
 		if waitErr != nil {
 			// On-chain revert — correct behavior
-			log.Printf("[pdp-griefing] insolvent create reverted on-chain: %v", waitErr)
+			log.Printf("[foc-griefing] insolvent create reverted on-chain: %v", waitErr)
 			assert.Sometimes(true, "insolvent client dataset creation rejected", map[string]any{
 				"available": available.String(),
 			})
 		} else {
 			// CRITICAL: dataset created with insolvent client
-			log.Printf("[pdp-griefing] CRITICAL: insolvent client created dataset! onChainID=%d available=%s", onChainID, available)
+			log.Printf("[foc-griefing] CRITICAL: insolvent client created dataset! onChainID=%d available=%s", onChainID, available)
 			assert.Sometimes(false, "insolvent client dataset creation rejected", map[string]any{
 				"available":  available.String(),
 				"onChainID":  onChainID,
@@ -549,23 +580,12 @@ func probeInsolvencyCreation() {
 		}
 	}
 
-	// 4. Re-fund the secondary client for future probes
-	refundAmount := big.NewInt(griefUSDFCDeposit)
-	refundCalldata := foc.BuildCalldata(foc.SigTransfer,
-		foc.EncodeAddress(s.ClientEth),
-		foc.EncodeBigInt(refundAmount),
-	)
-	foc.SendEthTxConfirmed(ctx, node, focCfg.ClientKey, focCfg.USDFCAddr, refundCalldata, "pdp-griefing-refund")
-
-	// Re-deposit into FPV1
-	depositCalldata := foc.BuildCalldata(foc.SigDeposit,
-		foc.EncodeAddress(focCfg.USDFCAddr),
-		foc.EncodeAddress(s.ClientEth),
-		foc.EncodeBigInt(refundAmount),
-	)
-	foc.SendEthTxConfirmed(ctx, node, s.ClientKey, focCfg.FilPayAddr, depositCalldata, "pdp-griefing-redeposit")
-
-	log.Printf("[pdp-griefing] secondary client re-funded for future probes")
+	// 4. Re-fund the secondary client for future probes.
+	// We need to ensure available = funds - lockup is enough for the next
+	// dataset creation (sybilFee + minimumLockup ≈ 0.12 USDFC). Since lockup
+	// accumulates from previous datasets, we check after depositing and top up
+	// if needed.
+	griefRefundAndTopUp(s, node)
 }
 
 // ---------------------------------------------------------------------------
@@ -604,7 +624,7 @@ func probeCrossPayerReplay() {
 		metadataKeys, metadataValues,
 	)
 	if err != nil {
-		log.Printf("[pdp-griefing] EIP-712 signing failed: %v", err)
+		log.Printf("[foc-griefing] EIP-712 signing failed: %v", err)
 		return
 	}
 
@@ -612,12 +632,12 @@ func probeCrossPayerReplay() {
 	extraData := encodeCreateDataSetExtra(focCfg.ClientEthAddr, clientDataSetId, metadataKeys, metadataValues, sig)
 	recordKeeper := "0x" + hex.EncodeToString(focCfg.FWSSAddr)
 
-	log.Printf("[pdp-griefing] attempting cross-payer replay: signer=secondary payer=primary")
+	log.Printf("[foc-griefing] attempting cross-payer replay: signer=secondary payer=primary")
 	txHash, err := foc.CreateDataSetHTTP(ctx, recordKeeper, hex.EncodeToString(extraData))
 
 	if err != nil {
 		// Rejected at HTTP level
-		log.Printf("[pdp-griefing] cross-payer replay rejected at HTTP: %v", err)
+		log.Printf("[foc-griefing] cross-payer replay rejected at HTTP: %v", err)
 		assert.Sometimes(true, "cross-payer signature replay rejected", nil)
 		return
 	}
@@ -626,7 +646,7 @@ func probeCrossPayerReplay() {
 	onChainID, waitErr := foc.WaitForDataSetCreation(ctx, txHash)
 	if waitErr != nil {
 		// On-chain revert — correct, signature didn't match payer
-		log.Printf("[pdp-griefing] cross-payer replay reverted on-chain: %v", waitErr)
+		log.Printf("[foc-griefing] cross-payer replay reverted on-chain: %v", waitErr)
 		assert.Sometimes(true, "cross-payer signature replay rejected", nil)
 		return
 	}
@@ -636,7 +656,7 @@ func probeCrossPayerReplay() {
 	primaryCharged := primaryFundsAfter.Cmp(primaryFundsBefore) < 0
 
 	if primaryCharged {
-		log.Printf("[pdp-griefing] CRITICAL: cross-payer replay succeeded! Primary client charged without signing. onChainID=%d", onChainID)
+		log.Printf("[foc-griefing] CRITICAL: cross-payer replay succeeded! Primary client charged without signing. onChainID=%d", onChainID)
 		assert.Sometimes(false, "cross-payer signature replay rejected", map[string]any{
 			"onChainID":          onChainID,
 			"primaryFundsBefore": primaryFundsBefore.String(),
@@ -644,7 +664,7 @@ func probeCrossPayerReplay() {
 		})
 	} else {
 		// Creation succeeded but primary wasn't charged — maybe secondary was?
-		log.Printf("[pdp-griefing] cross-payer replay: tx succeeded but primary not charged (onChainID=%d)", onChainID)
+		log.Printf("[foc-griefing] cross-payer replay: tx succeeded but primary not charged (onChainID=%d)", onChainID)
 	}
 }
 
@@ -679,7 +699,7 @@ func probeBurstCreation() {
 	accepted := 0
 	recordKeeper := "0x" + hex.EncodeToString(focCfg.FWSSAddr)
 
-	log.Printf("[pdp-griefing] starting burst creation: %d requests", burstSize)
+	log.Printf("[foc-griefing] starting burst creation: %d requests", burstSize)
 
 	for i := 0; i < burstSize; i++ {
 		clientDataSetId := new(big.Int).SetUint64(random.GetRandom())
@@ -700,7 +720,7 @@ func probeBurstCreation() {
 		// Fire without waiting for confirmation
 		_, err = foc.CreateDataSetHTTP(ctx, recordKeeper, hex.EncodeToString(extraData))
 		if err != nil {
-			log.Printf("[pdp-griefing] burst request %d/%d rejected: %v", i+1, burstSize, err)
+			log.Printf("[foc-griefing] burst request %d/%d rejected: %v", i+1, burstSize, err)
 		} else {
 			accepted++
 		}
@@ -710,7 +730,7 @@ func probeBurstCreation() {
 	fundsAfter := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
 	delta := new(big.Int).Sub(fundsBefore, fundsAfter)
 
-	log.Printf("[pdp-griefing] burst complete: accepted=%d/%d fundsBefore=%s fundsAfter=%s delta=%s",
+	log.Printf("[foc-griefing] burst complete: accepted=%d/%d fundsBefore=%s fundsAfter=%s delta=%s",
 		accepted, burstSize, fundsBefore, fundsAfter, delta)
 
 	// If all requests accepted with no rate limiting, log it
@@ -738,6 +758,71 @@ func probeBurstCreation() {
 
 // ---------------------------------------------------------------------------
 // Progress
+// griefRefundAndTopUp transfers USDFC from the primary client to the secondary
+// client and deposits into FilecoinPay. After depositing, it checks whether
+// available funds (funds - lockup) are sufficient for the next dataset creation.
+// If not, it sends an additional top-up. This prevents the insolvency probe's
+// drain from starving other probes that need to create datasets.
+func griefRefundAndTopUp(s griefRuntime, node api.FullNode) {
+	refundAmount := big.NewInt(griefUSDFCDeposit)
+
+	// Transfer USDFC from primary → secondary
+	refundCalldata := foc.BuildCalldata(foc.SigTransfer,
+		foc.EncodeAddress(s.ClientEth),
+		foc.EncodeBigInt(refundAmount),
+	)
+	if !foc.SendEthTxConfirmed(ctx, node, focCfg.ClientKey, focCfg.USDFCAddr, refundCalldata, "foc-griefing-refund") {
+		log.Printf("[foc-griefing] WARN: refund transfer failed — secondary client may be drained")
+		return
+	}
+
+	// Deposit into FilecoinPay
+	depositCalldata := foc.BuildCalldata(foc.SigDeposit,
+		foc.EncodeAddress(focCfg.USDFCAddr),
+		foc.EncodeAddress(s.ClientEth),
+		foc.EncodeBigInt(refundAmount),
+	)
+	if !foc.SendEthTxConfirmed(ctx, node, s.ClientKey, focCfg.FilPayAddr, depositCalldata, "foc-griefing-redeposit") {
+		log.Printf("[foc-griefing] WARN: re-deposit failed")
+		return
+	}
+
+	// Check if available funds are sufficient. Lockup accumulates from
+	// previously created datasets' rails, so even after depositing 0.5 USDFC,
+	// available might be near zero. Top up if needed.
+	funds := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
+	lockup := foc.ReadAccountLockup(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, s.ClientEth)
+	if funds == nil || lockup == nil {
+		return
+	}
+
+	available := new(big.Int).Sub(funds, lockup)
+	minRequired := big.NewInt(griefUSDFCDeposit) // 0.5 USDFC — covers sybilFee + lockup with margin
+
+	if available.Cmp(minRequired) < 0 {
+		topUp := new(big.Int).Sub(minRequired, available)
+		log.Printf("[foc-griefing] available=%s < required=%s, topping up by %s", available, minRequired, topUp)
+
+		topUpCalldata := foc.BuildCalldata(foc.SigTransfer,
+			foc.EncodeAddress(s.ClientEth),
+			foc.EncodeBigInt(topUp),
+		)
+		if !foc.SendEthTxConfirmed(ctx, node, focCfg.ClientKey, focCfg.USDFCAddr, topUpCalldata, "foc-griefing-topup") {
+			log.Printf("[foc-griefing] WARN: top-up transfer failed")
+			return
+		}
+
+		topUpDeposit := foc.BuildCalldata(foc.SigDeposit,
+			foc.EncodeAddress(focCfg.USDFCAddr),
+			foc.EncodeAddress(s.ClientEth),
+			foc.EncodeBigInt(topUp),
+		)
+		foc.SendEthTxConfirmed(ctx, node, s.ClientKey, focCfg.FilPayAddr, topUpDeposit, "foc-griefing-topup-deposit")
+	}
+
+	log.Printf("[foc-griefing] secondary client re-funded (available after=%s)", available)
+}
+
 // ---------------------------------------------------------------------------
 
 func logGriefProgress() {
@@ -745,6 +830,6 @@ func logGriefProgress() {
 	if s.ClientEth == nil {
 		return
 	}
-	log.Printf("[pdp-griefing] state=%s ds_created=%d initFunds=%v lastFunds=%v",
+	log.Printf("[foc-griefing] state=%s ds_created=%d initFunds=%v lastFunds=%v",
 		s.State, s.DSCreated, s.InitFunds, s.LastFunds)
 }

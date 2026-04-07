@@ -14,61 +14,51 @@ import (
 )
 
 // ===========================================================================
-// Scenario 1: Piece Lifecycle Security
+// FOC Piece Lifecycle Security
 //
-// Tests the full piece add/delete/retrieve lifecycle with security edge cases.
-// Each deck invocation advances one phase. The scenario cycles continuously:
+// Tests the full piece add/delete/retrieve lifecycle, then runs an independent
+// attack probe. The first 4 phases have real ordering dependencies:
 //
-//   Init → Added → Verified → DeleteScheduled → DeleteVerified →
-//   AttackPhase → Terminated → Cleanup → (back to Init)
+//   Init (upload+add) → Verified (retrieve+CID check) →
+//   Deleted (schedule delete + post-delete retrieve) →
+//   Checked (verify count + proving) → Attack → (back to Init)
 //
-// Covers:
-//   - Piece add/delete accounting correctness
-//   - Retrieval integrity before and after deletion (curio#1039)
-//   - Proving continuity after deletion
-//   - Nonce replay attacks on addPieces (EIP-712)
+// The attack phase picks one random probe per cycle:
+//   - Nonce replay on addPieces
 //   - Cross-dataset piece injection
 //   - Double piece deletion
-//   - Post-termination piece addition race
+//   - Nonexistent piece deletion
+//   - Post-termination piece addition
 //
-// Requires griefRuntime to be in griefReady state (secondary client set up).
+// Requires griefRuntime in griefReady state with LastOnChainDSID > 0.
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
-type pieceSecState int
+type pieceSecPhase int
 
 const (
-	pieceSecInit            pieceSecState = iota // upload piece to Curio
-	pieceSecAdded                                // piece added on-chain, snapshot counts
-	pieceSecVerified                             // retrieval integrity verified
-	pieceSecDeleteScheduled                      // deletion scheduled, re-retrieve check
-	pieceSecDeleteVerified                       // piece count decreased, proving OK
-	pieceSecAttackPhase                          // random attack probe
-	pieceSecTerminated                           // terminate service, try post-term add
-	pieceSecCleanup                              // delete dataset, re-create, reset
+	pieceSecInit    pieceSecPhase = iota // upload + add piece
+	pieceSecVerify                       // retrieve + CID integrity check
+	pieceSecDelete                       // schedule deletion + post-delete retrieval (curio#1039)
+	pieceSecCheck                        // verify count decreased + proving continues
+	pieceSecAttack                       // random attack probe, then reset to Init
 )
 
-func (s pieceSecState) String() string {
+func (s pieceSecPhase) String() string {
 	switch s {
 	case pieceSecInit:
 		return "Init"
-	case pieceSecAdded:
-		return "Added"
-	case pieceSecVerified:
-		return "Verified"
-	case pieceSecDeleteScheduled:
-		return "DeleteScheduled"
-	case pieceSecDeleteVerified:
-		return "DeleteVerified"
-	case pieceSecAttackPhase:
-		return "AttackPhase"
-	case pieceSecTerminated:
-		return "Terminated"
-	case pieceSecCleanup:
-		return "Cleanup"
+	case pieceSecVerify:
+		return "Verify"
+	case pieceSecDelete:
+		return "Delete"
+	case pieceSecCheck:
+		return "Check"
+	case pieceSecAttack:
+		return "Attack"
 	default:
 		return "Unknown"
 	}
@@ -80,19 +70,16 @@ var (
 )
 
 type pieceSecRuntime struct {
-	State pieceSecState
+	Phase pieceSecPhase
 
 	// Piece under test
 	PieceCID string
 	PieceID  int
-	Nonce    *big.Int // nonce used for the addPieces EIP-712 signature
+	Nonce    *big.Int // nonce used for addPieces (for replay test)
 
-	// Snapshots for before/after comparison
-	CountBefore    *big.Int
-	CountAfter     *big.Int
-	ProvenBefore   uint64
-	TermDataSetID  int      // dataset ID being terminated (for cleanup)
-	TermClientDSID *big.Int // clientDataSetId for the terminated dataset
+	// Snapshots
+	CountBefore  *big.Int
+	ProvenBefore uint64
 
 	// Progress
 	Cycles      int
@@ -116,38 +103,26 @@ func DoFOCPieceSecurityProbe() {
 	if _, ok := requireReady(); !ok {
 		return
 	}
-
-	// Wait for griefing secondary client to be ready
 	gs := griefSnap()
-	if gs.State != griefReady || gs.ClientKey == nil {
+	if gs.State != griefReady || gs.ClientKey == nil || gs.LastOnChainDSID == 0 {
 		return
-	}
-	if gs.LastOnChainDSID == 0 {
-		return // need a griefing dataset to operate on
 	}
 
 	pieceSecMu.Lock()
-	state := pieceSec.State
+	phase := pieceSec.Phase
 	pieceSecMu.Unlock()
 
-	switch state {
+	switch phase {
 	case pieceSecInit:
-		pieceSecDoInit()
-	case pieceSecAdded:
+		pieceSecDoInit(gs)
+	case pieceSecVerify:
 		pieceSecDoVerify()
-	case pieceSecVerified:
-		pieceSecDoScheduleDelete()
-	case pieceSecDeleteScheduled:
-		pieceSecDoVerifyDelete()
-	case pieceSecDeleteVerified:
-		pieceSecDoAttack()
-	case pieceSecAttackPhase:
-		pieceSecDoTerminate()
-	case pieceSecTerminated:
-		pieceSecDoCleanup()
-	case pieceSecCleanup:
-		// Cleanup resets to Init internally
-		pieceSecDoCleanup()
+	case pieceSecDelete:
+		pieceSecDoDelete(gs)
+	case pieceSecCheck:
+		pieceSecDoCheck(gs)
+	case pieceSecAttack:
+		pieceSecDoAttack(gs)
 	}
 }
 
@@ -155,11 +130,10 @@ func DoFOCPieceSecurityProbe() {
 // Phase 1: Upload + Add Piece
 // ---------------------------------------------------------------------------
 
-func pieceSecDoInit() {
+func pieceSecDoInit(gs griefRuntime) {
 	if !foc.PingCurio(ctx) {
 		return
 	}
-	gs := griefSnap()
 	node := focNode()
 
 	// Upload a small random piece
@@ -171,54 +145,49 @@ func pieceSecDoInit() {
 
 	pieceCID, err := foc.CalculatePieceCID(data)
 	if err != nil {
-		log.Printf("[piece-security] CalculatePieceCID failed: %v", err)
+		log.Printf("[foc-piece-security] CalculatePieceCID failed: %v", err)
 		return
 	}
-
 	if err := foc.UploadPiece(ctx, data, pieceCID); err != nil {
-		log.Printf("[piece-security] UploadPiece failed: %v", err)
+		log.Printf("[foc-piece-security] UploadPiece failed: %v", err)
 		return
 	}
-
 	if err := foc.WaitForPiece(ctx, pieceCID); err != nil {
-		log.Printf("[piece-security] WaitForPiece failed: %v", err)
+		log.Printf("[foc-piece-security] WaitForPiece failed: %v", err)
 		return
 	}
 
-	// Snapshot active piece count BEFORE
+	// Snapshot count BEFORE
 	dsIDBytes := foc.EncodeBigInt(big.NewInt(int64(gs.LastOnChainDSID)))
 	countBefore, _ := foc.EthCallUint256(ctx, node, focCfg.PDPAddr, foc.BuildCalldata(foc.SigGetActivePieceCount, dsIDBytes))
 
 	// Add piece to griefing dataset
 	nonce := new(big.Int).SetUint64(random.GetRandom())
-
 	parsedCID, err := cid.Decode(pieceCID)
 	if err != nil {
-		log.Printf("[piece-security] CID decode failed: %v", err)
 		return
 	}
-	cidBytes := parsedCID.Bytes()
 
 	sig, err := foc.SignEIP712AddPieces(
 		gs.ClientKey, focCfg.FWSSAddr,
 		gs.LastClientDSID, nonce,
-		[][]byte{cidBytes}, nil, nil,
+		[][]byte{parsedCID.Bytes()}, nil, nil,
 	)
 	if err != nil {
-		log.Printf("[piece-security] EIP-712 signing failed: %v", err)
+		log.Printf("[foc-piece-security] EIP-712 signing failed: %v", err)
 		return
 	}
 
 	extraData := encodeAddPiecesExtraData(nonce, 1, sig)
 	txHash, err := foc.AddPiecesHTTP(ctx, gs.LastOnChainDSID, []string{pieceCID}, hex.EncodeToString(extraData))
 	if err != nil {
-		log.Printf("[piece-security] AddPiecesHTTP failed: %v", err)
+		log.Printf("[foc-piece-security] AddPiecesHTTP failed: %v", err)
 		return
 	}
 
 	pieceIDs, err := foc.WaitForPieceAddition(ctx, gs.LastOnChainDSID, txHash)
 	if err != nil {
-		log.Printf("[piece-security] WaitForPieceAddition failed: %v", err)
+		log.Printf("[foc-piece-security] WaitForPieceAddition failed: %v", err)
 		return
 	}
 
@@ -227,28 +196,23 @@ func pieceSecDoInit() {
 		pieceID = pieceIDs[0]
 	}
 
-	// Snapshot count AFTER
+	// Check count increased
 	countAfter, _ := foc.EthCallUint256(ctx, node, focCfg.PDPAddr, foc.BuildCalldata(foc.SigGetActivePieceCount, dsIDBytes))
-
 	if countBefore != nil && countAfter != nil {
-		increased := countAfter.Cmp(countBefore) > 0
-		assert.Sometimes(increased, "Active piece count increases after addition", map[string]any{
+		assert.Sometimes(countAfter.Cmp(countBefore) > 0, "Active piece count increases after addition", map[string]any{
 			"countBefore": countBefore.String(),
 			"countAfter":  countAfter.String(),
-			"pieceCID":    pieceCID,
 		})
 	}
 
-	log.Printf("[piece-security] piece added: cid=%s pieceID=%d countBefore=%v countAfter=%v",
-		pieceCID, pieceID, countBefore, countAfter)
+	log.Printf("[foc-piece-security] piece added: cid=%s pieceID=%d", pieceCID, pieceID)
 
 	pieceSecMu.Lock()
 	pieceSec.PieceCID = pieceCID
 	pieceSec.PieceID = pieceID
 	pieceSec.Nonce = nonce
-	pieceSec.CountBefore = countBefore
-	pieceSec.CountAfter = countAfter
-	pieceSec.State = pieceSecAdded
+	pieceSec.CountBefore = countAfter // use post-add count as baseline for delete check
+	pieceSec.Phase = pieceSecVerify
 	pieceSecMu.Unlock()
 }
 
@@ -261,13 +225,12 @@ func pieceSecDoVerify() {
 
 	data, err := foc.DownloadPiece(ctx, s.PieceCID)
 	if err != nil {
-		log.Printf("[piece-security] download failed for %s: %v", s.PieceCID, err)
-		return // will retry next invocation
+		log.Printf("[foc-piece-security] download failed for %s: %v", s.PieceCID, err)
+		return
 	}
 
 	computedCID, err := foc.CalculatePieceCID(data)
 	if err != nil {
-		log.Printf("[piece-security] CalculatePieceCID failed: %v", err)
 		return
 	}
 
@@ -275,34 +238,29 @@ func pieceSecDoVerify() {
 	assert.Sometimes(match, "Retrieved piece matches uploaded CID", map[string]any{
 		"pieceCID":    s.PieceCID,
 		"computedCID": computedCID,
-		"dataLen":     len(data),
 	})
 
-	if !match {
-		log.Printf("[piece-security] INTEGRITY MISMATCH: expected=%s computed=%s", s.PieceCID, computedCID)
-	} else {
-		log.Printf("[piece-security] integrity verified: cid=%s", s.PieceCID)
-	}
+	log.Printf("[foc-piece-security] retrieval verified: cid=%s match=%v", s.PieceCID, match)
 
 	pieceSecMu.Lock()
-	pieceSec.State = pieceSecVerified
+	pieceSec.Phase = pieceSecDelete
 	pieceSecMu.Unlock()
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3: Schedule Deletion + Re-Retrieve (curio#1039)
+// Phase 3: Schedule Deletion + Post-Delete Retrieval (curio#1039)
 // ---------------------------------------------------------------------------
 
-func pieceSecDoScheduleDelete() {
+func pieceSecDoDelete(gs griefRuntime) {
 	s := pieceSecSnap()
-	gs := griefSnap()
 	node := focNode()
 
 	if s.PieceID == 0 {
-		// Can't delete without a valid piece ID — skip to attack phase
-		log.Printf("[piece-security] skipping delete (pieceID=0), advancing to attack phase")
+		// Curio didn't return piece IDs — can't delete by ID.
+		// Skip to attack phase (this IS the known gap).
+		log.Printf("[foc-piece-security] pieceID=0, skipping delete (Curio didn't return IDs)")
 		pieceSecMu.Lock()
-		pieceSec.State = pieceSecDeleteVerified
+		pieceSec.Phase = pieceSecAttack
 		pieceSecMu.Unlock()
 		return
 	}
@@ -314,19 +272,18 @@ func pieceSecDoScheduleDelete() {
 		}
 	}
 
-	// Snapshot proven epoch before deletion
+	// Snapshot proven epoch before
 	dsIDBytes := foc.EncodeBigInt(big.NewInt(int64(gs.LastOnChainDSID)))
 	provenBefore, _ := foc.EthCallUint256(ctx, node, focCfg.PDPAddr, foc.BuildCalldata(foc.SigGetLastProvenEpoch, dsIDBytes))
-	countBefore, _ := foc.EthCallUint256(ctx, node, focCfg.PDPAddr, foc.BuildCalldata(foc.SigGetActivePieceCount, dsIDBytes))
 
-	// Schedule piece deletion
+	// Schedule deletion
 	pieceIDBig := big.NewInt(int64(s.PieceID))
 	sig, err := foc.SignEIP712SchedulePieceRemovals(
 		gs.ClientKey, focCfg.FWSSAddr,
 		gs.LastClientDSID, []*big.Int{pieceIDBig},
 	)
 	if err != nil {
-		log.Printf("[piece-security] EIP-712 deletion signing failed: %v", err)
+		log.Printf("[foc-piece-security] deletion signing failed: %v", err)
 		return
 	}
 
@@ -340,36 +297,25 @@ func pieceSecDoScheduleDelete() {
 		extraData,
 	)
 
-	ok := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.PDPAddr, calldata, "piece-security-delete")
+	ok := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.PDPAddr, calldata, "foc-piece-security-delete")
 	if !ok {
-		log.Printf("[piece-security] schedulePieceDeletions failed, will retry")
+		log.Printf("[foc-piece-security] deletion tx failed, will retry")
 		return
 	}
 
-	log.Printf("[piece-security] deletion scheduled for pieceID=%d", s.PieceID)
-
-	// curio#1039: immediately try to retrieve the piece after deletion scheduled
-	// The "no byte-level deletion" behavior means data should still be on disk
+	// curio#1039: immediately retrieve after deletion scheduled
 	retrieveData, retrieveErr := foc.DownloadPiece(ctx, s.PieceCID)
 	if retrieveErr != nil {
-		log.Printf("[piece-security] post-delete retrieval: %v (expected if deletion processed)", retrieveErr)
+		log.Printf("[foc-piece-security] post-delete retrieval: %v", retrieveErr)
 	} else {
-		// Retrieval succeeded — verify it's not corrupt
 		computedCID, cidErr := foc.CalculatePieceCID(retrieveData)
-		if cidErr != nil {
-			log.Printf("[piece-security] CRITICAL: post-delete retrieval returned data but CID computation failed: %v", cidErr)
-		} else {
+		if cidErr == nil {
 			clean := computedCID == s.PieceCID
-			assert.Sometimes(clean, "Piece still retrievable after deletion scheduled", map[string]any{
-				"pieceCID":    s.PieceCID,
-				"computedCID": computedCID,
-				"dataLen":     len(retrieveData),
+			assert.Sometimes(clean, "Piece retrievable after deletion scheduled", map[string]any{
+				"pieceCID": s.PieceCID,
+				"clean":    clean,
 			})
-			if !clean {
-				log.Printf("[piece-security] CRITICAL: post-delete data CORRUPTED: expected=%s got=%s", s.PieceCID, computedCID)
-			} else {
-				log.Printf("[piece-security] post-delete retrieval OK (no byte-level deletion confirmed)")
-			}
+			log.Printf("[foc-piece-security] post-delete retrieval: clean=%v", clean)
 		}
 	}
 
@@ -380,60 +326,47 @@ func pieceSecDoScheduleDelete() {
 
 	pieceSecMu.Lock()
 	pieceSec.ProvenBefore = provenBeforeU64
-	pieceSec.CountBefore = countBefore
-	pieceSec.State = pieceSecDeleteScheduled
+	pieceSec.Phase = pieceSecCheck
 	pieceSecMu.Unlock()
 }
 
 // ---------------------------------------------------------------------------
-// Phase 4: Verify Delete — piece count decreased, proving continues
+// Phase 4: Verify Count Decreased + Proving Continues
 // ---------------------------------------------------------------------------
 
-func pieceSecDoVerifyDelete() {
+func pieceSecDoCheck(gs griefRuntime) {
 	s := pieceSecSnap()
-	gs := griefSnap()
 	node := focNode()
 
 	dsIDBytes := foc.EncodeBigInt(big.NewInt(int64(gs.LastOnChainDSID)))
 
-	countAfter, err := foc.EthCallUint256(ctx, node, focCfg.PDPAddr, foc.BuildCalldata(foc.SigGetActivePieceCount, dsIDBytes))
-	if err != nil {
-		log.Printf("[piece-security] getActivePieceCount failed: %v", err)
-		return
-	}
-
+	countAfter, _ := foc.EthCallUint256(ctx, node, focCfg.PDPAddr, foc.BuildCalldata(foc.SigGetActivePieceCount, dsIDBytes))
 	if s.CountBefore != nil && countAfter != nil {
 		decreased := countAfter.Cmp(s.CountBefore) < 0
 		assert.Sometimes(decreased, "Active piece count decreases after deletion", map[string]any{
 			"countBefore": s.CountBefore.String(),
 			"countAfter":  countAfter.String(),
-			"pieceID":     s.PieceID,
 		})
-		log.Printf("[piece-security] delete verified: countBefore=%s countAfter=%s", s.CountBefore, countAfter)
 	}
 
-	// Check proving still advances
 	provenAfter, _ := foc.EthCallUint256(ctx, node, focCfg.PDPAddr, foc.BuildCalldata(foc.SigGetLastProvenEpoch, dsIDBytes))
 	if provenAfter != nil {
-		advanced := provenAfter.Uint64() >= s.ProvenBefore
-		assert.Sometimes(advanced, "Proving continues after piece deletion", map[string]any{
+		assert.Sometimes(provenAfter.Uint64() >= s.ProvenBefore, "Proving continues after piece deletion", map[string]any{
 			"provenBefore": s.ProvenBefore,
 			"provenAfter":  provenAfter.Uint64(),
 		})
 	}
 
 	pieceSecMu.Lock()
-	pieceSec.CountAfter = countAfter
-	pieceSec.State = pieceSecDeleteVerified
+	pieceSec.Phase = pieceSecAttack
 	pieceSecMu.Unlock()
 }
 
 // ---------------------------------------------------------------------------
-// Phase 5: Attack Phase — randomly pick one attack per cycle
+// Phase 5: Random Attack Probe, then reset
 // ---------------------------------------------------------------------------
 
-func pieceSecDoAttack() {
-	gs := griefSnap()
+func pieceSecDoAttack(gs griefRuntime) {
 	s := pieceSecSnap()
 
 	type attack struct {
@@ -445,25 +378,39 @@ func pieceSecDoAttack() {
 		{"CrossDatasetInject", attackCrossDataset},
 		{"DoubleDeletion", attackDoubleDeletion},
 		{"NonexistentDelete", attackNonexistentDelete},
+		{"PostTerminationAdd", attackPostTerminationAdd},
 	}
 
 	pick := attacks[rngIntn(len(attacks))]
-	log.Printf("[piece-security] attack: %s", pick.name)
+	log.Printf("[foc-piece-security] attack: %s", pick.name)
 	pick.fn(gs, s)
 
+	// Cycle complete — reset
 	pieceSecMu.Lock()
 	pieceSec.AttacksDone++
-	pieceSec.State = pieceSecAttackPhase
+	pieceSec.Cycles++
+	cycles := pieceSec.Cycles
+	pieceSec.Phase = pieceSecInit
+	pieceSec.PieceCID = ""
+	pieceSec.PieceID = 0
+	pieceSec.Nonce = nil
+	pieceSec.CountBefore = nil
+	pieceSec.ProvenBefore = 0
 	pieceSecMu.Unlock()
+
+	log.Printf("[foc-piece-security] cycle %d complete", cycles)
+	assert.Sometimes(true, "Piece security cycle completes", map[string]any{"cycles": cycles})
 }
 
-// attackNonceReplay reuses the nonce from the previous addPieces call.
+// ---------------------------------------------------------------------------
+// Attack: Nonce Replay on addPieces
+// ---------------------------------------------------------------------------
+
 func attackNonceReplay(gs griefRuntime, s pieceSecRuntime) {
 	if s.Nonce == nil || !foc.PingCurio(ctx) {
 		return
 	}
 
-	// Upload a new piece
 	data := make([]byte, 128)
 	for i := range data {
 		data[i] = byte(random.GetRandom() & 0xFF)
@@ -472,9 +419,7 @@ func attackNonceReplay(gs griefRuntime, s pieceSecRuntime) {
 	if err != nil {
 		return
 	}
-	if err := foc.UploadPiece(ctx, data, newCID); err != nil {
-		return
-	}
+	_ = foc.UploadPiece(ctx, data, newCID)
 	_ = foc.WaitForPiece(ctx, newCID)
 
 	parsedCID, err := cid.Decode(newCID)
@@ -485,7 +430,7 @@ func attackNonceReplay(gs griefRuntime, s pieceSecRuntime) {
 	// Sign with the SAME nonce as the previous add
 	sig, err := foc.SignEIP712AddPieces(
 		gs.ClientKey, focCfg.FWSSAddr,
-		gs.LastClientDSID, s.Nonce, // replayed nonce
+		gs.LastClientDSID, s.Nonce,
 		[][]byte{parsedCID.Bytes()}, nil, nil,
 	)
 	if err != nil {
@@ -496,32 +441,24 @@ func attackNonceReplay(gs griefRuntime, s pieceSecRuntime) {
 	_, httpErr := foc.AddPiecesHTTP(ctx, gs.LastOnChainDSID, []string{newCID}, hex.EncodeToString(extraData))
 
 	if httpErr != nil {
-		log.Printf("[piece-security] nonce replay rejected at HTTP: %v", httpErr)
-		assert.Sometimes(true, "AddPieces nonce replay rejected", map[string]any{
-			"replayedNonce": s.Nonce.String(),
-		})
+		assert.Sometimes(true, "AddPieces nonce replay rejected", map[string]any{"nonce": s.Nonce.String()})
 	} else {
-		// HTTP accepted — check if it actually lands on-chain
-		log.Printf("[piece-security] CRITICAL: nonce replay accepted by Curio HTTP — checking on-chain")
-		// Even if HTTP accepted, the contract should reject it
-		assert.Sometimes(false, "AddPieces nonce replay rejected", map[string]any{
-			"replayedNonce": s.Nonce.String(),
-			"note":          "HTTP accepted replayed nonce — contract may still reject",
-		})
+		log.Printf("[foc-piece-security] CRITICAL: nonce replay accepted by Curio HTTP")
+		assert.Sometimes(false, "AddPieces nonce replay rejected", map[string]any{"nonce": s.Nonce.String()})
 	}
 }
 
-// attackCrossDataset signs addPieces for the griefing dataset but submits to the primary FOC dataset.
+// ---------------------------------------------------------------------------
+// Attack: Cross-Dataset Piece Injection
+// ---------------------------------------------------------------------------
+
 func attackCrossDataset(gs griefRuntime, _ pieceSecRuntime) {
 	if !foc.PingCurio(ctx) {
 		return
 	}
 	focS := snap()
-	if focS.OnChainDataSetID == 0 || gs.LastOnChainDSID == 0 {
+	if focS.OnChainDataSetID == 0 || gs.LastOnChainDSID == 0 || focS.OnChainDataSetID == gs.LastOnChainDSID {
 		return
-	}
-	if focS.OnChainDataSetID == gs.LastOnChainDSID {
-		return // same dataset, not a meaningful test
 	}
 
 	data := make([]byte, 128)
@@ -532,9 +469,7 @@ func attackCrossDataset(gs griefRuntime, _ pieceSecRuntime) {
 	if err != nil {
 		return
 	}
-	if err := foc.UploadPiece(ctx, data, newCID); err != nil {
-		return
-	}
+	_ = foc.UploadPiece(ctx, data, newCID)
 	_ = foc.WaitForPiece(ctx, newCID)
 
 	parsedCID, err := cid.Decode(newCID)
@@ -543,10 +478,10 @@ func attackCrossDataset(gs griefRuntime, _ pieceSecRuntime) {
 	}
 	nonce := new(big.Int).SetUint64(random.GetRandom())
 
-	// Sign for GRIEFING dataset
+	// Sign for GRIEFING dataset, submit to PRIMARY dataset
 	sig, err := foc.SignEIP712AddPieces(
 		gs.ClientKey, focCfg.FWSSAddr,
-		gs.LastClientDSID, nonce, // griefing clientDataSetId
+		gs.LastClientDSID, nonce,
 		[][]byte{parsedCID.Bytes()}, nil, nil,
 	)
 	if err != nil {
@@ -554,26 +489,24 @@ func attackCrossDataset(gs griefRuntime, _ pieceSecRuntime) {
 	}
 
 	extraData := encodeAddPiecesExtraData(nonce, 1, sig)
-
-	// Submit to PRIMARY FOC dataset — signature mismatch
 	_, httpErr := foc.AddPiecesHTTP(ctx, focS.OnChainDataSetID, []string{newCID}, hex.EncodeToString(extraData))
 
 	if httpErr != nil {
-		log.Printf("[piece-security] cross-dataset injection rejected: %v", httpErr)
 		assert.Sometimes(true, "Cross-dataset piece injection rejected", map[string]any{
-			"signedFor":   gs.LastOnChainDSID,
-			"submittedTo": focS.OnChainDataSetID,
+			"signedFor": gs.LastOnChainDSID, "submittedTo": focS.OnChainDataSetID,
 		})
 	} else {
-		log.Printf("[piece-security] CRITICAL: cross-dataset injection accepted by HTTP")
+		log.Printf("[foc-piece-security] CRITICAL: cross-dataset injection accepted")
 		assert.Sometimes(false, "Cross-dataset piece injection rejected", map[string]any{
-			"signedFor":   gs.LastOnChainDSID,
-			"submittedTo": focS.OnChainDataSetID,
+			"signedFor": gs.LastOnChainDSID, "submittedTo": focS.OnChainDataSetID,
 		})
 	}
 }
 
-// attackDoubleDeletion tries to delete the same pieceID that was already deleted in phase 3.
+// ---------------------------------------------------------------------------
+// Attack: Double Piece Deletion
+// ---------------------------------------------------------------------------
+
 func attackDoubleDeletion(gs griefRuntime, s pieceSecRuntime) {
 	if s.PieceID == 0 || focCfg.SPKey == nil {
 		return
@@ -599,23 +532,20 @@ func attackDoubleDeletion(gs griefRuntime, s pieceSecRuntime) {
 		extraData,
 	)
 
-	ok := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.PDPAddr, calldata, "piece-security-double-del")
+	ok := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.PDPAddr, calldata, "foc-piece-security-double-del")
 
 	if !ok {
-		log.Printf("[piece-security] double deletion correctly rejected for pieceID=%d", s.PieceID)
-		assert.Sometimes(true, "Double piece deletion rejected", map[string]any{
-			"pieceID": s.PieceID,
-		})
+		assert.Sometimes(true, "Double piece deletion rejected", map[string]any{"pieceID": s.PieceID})
 	} else {
-		log.Printf("[piece-security] CRITICAL: double deletion SUCCEEDED for pieceID=%d", s.PieceID)
-		assert.Sometimes(false, "Double piece deletion rejected", map[string]any{
-			"pieceID": s.PieceID,
-			"note":    "same piece deleted twice — accounting bug",
-		})
+		log.Printf("[foc-piece-security] CRITICAL: double deletion succeeded for pieceID=%d", s.PieceID)
+		assert.Sometimes(false, "Double piece deletion rejected", map[string]any{"pieceID": s.PieceID})
 	}
 }
 
-// attackNonexistentDelete tries to delete a piece ID that doesn't exist.
+// ---------------------------------------------------------------------------
+// Attack: Nonexistent Piece Deletion
+// ---------------------------------------------------------------------------
+
 func attackNonexistentDelete(gs griefRuntime, _ pieceSecRuntime) {
 	if focCfg.SPKey == nil {
 		return
@@ -641,81 +571,52 @@ func attackNonexistentDelete(gs griefRuntime, _ pieceSecRuntime) {
 		extraData,
 	)
 
-	ok := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.PDPAddr, calldata, "piece-security-fake-del")
+	ok := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.PDPAddr, calldata, "foc-piece-security-fake-del")
 
 	if !ok {
-		log.Printf("[piece-security] nonexistent piece deletion correctly rejected (fakeID=%s)", fakePieceID)
-		assert.Sometimes(true, "Nonexistent piece deletion rejected", map[string]any{
-			"fakePieceID": fakePieceID.String(),
-		})
+		assert.Sometimes(true, "Nonexistent piece deletion rejected", map[string]any{"fakeID": fakePieceID.String()})
 	} else {
-		log.Printf("[piece-security] CRITICAL: nonexistent piece deletion SUCCEEDED (fakeID=%s)", fakePieceID)
-		assert.Sometimes(false, "Nonexistent piece deletion rejected", map[string]any{
-			"fakePieceID": fakePieceID.String(),
-		})
+		log.Printf("[foc-piece-security] CRITICAL: nonexistent piece deletion succeeded (fakeID=%s)", fakePieceID)
+		assert.Sometimes(false, "Nonexistent piece deletion rejected", map[string]any{"fakeID": fakePieceID.String()})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Phase 6: Post-Termination Piece Addition Race
+// Attack: Post-Termination Piece Addition
 // ---------------------------------------------------------------------------
 
-func pieceSecDoTerminate() {
-	gs := griefSnap()
-	node := focNode()
-
-	if focCfg.SPKey == nil {
-		focCfg.ReloadSPKey()
-		if focCfg.SPKey == nil {
-			return
-		}
-	}
-	if !foc.PingCurio(ctx) {
+func attackPostTerminationAdd(gs griefRuntime, _ pieceSecRuntime) {
+	if focCfg.SPKey == nil || !foc.PingCurio(ctx) {
 		return
 	}
+	node := focNode()
 
-	// Terminate the griefing dataset
+	// Terminate the griefing dataset's service
 	calldata := foc.BuildCalldata(foc.SigTerminateService,
 		foc.EncodeBigInt(gs.LastClientDSID),
 	)
-
-	ok := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.FWSSAddr, calldata, "piece-security-terminate")
+	ok := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.FWSSAddr, calldata, "foc-piece-security-terminate")
 	if !ok {
-		log.Printf("[piece-security] terminateService failed, will retry")
+		log.Printf("[foc-piece-security] terminateService failed")
 		return
 	}
 
-	log.Printf("[piece-security] service terminated for dataset=%d", gs.LastOnChainDSID)
-
-	// THE KEY TEST: immediately try to add a piece after termination
+	// Immediately try to add a piece — should be rejected
 	data := make([]byte, 128)
 	for i := range data {
 		data[i] = byte(random.GetRandom() & 0xFF)
 	}
 	newCID, err := foc.CalculatePieceCID(data)
 	if err != nil {
-		log.Printf("[piece-security] post-term CID calc failed: %v", err)
-		pieceSecMu.Lock()
-		pieceSec.TermDataSetID = gs.LastOnChainDSID
-		pieceSec.TermClientDSID = gs.LastClientDSID
-		pieceSec.State = pieceSecTerminated
-		pieceSecMu.Unlock()
 		return
 	}
-
 	_ = foc.UploadPiece(ctx, data, newCID)
 	_ = foc.WaitForPiece(ctx, newCID)
 
 	parsedCID, err := cid.Decode(newCID)
 	if err != nil {
-		pieceSecMu.Lock()
-		pieceSec.TermDataSetID = gs.LastOnChainDSID
-		pieceSec.TermClientDSID = gs.LastClientDSID
-		pieceSec.State = pieceSecTerminated
-		pieceSecMu.Unlock()
 		return
 	}
-
 	nonce := new(big.Int).SetUint64(random.GetRandom())
 	sig, err := foc.SignEIP712AddPieces(
 		gs.ClientKey, focCfg.FWSSAddr,
@@ -723,11 +624,6 @@ func pieceSecDoTerminate() {
 		[][]byte{parsedCID.Bytes()}, nil, nil,
 	)
 	if err != nil {
-		pieceSecMu.Lock()
-		pieceSec.TermDataSetID = gs.LastOnChainDSID
-		pieceSec.TermClientDSID = gs.LastClientDSID
-		pieceSec.State = pieceSecTerminated
-		pieceSecMu.Unlock()
 		return
 	}
 
@@ -735,90 +631,12 @@ func pieceSecDoTerminate() {
 	_, httpErr := foc.AddPiecesHTTP(ctx, gs.LastOnChainDSID, []string{newCID}, hex.EncodeToString(extraData))
 
 	if httpErr != nil {
-		log.Printf("[piece-security] post-termination add rejected: %v", httpErr)
-		assert.Sometimes(true, "Piece addition blocked after termination", map[string]any{
-			"dataSetID": gs.LastOnChainDSID,
-		})
+		assert.Sometimes(true, "Piece addition blocked after termination", map[string]any{"dsID": gs.LastOnChainDSID})
+		log.Printf("[foc-piece-security] post-termination add correctly rejected")
 	} else {
-		log.Printf("[piece-security] CRITICAL: post-termination add ACCEPTED for dataset=%d", gs.LastOnChainDSID)
-		assert.Sometimes(false, "Piece addition blocked after termination", map[string]any{
-			"dataSetID": gs.LastOnChainDSID,
-			"note":      "pieces added to dying dataset — orphan risk",
-		})
+		log.Printf("[foc-piece-security] CRITICAL: post-termination add ACCEPTED for dataset=%d", gs.LastOnChainDSID)
+		assert.Sometimes(false, "Piece addition blocked after termination", map[string]any{"dsID": gs.LastOnChainDSID})
 	}
-
-	pieceSecMu.Lock()
-	pieceSec.TermDataSetID = gs.LastOnChainDSID
-	pieceSec.TermClientDSID = gs.LastClientDSID
-	pieceSec.State = pieceSecTerminated
-	pieceSecMu.Unlock()
-}
-
-// ---------------------------------------------------------------------------
-// Phase 7: Cleanup — delete dataset, re-create, reset
-// ---------------------------------------------------------------------------
-
-func pieceSecDoCleanup() {
-	s := pieceSecSnap()
-	gs := griefSnap()
-	node := focNode()
-
-	if focCfg.SPKey == nil {
-		return
-	}
-
-	// Delete the terminated dataset
-	if s.TermDataSetID > 0 && s.TermClientDSID != nil {
-		sig, err := foc.SignEIP712DeleteDataSet(gs.ClientKey, focCfg.FWSSAddr, s.TermClientDSID)
-		if err != nil {
-			log.Printf("[piece-security] deleteDataSet EIP-712 signing failed: %v", err)
-			// Don't block — reset anyway
-		} else {
-			extraData := encodeBytes(sig)
-			calldata := foc.BuildCalldata(foc.SigDeleteDataSet,
-				foc.EncodeBigInt(big.NewInt(int64(s.TermDataSetID))),
-				foc.EncodeBigInt(big.NewInt(64)),
-				extraData,
-			)
-			sent := foc.SendEthTxConfirmed(ctx, node, focCfg.SPKey, focCfg.PDPAddr, calldata, "piece-security-cleanup")
-			if sent {
-				log.Printf("[piece-security] dataset %d deleted", s.TermDataSetID)
-			} else {
-				log.Printf("[piece-security] dataset %d delete failed (endEpoch may not have passed yet), will retry", s.TermDataSetID)
-				return // retry next invocation
-			}
-		}
-	}
-
-	// Re-create a new dataset for the griefing runtime via probeEmptyDatasetFee flow
-	// This is handled by the griefing probe on its next invocation once it detects
-	// the dataset was deleted. We just need to reset griefRT state.
-	griefMu.Lock()
-	griefRT.LastOnChainDSID = 0
-	griefRT.LastClientDSID = nil
-	griefRT.DSCreated = 0
-	griefMu.Unlock()
-
-	pieceSecMu.Lock()
-	pieceSec.Cycles++
-	cycles := pieceSec.Cycles
-	attacks := pieceSec.AttacksDone
-	pieceSec.State = pieceSecInit
-	pieceSec.PieceCID = ""
-	pieceSec.PieceID = 0
-	pieceSec.Nonce = nil
-	pieceSec.CountBefore = nil
-	pieceSec.CountAfter = nil
-	pieceSec.ProvenBefore = 0
-	pieceSec.TermDataSetID = 0
-	pieceSec.TermClientDSID = nil
-	pieceSecMu.Unlock()
-
-	log.Printf("[piece-security] cycle %d complete (attacks=%d), resetting to Init", cycles, attacks)
-	assert.Sometimes(true, "Piece security scenario cycle completes", map[string]any{
-		"cycles":  cycles,
-		"attacks": attacks,
-	})
 }
 
 // ---------------------------------------------------------------------------
@@ -827,6 +645,7 @@ func pieceSecDoCleanup() {
 
 func logPieceSecProgress() {
 	s := pieceSecSnap()
-	log.Printf("[piece-security] state=%s cycles=%d attacks=%d pieceCID=%s pieceID=%d",
-		s.State, s.Cycles, s.AttacksDone, s.PieceCID, s.PieceID)
+	if s.Cycles > 0 || s.Phase != pieceSecInit {
+		log.Printf("[foc-piece-security] phase=%s cycles=%d attacks=%d", s.Phase, s.Cycles, s.AttacksDone)
+	}
 }
