@@ -227,7 +227,7 @@ func DoTipsetConsensus() {
 	}
 
 	snap := getFinalizedSnapshots()
-	finalizedHeight, _ := snapshotMinHeight(snap)
+	finalizedHeight, anchorKey := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight {
 		return
 	}
@@ -243,7 +243,8 @@ func DoTipsetConsensus() {
 			errs++
 			continue
 		}
-		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, s.key)
+		_ = s // snapshot used only for error check; anchor is shared
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, anchorKey)
 		if err != nil {
 			log.Printf("[chain-monitor] ChainGetTipSetByHeight(%d) failed for %s: %v", checkHeight, name, err)
 			errs++
@@ -432,7 +433,7 @@ func DoStateRootComparison() {
 	}
 
 	snap := getFinalizedSnapshots()
-	finalizedHeight, _ := snapshotMinHeight(snap)
+	finalizedHeight, anchorKey := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight {
 		return
 	}
@@ -446,7 +447,8 @@ func DoStateRootComparison() {
 			log.Printf("[chain-monitor] ChainGetFinalizedTipSet failed for %s: %v", name, s.err)
 			continue
 		}
-		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, s.key)
+		_ = s // snapshot used only for error check; anchor is shared
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, anchorKey)
 		if err != nil {
 			log.Printf("[chain-monitor] ChainGetTipSetByHeight(%d) failed for %s: %v", checkHeight, name, err)
 			continue
@@ -492,7 +494,7 @@ func DoStateAudit() {
 	}
 
 	snap := getFinalizedSnapshots()
-	finalizedHeight, _ := snapshotMinHeight(snap)
+	finalizedHeight, anchorKey := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight {
 		return
 	}
@@ -507,7 +509,8 @@ func DoStateAudit() {
 		if s.err != nil {
 			continue
 		}
-		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, s.key)
+		_ = s // snapshot used only for error check; anchor is shared
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, anchorKey)
 		if err != nil {
 			continue
 		}
