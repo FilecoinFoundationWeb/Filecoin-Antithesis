@@ -401,8 +401,26 @@ func ReadAllowance(ctx context.Context, node api.FullNode, tokenAddr, ownerAddr,
 	return result
 }
 
+// ReadOperatorApprovals calls operatorApprovals(token, client, operator) on FilecoinPay.
+// Returns (rateUsage, lockupUsage) — words 3 and 4 of the 6-word return tuple:
+//   (approved bool, rateAllowance, lockupAllowance, rateUsage, lockupUsage, maxLockupPeriod)
+func ReadOperatorApprovals(ctx context.Context, node api.FullNode, filPayAddr, tokenAddr, clientAddr, operatorAddr []byte) (rateUsage, lockupUsage *big.Int) {
+	calldata := BuildCalldata(SigOperatorApprovals, EncodeAddress(tokenAddr), EncodeAddress(clientAddr), EncodeAddress(operatorAddr))
+	result, err := EthCallRaw(ctx, node, filPayAddr, calldata)
+	if err != nil {
+		log.Printf("[foc] ReadOperatorApprovals failed: %v", err)
+		return big.NewInt(0), big.NewInt(0)
+	}
+	if len(result) < 192 { // need 6 words
+		return big.NewInt(0), big.NewInt(0)
+	}
+	rateUsage = new(big.Int).SetBytes(result[96:128])   // word 3
+	lockupUsage = new(big.Int).SetBytes(result[128:160]) // word 4
+	return
+}
+
 // ReadRailFull calls getRail(railId) and returns the full raw result (12 words / 384 bytes).
-// Layout: token|from|to|operator|paymentRate|arbiter|createdEpoch|endEpoch|...
+// Layout: token|from|to|operator|paymentRate|arbiter|createdEpoch|endEpoch|settledUpTo|lockupPeriod|lockupFixed|commissionRateBps
 func ReadRailFull(ctx context.Context, node api.FullNode, filPayAddr []byte, railID uint64) ([]byte, error) {
 	calldata := BuildCalldata(SigGetRail, EncodeBigInt(new(big.Int).SetUint64(railID)))
 	return EthCallRaw(ctx, node, filPayAddr, calldata)

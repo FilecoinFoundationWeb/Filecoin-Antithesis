@@ -72,6 +72,7 @@ func DoFOCPaymentSecurity() {
 		{"DirectTerminateRail", payProbeDirectTerminateRail},
 		{"SettleTerminatedRail", payProbeSettleTerminatedRail},
 		{"WithdrawAll", payProbeWithdrawAll},
+		{"SettleMidPeriod", payProbeSettleMidPeriod},
 	}
 
 	pick := probes[rngIntn(len(probes))]
@@ -159,7 +160,10 @@ func payProbeSettleLockup(gs griefRuntime) {
 	)
 	ok := foc.SendEthTxConfirmed(ctx, node, gs.ClientKey, focCfg.FilPayAddr, calldata, "foc-payment-security-settle")
 	if !ok {
-		log.Printf("[foc-payment-security] settle failed for railID=%s", railID)
+		// Replay via eth_call to capture revert reason
+		revertData, revertErr := foc.EthCallRaw(ctx, node, focCfg.FilPayAddr, calldata)
+		log.Printf("[foc-payment-security] settle REVERTED for railID=%s epoch=%s revertData=%x revertErr=%v",
+			railID, settleEpoch, revertData, revertErr)
 		return
 	}
 
@@ -449,6 +453,85 @@ func payProbeWithdrawAll(gs griefRuntime) {
 			foc.EncodeBigInt(available),
 		)
 		foc.SendEthTxConfirmed(ctx, node, gs.ClientKey, focCfg.FilPayAddr, redeposit, "foc-payment-security-redeposit")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Probe: Settle Mid-Period (filecoin-services#416/#417)
+//
+// Attempts settlement during an open proving period (deadline not passed).
+// The contract should block — settledUpTo must NOT advance past the previous
+// period boundary. If it does, the SP gets paid for unproven epochs.
+// ---------------------------------------------------------------------------
+
+func payProbeSettleMidPeriod(gs griefRuntime) {
+	railID := payFindRail(gs)
+	if railID == nil {
+		return
+	}
+	if gs.LastOnChainDSID == 0 || focCfg.PDPAddr == nil {
+		return
+	}
+
+	node := focNode()
+	head, err := node.ChainHead(ctx)
+	if err != nil {
+		return
+	}
+	currentEpoch := int64(head.Height())
+
+	// Check if we're mid-period (deadline not passed yet)
+	dsIDBytes := foc.EncodeBigInt(big.NewInt(int64(gs.LastOnChainDSID)))
+	nextChallenge, err := foc.EthCallUint256(ctx, node, focCfg.PDPAddr,
+		foc.BuildCalldata(foc.SigGetNextChallengeEpoch, dsIDBytes))
+	if err != nil || nextChallenge == nil || nextChallenge.Sign() == 0 {
+		return
+	}
+
+	if currentEpoch >= nextChallenge.Int64() {
+		// Deadline already passed — not a mid-period test
+		log.Printf("[foc-payment-security] SettleMidPeriod: deadline already passed (epoch=%d, challenge=%s)", currentEpoch, nextChallenge)
+		return
+	}
+
+	// Read settledUpTo BEFORE
+	railData, err := foc.ReadRailFull(ctx, node, focCfg.FilPayAddr, railID.Uint64())
+	if err != nil || len(railData) < 320 {
+		return
+	}
+	settledBefore := new(big.Int).SetBytes(railData[256:288]) // word 8
+
+	// Attempt settlement at current epoch (mid-period)
+	settleCalldata := foc.BuildCalldata(foc.SigSettleRail,
+		foc.EncodeBigInt(railID),
+		foc.EncodeBigInt(big.NewInt(currentEpoch)),
+	)
+	foc.SendEthTxConfirmed(ctx, node, gs.ClientKey, focCfg.FilPayAddr, settleCalldata, "foc-payment-security-settle-mid")
+
+	// Read settledUpTo AFTER
+	railDataAfter, err := foc.ReadRailFull(ctx, node, focCfg.FilPayAddr, railID.Uint64())
+	if err != nil || len(railDataAfter) < 320 {
+		return
+	}
+	settledAfter := new(big.Int).SetBytes(railDataAfter[256:288])
+
+	// settledUpTo should NOT have advanced past the previous period boundary
+	// (it may have advanced to a completed period boundary, but not into the open period)
+	noAdvancePastChallenge := settledAfter.Int64() < nextChallenge.Int64()
+	assert.Sometimes(noAdvancePastChallenge, "Settlement blocked during open proving period", map[string]any{
+		"railID":           railID.String(),
+		"settledBefore":    settledBefore.String(),
+		"settledAfter":     settledAfter.String(),
+		"nextChallenge":    nextChallenge.String(),
+		"currentEpoch":     currentEpoch,
+	})
+
+	if !noAdvancePastChallenge {
+		log.Printf("[foc-payment-security] ANOMALY: settlement advanced past open deadline! settled=%s challenge=%s",
+			settledAfter, nextChallenge)
+	} else {
+		log.Printf("[foc-payment-security] SettleMidPeriod: correctly blocked (settled=%s, challenge=%s, epoch=%d)",
+			settledAfter, nextChallenge, currentEpoch)
 	}
 }
 

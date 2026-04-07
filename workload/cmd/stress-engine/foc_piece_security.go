@@ -303,7 +303,10 @@ func pieceSecDoDelete(gs griefRuntime) {
 		// (~29.7M gas for the cross-contract callback chain). It may hit the
 		// 30M gas limit and revert. This is a known FVM cost issue, not a
 		// contract logic bug. Skip to attack phase rather than retrying forever.
-		log.Printf("[foc-piece-security] deletion tx failed (likely gas limit on FVM cross-contract calls), skipping to attack phase")
+		// Replay via eth_call to capture revert reason
+		revertData, revertErr := foc.EthCallRaw(ctx, node, focCfg.PDPAddr, calldata)
+		log.Printf("[foc-piece-security] deletion REVERTED: revertData=%x revertErr=%v", revertData, revertErr)
+		log.Printf("[foc-piece-security] deletion tx failed, skipping to attack phase")
 		assert.Sometimes(false, "Piece deletion via FWSS callback succeeds", map[string]any{
 			"pieceID":   s.PieceID,
 			"dataSetID": gs.LastOnChainDSID,

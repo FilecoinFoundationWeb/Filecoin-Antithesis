@@ -29,14 +29,19 @@ type DatasetInfo struct {
 	LastSeenChallengeEpoch uint64 // last observed getNextChallengeEpoch value
 	LastSeenProvenEpoch    uint64 // last observed getDataSetLastProvenEpoch value
 	ChallengeEpochStale    int    // consecutive polls where challenge epoch didn't advance
+
+	// Piece-add lockup tracking (for checkLockupIncreasesOnPieceAdd)
+	LastSeenPieceCount  uint64   // last observed activePieceCount
+	LastSeenPayerLockup *big.Int // payer lockup when piece count was last read
 }
 
 // RailInfo holds state for a tracked payment rail.
 type RailInfo struct {
-	RailID uint64
-	Token  []byte
-	From   []byte
-	To     []byte
+	RailID              uint64
+	Token               []byte
+	From                []byte
+	To                  []byte
+	LastSeenSettledUpTo uint64 // for settlement monotonicity check
 }
 
 // NewSidecarState creates an initialized SidecarState.
