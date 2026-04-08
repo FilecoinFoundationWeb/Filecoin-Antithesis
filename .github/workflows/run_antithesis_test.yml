@@ -2,8 +2,7 @@ name: Run Antithesis Test
 
 on:
   schedule:
-    - cron: '30 15 * * *'  # nightly
-    - cron: '30 17 * * *'  # foc
+    - cron: '30 17 * * *'  # 11 PM IST / 5:30 PM UTC 
   workflow_dispatch:
     inputs:
       endpoint:
@@ -156,9 +155,9 @@ jobs:
             custom.forest_0_tag=${{ inputs.forest_0_tag }}
 
 
-  scheduled_nightly:
-    name: "Nightly Profile — balanced full coverage"
-    if: github.event_name == 'schedule' && github.event.schedule == '30 15 * * *'
+  scheduled_run_a:
+    name: "Nightly @ 11 PM IST - Implementors Team"
+    if: github.event_name == 'schedule' && github.event.schedule == '30 17 * * *'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -180,9 +179,9 @@ jobs:
             antithesis.source=main-nightly
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
-
-  scheduled_foc:
-    name: "FOC Profile — Curio PDP lifecycle"
+      
+  scheduled_run_b:
+    name: "Nightly @ 11 PM IST - FOC Team"
     if: github.event_name == 'schedule' && github.event.schedule == '30 17 * * *'
     runs-on: ubuntu-latest
     permissions:

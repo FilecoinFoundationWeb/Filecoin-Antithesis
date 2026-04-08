@@ -425,3 +425,4 @@ jobs:
             custom.duration=1.0
             antithesis.is_ephemeral=true
             custom.is_smoke_test=true
+            custom.setup=${{ matrix.notebook_name == 'filecoin-foc' && 'foc' || 'nightly' }}
