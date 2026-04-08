@@ -163,7 +163,7 @@ func classifyExpected(adversaryPct float64, f3HasQuorum bool) string {
 // ---------------------------------------------------------------------------
 
 func startConsensusTestLifecycle() {
-	if envOrDefault("STRESS_CONSENSUS_TEST", "1") != "1" {
+	if envOrDefault("STRESS_CONSENSUS_TEST", "0") != "1" {
 		log.Println("[consensus-test] disabled (STRESS_CONSENSUS_TEST != 1)")
 		return
 	}

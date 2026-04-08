@@ -20,6 +20,9 @@ export FOREST_CHAIN_INDEXER_ENABLED=true
 export FOREST_BLOCK_DELAY_SECS="${BLOCK_DELAY_SECS:-4}"
 export FOREST_PROPAGATION_DELAY_SECS=1
 
+# ---------------------------------------------------------------------------
+# Fetch drand chain info (needed on both fresh start and restart)
+# ---------------------------------------------------------------------------
 MAX_DRAND_RETRIES=60
 drand_attempt=0
 while true; do
@@ -55,7 +58,45 @@ generate_forest_config() {
     echo "name = \"${NETWORK_NAME}\"" >> "${FOREST_DATA_DIR}/forest_config.toml"
 }
 
-if [ ! -f "${FOREST_DATA_DIR}/jwt" ]; then
+# ---------------------------------------------------------------------------
+# Restart path: jwt exists, skip init, just restart daemon
+# ---------------------------------------------------------------------------
+if [ -f "${FOREST_DATA_DIR}/jwt" ]; then
+    echo "forest${node_number}: already initialized — restarting daemon"
+    generate_forest_config
+
+    for attempt in $(seq 1 10); do
+        forest --genesis "${SHARED_CONFIGS}/devgen.car" \
+               --config "${FOREST_DATA_DIR}/forest_config.toml" \
+               --rpc-address "${host_ip}:${FOREST_RPC_PORT}" \
+               --p2p-listen-address "/ip4/${host_ip}/tcp/${FOREST_P2P_PORT}" \
+               --healthcheck-address "${host_ip}:${FOREST_HEALTHZ_RPC_PORT}" &
+        FOREST_PID=$!
+        sleep 2
+        if kill -0 $FOREST_PID 2>/dev/null; then
+            echo "forest${node_number}: daemon started (attempt $attempt)"
+            break
+        fi
+        echo "forest${node_number}: daemon start failed (attempt $attempt/10), retrying..."
+        sleep 2
+    done
+
+    if ! kill -0 $FOREST_PID 2>/dev/null; then
+        echo "ERROR: forest${node_number} daemon failed to start after 10 attempts"
+        exit 1
+    fi
+
+    export TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
+    export FULLNODE_API_INFO="$TOKEN:/ip4/$host_ip/tcp/${FOREST_RPC_PORT}/http"
+    forest-cli wait-api
+
+    echo "forest${node_number}: restart complete — reconnecting peers"
+
+# ---------------------------------------------------------------------------
+# Fresh start: init, export artifacts
+# ---------------------------------------------------------------------------
+else
+    echo "forest${node_number}: fresh start — initializing"
     generate_forest_config
 
     echo "---------------------------"
@@ -68,39 +109,40 @@ if [ ! -f "${FOREST_DATA_DIR}/jwt" ]; then
         --no-healthcheck \
         --skip-load-actors \
         --exit-after-init
-else
-    echo "forest${node_number}: Node already initialized, skipping init..."
-    generate_forest_config
+
+    forest --genesis "${SHARED_CONFIGS}/devgen.car" \
+           --config "${FOREST_DATA_DIR}/forest_config.toml" \
+           --rpc-address "${host_ip}:${FOREST_RPC_PORT}" \
+           --p2p-listen-address "/ip4/${host_ip}/tcp/${FOREST_P2P_PORT}" \
+           --healthcheck-address "${host_ip}:${FOREST_HEALTHZ_RPC_PORT}" &
+    FOREST_PID=$!
+
+    export TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
+    export FULLNODE_API_INFO="$TOKEN:/ip4/$host_ip/tcp/${FOREST_RPC_PORT}/http"
+    echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
+
+    forest-cli wait-api
+    echo "forest${node_number}: collecting network info…"
+
+    forest-cli net listen | grep -v "127.0.0.1" | grep -v "::1" | head -n 1 > "${FOREST_DATA_DIR}/forest${node_number}-ipv4addr"
+    cp "${FOREST_DATA_DIR}/jwt" "${FOREST_DATA_DIR}/forest${node_number}-jwt"
+    forest-cli net id > "${FOREST_DATA_DIR}/forest${node_number}-p2pid" 2>/dev/null || echo "WARNING: P2P ID export failed"
+
+    echo "forest${node_number}: Exported artifacts to ${FOREST_DATA_DIR}:"
+    ls -la "${FOREST_DATA_DIR}/forest${node_number}-"* 2>/dev/null || true
+
+    echo "forest${node_number}: Importing genesis miner keys..."
+    for PRESEAL_KEY_FILE in ${SHARED_CONFIGS}/.genesis-sector-*/pre-seal-*.key; do
+        if [ -f "$PRESEAL_KEY_FILE" ]; then
+            echo "Importing pre-seal key from $PRESEAL_KEY_FILE"
+            forest-wallet --remote-wallet import "$PRESEAL_KEY_FILE" || true
+        fi
+    done
 fi
 
-forest --genesis "${SHARED_CONFIGS}/devgen.car" \
-       --config "${FOREST_DATA_DIR}/forest_config.toml" \
-       --rpc-address "${host_ip}:${FOREST_RPC_PORT}" \
-       --p2p-listen-address "/ip4/${host_ip}/tcp/${FOREST_P2P_PORT}" \
-       --healthcheck-address "${host_ip}:${FOREST_HEALTHZ_RPC_PORT}" &
-
-export TOKEN=$(cat "${FOREST_DATA_DIR}/jwt")
-export FULLNODE_API_INFO="$TOKEN:/ip4/$host_ip/tcp/${FOREST_RPC_PORT}/http"
-echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
-
-forest-cli wait-api
-echo "forest${node_number}: collecting network info…"
-
-forest-cli net listen | grep -v "127.0.0.1" | grep -v "::1" | head -n 1 > "${FOREST_DATA_DIR}/forest${node_number}-ipv4addr"
-cp "${FOREST_DATA_DIR}/jwt" "${FOREST_DATA_DIR}/forest${node_number}-jwt"
-forest-cli net id > "${FOREST_DATA_DIR}/forest${node_number}-p2pid" 2>/dev/null || echo "WARNING: P2P ID export failed"
-
-echo "forest${node_number}: Exported artifacts to ${FOREST_DATA_DIR}:"
-ls -la "${FOREST_DATA_DIR}/forest${node_number}-"* 2>/dev/null || true
-
-echo "forest${node_number}: Importing genesis miner keys..."
-for PRESEAL_KEY_FILE in ${SHARED_CONFIGS}/.genesis-sector-*/pre-seal-*.key; do
-    if [ -f "$PRESEAL_KEY_FILE" ]; then
-        echo "Importing pre-seal key from $PRESEAL_KEY_FILE"
-        forest-wallet --remote-wallet import "$PRESEAL_KEY_FILE" || true
-    fi
-done
-
+# ---------------------------------------------------------------------------
+# Peer connection (runs on both fresh start and restart)
+# ---------------------------------------------------------------------------
 connect_with_retries() {
     local max_retries=10
     local addr_file="$1"
@@ -150,6 +192,7 @@ forest-cli sync wait
 forest-cli sync status
 forest-cli healthcheck healthy --healthcheck-port "${FOREST_HEALTHZ_RPC_PORT}"
 
-echo "forest${node_number}: completed startup"
+touch "${SHARED_CONFIGS}/forest-${node_number}-ready"
+echo "forest${node_number}: completed startup (readiness marker written)"
 
-sleep infinity
+wait $FOREST_PID

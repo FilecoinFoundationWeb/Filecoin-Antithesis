@@ -97,6 +97,10 @@ build-filwizard:
 up:
 	$(builder) compose up -d
 
+.PHONY: up-full
+up-full:
+	$(builder) compose --profile full up -d
+
 .PHONY: up-foc
 up-foc:
 	$(builder) compose --profile foc up -d
@@ -104,6 +108,10 @@ up-foc:
 .PHONY: down
 down:
 	$(builder) compose down
+
+.PHONY: down-full
+down-full:
+	$(builder) compose --profile full down
 
 .PHONY: down-foc
 down-foc:

@@ -60,11 +60,50 @@ else
     log_info "Non-FOC profile."
 fi
 
-# ── 5. Signal setup complete to Antithesis ──
-log_info "All prerequisites met, signaling setup complete to Antithesis..."
+# ── 5. Wait for all nodes and miners to be ready ──
+NODES="${STRESS_NODES:-lotus0,lotus1,lotus2,lotus3}"
+IFS=',' read -ra NODE_LIST <<< "$NODES"
+
+log_info "Waiting for lotus node readiness markers..."
+for (( i=0; i<${NUM_LOTUS_CLIENTS:-4}; i++ )); do
+    marker="${SHARED_CONFIGS}/lotus-${i}-ready"
+    while [ ! -f "$marker" ]; do
+        log_info "  waiting for lotus${i} ($marker)..."
+        sleep 3
+    done
+    log_info "  lotus${i} ready"
+done
+
+if getent hosts forest0 &>/dev/null; then
+    log_info "Waiting for forest node readiness markers..."
+    for (( i=0; i<${NUM_FOREST_CLIENTS:-1}; i++ )); do
+        marker="${SHARED_CONFIGS}/forest-${i}-ready"
+        while [ ! -f "$marker" ]; do
+            log_info "  waiting for forest${i} ($marker)..."
+            sleep 3
+        done
+        log_info "  forest${i} ready"
+    done
+else
+    log_info "No forest nodes detected, skipping forest readiness check"
+fi
+
+NUM_MINERS="${NUM_LOTUS_MINERS:-4}"
+log_info "Waiting for $NUM_MINERS miner readiness markers..."
+for (( i=0; i<NUM_MINERS; i++ )); do
+    marker="${SHARED_CONFIGS}/miner-${i}-ready"
+    while [ ! -f "$marker" ]; do
+        log_info "  waiting for lotus-miner${i} ($marker)..."
+        sleep 3
+    done
+    log_info "  lotus-miner${i} ready"
+done
+
+# ── 6. Signal setup complete to Antithesis ──
+log_info "All nodes and miners ready, signaling setup complete to Antithesis..."
 /opt/antithesis/setup-complete
 
-# ── 6. Launch FOC sidecar if in FOC profile ──
+# ── 7. Launch FOC sidecar if in FOC profile ──
 if getent hosts filwizard &>/dev/null; then
     log_info "Starting FOC sidecar..."
     /opt/antithesis/foc-sidecar &
@@ -72,7 +111,7 @@ if getent hosts filwizard &>/dev/null; then
     log_info "FOC sidecar started (PID=$SIDECAR_PID)"
 fi
 
-# ── 7. Launch stress engine ──
+# ── 8. Launch stress engine ──
 log_info "Launching stress engine..."
 /opt/antithesis/stress-engine &
 STRESS_PID=$!
