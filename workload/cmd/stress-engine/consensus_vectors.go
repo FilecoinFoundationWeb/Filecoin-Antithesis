@@ -625,12 +625,16 @@ const (
 	// this many epochs, it's a persistent fork (real bug).
 	forkConvergenceBuffer = 50
 
-	// forkPollInterval is how often the background goroutine checks for forks.
-	forkPollInterval = 5 * time.Second
+	// forkPollIntervalDefault is the fallback if env var is not set.
+	forkPollIntervalDefault = 5
 
 	// forkMaxTracked limits memory usage for tracked forks.
 	forkMaxTracked = 100
 )
+
+// forkPollInterval is configurable via FORK_POLL_INTERVAL_SECS. Set higher
+// (e.g. 30) for FOC runs where fork detection is less critical.
+var forkPollInterval = time.Duration(envInt("FORK_POLL_INTERVAL_SECS", forkPollIntervalDefault)) * time.Second
 
 // trackedFork records a detected disagreement for later re-verification.
 type trackedFork struct {

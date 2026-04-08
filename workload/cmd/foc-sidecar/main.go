@@ -89,6 +89,12 @@ func main() {
 		checkProvingAdvancement(ctx, node, cfg, state)
 		checkPieceAccountingConsistency(ctx, node, cfg, state)
 		checkRateConsistency(ctx, node, cfg, state)
+		checkLockupNeverExceedsFunds(ctx, node, cfg, state)
+		checkDeletedDatasetRailTerminated(ctx, node, cfg, state)
+		checkSettlementMonotonicity(ctx, node, cfg, state)
+		checkDeletedDatasetFullySettled(ctx, node, cfg, state)
+		checkOperatorApprovalConsistency(ctx, node, cfg, state)
+		checkLockupIncreasesOnPieceAdd(ctx, node, cfg, state)
 
 		lastPolledBlock = finalizedHeight
 		pollCount++

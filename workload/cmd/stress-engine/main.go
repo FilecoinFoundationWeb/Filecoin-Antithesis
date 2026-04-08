@@ -300,6 +300,16 @@ func buildDeck() {
 			// Destructive — weight 0 by default (opt-in)
 			weightedAction{"DoFOCDeletePiece", "STRESS_WEIGHT_FOC_DELETE_PIECE", DoFOCDeletePiece, 0},
 			weightedAction{"DoFOCDeleteDataSet", "STRESS_WEIGHT_FOC_DELETE_DS", DoFOCDeleteDataSet, 0},
+			// PDP griefing and economic assertion probes
+			weightedAction{"DoPDPGriefingProbe", "STRESS_WEIGHT_PDP_GRIEFING", DoPDPGriefingProbe, 2},
+			// Security: piece lifecycle + attack probes
+			weightedAction{"DoFOCPieceSecurityProbe", "STRESS_WEIGHT_FOC_PIECE_SECURITY", DoFOCPieceSecurityProbe, 2},
+			// Security: independent payment/rail probes (settlement, withdrawTo, terminate, etc.)
+			weightedAction{"DoFOCPaymentSecurity", "STRESS_WEIGHT_FOC_PAYMENT_SECURITY", DoFOCPaymentSecurity, 2},
+			// Resilience scenario: Curio HTTP stress + orphan rails
+			weightedAction{"DoFOCResilienceProbe", "STRESS_WEIGHT_FOC_RESILIENCE", DoFOCResilienceProbe, 1},
+			// Cross-node receipt consistency (catches consensus divergence on EVM txs)
+			weightedAction{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 1},
 		)
 	}
 
@@ -377,6 +387,10 @@ func main() {
 			}
 			if focCfg != nil {
 				logFOCProgress()
+				logGriefProgress()
+				logPieceSecProgress()
+				logPaySecProgress()
+				logResProgress()
 			}
 		}
 	}
