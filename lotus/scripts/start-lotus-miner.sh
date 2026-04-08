@@ -18,10 +18,22 @@ export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
 lotus-miner --version
-lotus wallet import --as-default "${SHARED_CONFIGS}/.genesis-sector-${node_number}/pre-seal-${LOTUS_MINER_ACTOR_ADDRESS}.key"
+lotus wallet import --as-default "${SHARED_CONFIGS}/.genesis-sector-${node_number}/pre-seal-${LOTUS_MINER_ACTOR_ADDRESS}.key" || echo "lotus-miner${node_number}: wallet key already imported (restart)"
 
+# ---------------------------------------------------------------------------
+# Restart path: repo already exists, skip init
+# Partial init recovery: if config.toml is missing but dir exists, wipe and re-init
+# ---------------------------------------------------------------------------
 if [ -f "${LOTUS_MINER_PATH}/config.toml" ]; then
-    echo "lotus-miner${node_number}: Repo already exists, skipping init..."
+    echo "lotus-miner${node_number}: already initialized — restarting"
+elif [ -d "${LOTUS_MINER_PATH}" ]; then
+    echo "lotus-miner${node_number}: partial init detected (dir exists, no config.toml) — wiping and re-initializing"
+    rm -rf "${LOTUS_MINER_PATH}"
+    if [ "$node_number" -eq 0 ]; then
+        lotus-miner init --genesis-miner --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${node_number} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
+    else
+        lotus-miner init --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${node_number} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
+    fi
 else
     if [ "$node_number" -eq 0 ]; then
         lotus-miner init --genesis-miner --actor=${LOTUS_MINER_ACTOR_ADDRESS} --sector-size=2KiB --pre-sealed-sectors=${SHARED_CONFIGS}/.genesis-sector-${node_number} --pre-sealed-metadata=${SHARED_CONFIGS}/manifest.json --nosync
@@ -65,4 +77,12 @@ done
 
 lotus-miner log set-level "${SYSTEM_FLAGS[@]}" error
 lotus-miner log set-level "${SYSTEM_FLAGS[@]}" warn
+
+# Signal readiness in the background once the miner API is up
+(
+    while ! lotus-miner auth api-info --perm admin >/dev/null 2>&1; do sleep 1; done
+    touch "${SHARED_CONFIGS}/miner-${node_number}-ready"
+    echo "lotus-miner${node_number}: readiness marker written"
+) &
+
 lotus-miner run --nosync

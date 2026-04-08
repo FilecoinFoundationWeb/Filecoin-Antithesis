@@ -3,9 +3,9 @@ x-templates:
   filecoin_service: &filecoin_service
     env_file: .env
     environment:
-      - NUM_LOTUS_CLIENTS=4
-      - NUM_LOTUS_MINERS=4
-      - NUM_FOREST_CLIENTS=1
+      - NUM_LOTUS_CLIENTS=${NUM_LOTUS_CLIENTS:-4}
+      - NUM_LOTUS_MINERS=${NUM_LOTUS_MINERS:-4}
+      - NUM_FOREST_CLIENTS=${NUM_FOREST_CLIENTS:-1}
       - SECTORS_PER_MINER=${SECTORS_PER_MINER:-4,3,2,1}
     volumes:
       - ./data/lotus0:${LOTUS_0_DATA_DIR}
@@ -137,7 +137,7 @@ services:
     image: workload:latest
     container_name: workload
     environment:
-      - STRESS_NODES=${STRESS_NODES:-lotus0,lotus1,lotus2,lotus3}
+      - STRESS_NODES=${STRESS_NODES:-lotus0,lotus1,lotus2,lotus3,forest0}
       - STRESS_RPC_PORT=1234
       - STRESS_FOREST_RPC_PORT=3456
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
