@@ -254,6 +254,7 @@ func buildDeck() {
 		{"DoStateAudit", "STRESS_WEIGHT_STATE_AUDIT", DoStateAudit, 5},
 		{"DoF3FinalityMonitor", "STRESS_WEIGHT_F3_MONITOR", DoF3FinalityMonitor, 2},
 		{"DoF3FinalityAgreement", "STRESS_WEIGHT_F3_AGREEMENT", DoF3FinalityAgreement, 3},
+		{"DoDrandBeaconAudit", "STRESS_WEIGHT_DRAND_BEACON_AUDIT", DoDrandBeaconAudit, 3},
 	}
 
 	// Non-FOC stress vectors — skipped when FOC profile is active.
@@ -268,6 +269,8 @@ func buildDeck() {
 		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 1},
 		// Cross-node consistency
 		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
+		// Drand beacon consistency
+		{"DoDrandBeaconAudit", "STRESS_WEIGHT_DRAND_BEACON_AUDIT", DoDrandBeaconAudit, 3},
 		// EVM contract stress
 		{"DoDeployContracts", "STRESS_WEIGHT_DEPLOY", DoDeployContracts, 1},
 		{"DoContractCall", "STRESS_WEIGHT_CONTRACT_CALL", DoContractCall, 1},

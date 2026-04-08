@@ -17,7 +17,7 @@ export FOREST_F3_SIDECAR_RPC_ENDPOINT="${!f3_sidecar_var}"
 export FOREST_F3_BOOTSTRAP_EPOCH=5
 export FOREST_F3_FINALITY=2
 export FOREST_CHAIN_INDEXER_ENABLED=true
-export FOREST_BLOCK_DELAY_SECS=6
+export FOREST_BLOCK_DELAY_SECS="${BLOCK_DELAY_SECS:-4}"
 export FOREST_PROPAGATION_DELAY_SECS=1
 
 MAX_DRAND_RETRIES=60
@@ -28,7 +28,7 @@ while true; do
 
     if [ $? -eq 0 ] && echo "$response" | jq -e '.public_key?' >/dev/null 2>&1; then
         # Forest expects drand config as {servers, chain_info, network_type}
-        formatted_json=$(jq --arg server "http://drand0" '{ servers: [$server], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$response")
+        formatted_json=$(jq '{ servers: ["http://drand0", "http://drand1", "http://drand2"], chain_info: { public_key: .public_key, period: .period, genesis_time: .genesis_time, hash: .hash, groupHash: .groupHash }, network_type: "Quicknet" }' <<<"$response")
         echo "formatted_json: $formatted_json"
         export FOREST_DRAND_QUICKNET_CONFIG="$formatted_json"
         echo "forest${node_number}: Drand chain info ready"

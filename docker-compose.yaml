@@ -59,6 +59,8 @@ services:
     container_name: drand0
     image: drand:latest
     entrypoint: ./start-drand0.sh
+    volumes:
+      - ./data/drand0:/root/.drand
     healthcheck:
       <<: *healthcheck_settings
       test: drand util ping http://drand0:8080
@@ -68,6 +70,8 @@ services:
     container_name: drand1
     image: drand:latest
     entrypoint: ./start-drand1.sh
+    volumes:
+      - ./data/drand1:/root/.drand
     healthcheck:
       <<: *healthcheck_settings
       test: drand util ping http://drand1:8080
@@ -77,6 +81,8 @@ services:
     container_name: drand2
     image: drand:latest
     entrypoint: ./start-drand2.sh
+    volumes:
+      - ./data/drand2:/root/.drand
     healthcheck:
       <<: *healthcheck_settings
       test: drand util ping http://drand2:8080
@@ -146,6 +152,7 @@ services:
       - STRESS_WEIGHT_STATE_AUDIT=${STRESS_WEIGHT_STATE_AUDIT:-3}
       - STRESS_WEIGHT_F3_MONITOR=${STRESS_WEIGHT_F3_MONITOR:-2}
       - STRESS_WEIGHT_F3_AGREEMENT=${STRESS_WEIGHT_F3_AGREEMENT:-3}
+      - STRESS_WEIGHT_DRAND_BEACON_AUDIT=${STRESS_WEIGHT_DRAND_BEACON_AUDIT:-3}
       # Power / reorg
       - STRESS_WEIGHT_REORG=${STRESS_WEIGHT_REORG:-0}
       - STRESS_WEIGHT_POWER_SLASH=${STRESS_WEIGHT_POWER_SLASH:-2}
