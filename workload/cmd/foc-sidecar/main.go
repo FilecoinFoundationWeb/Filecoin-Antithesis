@@ -8,7 +8,6 @@ import (
 	"workload/internal/chain"
 	"workload/internal/foc"
 
-	"github.com/antithesishq/antithesis-sdk-go/lifecycle"
 	"github.com/filecoin-project/lotus/api"
 )
 
@@ -102,9 +101,6 @@ func main() {
 		}
 
 		if !setupDone {
-			lifecycle.SetupComplete(map[string]any{
-				"component": "foc-sidecar",
-			})
 			setupDone = true
 			log.Println("[foc-sidecar] setup complete, polling active")
 		}

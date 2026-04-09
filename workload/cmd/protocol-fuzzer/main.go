@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/antithesishq/antithesis-sdk-go/lifecycle"
 )
 
 // ---------------------------------------------------------------------------
@@ -105,13 +104,6 @@ func main() {
 
 	// Build weighted attack deck
 	buildDeck()
-
-	lifecycle.SetupComplete(map[string]any{
-		"targets":      len(targets),
-		"network_name": networkName,
-		"genesis_cid":  genesisCID,
-		"deck_size":    len(deck),
-	})
 
 	log.Println("[protocol-fuzzer] entering main loop")
 
