@@ -892,14 +892,11 @@ func DoF3FinalityAgreement() {
 		return
 	}
 
-	// Find the minimum F3 instance across all responsive lotus nodes.
+	// Find the minimum F3 instance across all responsive nodes (including Forest).
 	// Every node at or past this instance must have a certificate for it.
 	var minInst uint64
 	respondedNodes := 0
 	for _, name := range nodeKeys {
-		if nodeType(name) != "lotus" {
-			continue
-		}
 		inst, ok := getF3Instance(nodes[name])
 		if !ok {
 			continue
@@ -917,29 +914,28 @@ func DoF3FinalityAgreement() {
 	// check a settled one to avoid races with in-progress instances).
 	checkInst := uint64(rngIntn(int(minInst-1))) + 1
 
-	// Query each lotus node for the F3 certificate at this instance.
+	// Query ALL nodes (including Forest) for the F3 certificate at this instance.
+	// Cross-implementation divergence in F3 finality is the highest-severity consensus bug.
 	type nodeResult struct {
 		name     string
+		nodeImpl string // "lotus" or "forest"
 		chainKey string // hex-encoded ECChain key digest
 		err      error
 	}
 
 	var results []nodeResult
 	for _, name := range nodeKeys {
-		if nodeType(name) != "lotus" {
-			continue
-		}
 		cert, err := nodes[name].F3GetCertificate(ctx, checkInst)
 		if err != nil {
-			results = append(results, nodeResult{name: name, err: err})
+			results = append(results, nodeResult{name: name, nodeImpl: nodeType(name), err: err})
 			continue
 		}
 		if cert == nil || cert.ECChain.IsZero() {
-			results = append(results, nodeResult{name: name, err: fmt.Errorf("nil cert or zero chain")})
+			results = append(results, nodeResult{name: name, nodeImpl: nodeType(name), err: fmt.Errorf("nil cert or zero chain")})
 			continue
 		}
 		key := cert.ECChain.Key()
-		results = append(results, nodeResult{name: name, chainKey: hex.EncodeToString(key[:])})
+		results = append(results, nodeResult{name: name, nodeImpl: nodeType(name), chainKey: hex.EncodeToString(key[:])})
 	}
 
 	// Group by finalized ECChain key
@@ -960,22 +956,46 @@ func DoF3FinalityAgreement() {
 
 	agreed := len(chainKeys) == 1
 
+	// Track which implementations are represented
+	implTypes := map[string]bool{}
+	for _, r := range results {
+		if r.err == nil {
+			implTypes[r.nodeImpl] = true
+		}
+	}
+	crossImpl := implTypes["lotus"] && implTypes["forest"]
+
 	assert.Always(agreed, "F3 finality agreement: all nodes finalized same chain for instance", map[string]any{
 		"instance":        checkInst,
 		"unique_chains":   len(chainKeys),
 		"chain_map":       chainKeys,
 		"nodes_responded": responded,
 		"nodes_errored":   errors,
+		"cross_impl":      crossImpl,
 	})
 
 	if !agreed {
-		log.Printf("[f3-agreement] FINALITY DISAGREEMENT at instance %d: %v", checkInst, chainKeys)
+		log.Printf("[f3-agreement] FINALITY DISAGREEMENT at instance %d: %v (cross_impl=%v)", checkInst, chainKeys, crossImpl)
 	} else {
-		debugLog("[f3-agreement] instance %d: all %d nodes agree", checkInst, responded)
+		debugLog("[f3-agreement] instance %d: all %d nodes agree (cross_impl=%v)", checkInst, responded, crossImpl)
+	}
+
+	// Cross-implementation F3 agreement is the highest-value safety check.
+	// A Lotus/Forest disagreement on F3 certificates = CVE-level consensus split.
+	if crossImpl {
+		assert.Always(agreed, "F3 cross-implementation agreement: Lotus and Forest finalized same chain", map[string]any{
+			"instance":      checkInst,
+			"unique_chains": len(chainKeys),
+			"chain_map":     chainKeys,
+		})
+		assert.Sometimes(true, "F3 cross-implementation check executed", map[string]any{
+			"instance": checkInst,
+		})
 	}
 
 	assert.Sometimes(agreed, "F3 finality agreement check ran successfully", map[string]any{
 		"instance":        checkInst,
 		"nodes_responded": responded,
+		"cross_impl":      crossImpl,
 	})
 }

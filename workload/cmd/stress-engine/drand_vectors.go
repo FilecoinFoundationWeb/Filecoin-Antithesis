@@ -68,6 +68,38 @@ func DoDrandBeaconAudit() {
 			continue
 		}
 
+		// Verify ALL blocks in the tipset have identical beacon entries.
+		// The spec assumes this, and Blocks()[0] is used for randomness derivation.
+		// A malicious miner with different beacon entries in their block could
+		// manipulate randomness if their block sorts to position [0].
+		if len(blks) > 1 {
+			refBeacon := blks[0].BeaconEntries
+			for bi := 1; bi < len(blks); bi++ {
+				otherBeacon := blks[bi].BeaconEntries
+				beaconMatch := len(refBeacon) == len(otherBeacon)
+				if beaconMatch {
+					for ei := range refBeacon {
+						if refBeacon[ei].Round != otherBeacon[ei].Round ||
+							hex.EncodeToString(refBeacon[ei].Data) != hex.EncodeToString(otherBeacon[ei].Data) {
+							beaconMatch = false
+							break
+						}
+					}
+				}
+				assert.Always(beaconMatch, "Beacon entries identical across all blocks in tipset", map[string]any{
+					"height":     checkHeight,
+					"node":       name,
+					"num_blocks": len(blks),
+					"block_0":    blks[0].Miner.String(),
+					"block_n":    blks[bi].Miner.String(),
+				})
+				if !beaconMatch {
+					log.Printf("[drand-audit] BEACON MISMATCH within tipset at height %d on %s: block[0]=%s block[%d]=%s",
+						checkHeight, name, blks[0].Miner, bi, blks[bi].Miner)
+				}
+			}
+		}
+
 		// All blocks in a tipset share the same beacon entries; use the first block.
 		be := blks[0].BeaconEntries
 		if len(be) == 0 {
