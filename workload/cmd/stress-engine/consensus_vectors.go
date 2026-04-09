@@ -541,7 +541,13 @@ func DoStateAudit() {
 		}
 	}
 
-	if len(stateRoots) < 2 {
+	// Need at least 2 responding nodes (values in the map) to compare.
+	// Note: len(stateRoots) counts unique roots, not responding nodes.
+	totalResponded := 0
+	for _, names := range stateRoots {
+		totalResponded += len(names)
+	}
+	if totalResponded < 2 {
 		return
 	}
 
