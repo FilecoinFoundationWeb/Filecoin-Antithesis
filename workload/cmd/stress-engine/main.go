@@ -14,7 +14,6 @@ import (
 	"workload/internal/chain"
 	"workload/internal/foc"
 
-	"github.com/antithesishq/antithesis-sdk-go/lifecycle"
 	"github.com/antithesishq/antithesis-sdk-go/random"
 
 	"github.com/filecoin-project/go-address"
@@ -357,12 +356,6 @@ func main() {
 	initContractBytecodes()
 	focCfg = foc.ParseEnvironment()
 	buildDeck()
-
-	lifecycle.SetupComplete(map[string]any{
-		"nodes":   len(nodes),
-		"wallets": len(addrs),
-		"deck":    len(deck),
-	})
 
 	// Background goroutines — run independently of the deck
 	startForkMonitor() // observes forks during partitions
