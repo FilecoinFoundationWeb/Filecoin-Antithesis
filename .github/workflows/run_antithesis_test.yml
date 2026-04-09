@@ -100,6 +100,11 @@ on:
         required: false
         default: false
         description: Enable to run an smoke test.
+      quiet_recovery:
+        type: boolean
+        required: false
+        default: false
+        description: Enable quiet recovery checks (pauses fault injection to verify chain self-healing)
 
 jobs:
   manual_run:
@@ -153,6 +158,7 @@ jobs:
             custom.lotus_miner_1_tag=${{ inputs.lotus_miner_1_tag }}
             custom.forest_tag=${{ inputs.forest }}
             custom.forest_0_tag=${{ inputs.forest_0_tag }}
+            custom.quiet_recovery=${{ inputs.quiet_recovery }}
 
 
   scheduled_run_a:

@@ -255,6 +255,8 @@ func buildDeck() {
 		{"DoF3FinalityMonitor", "STRESS_WEIGHT_F3_MONITOR", DoF3FinalityMonitor, 2},
 		{"DoF3FinalityAgreement", "STRESS_WEIGHT_F3_AGREEMENT", DoF3FinalityAgreement, 3},
 		{"DoDrandBeaconAudit", "STRESS_WEIGHT_DRAND_BEACON_AUDIT", DoDrandBeaconAudit, 3},
+		// Quiet recovery: pauses all faults, checks self-healing (off by default, enable via QUIET_RECOVERY_ENABLED=1)
+		{"DoQuietRecovery", "STRESS_WEIGHT_QUIET_RECOVERY", DoQuietRecovery, 0},
 	}
 
 	// Non-FOC stress vectors — skipped when FOC profile is active.
