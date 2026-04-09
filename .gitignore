@@ -1,5 +1,6 @@
 # Runtime data (generated on container start, never committed)
 data/
+antithesis/
 shared/
 !data/.gitkeep
 
