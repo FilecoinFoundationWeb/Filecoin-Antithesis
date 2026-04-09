@@ -225,6 +225,9 @@ func DoTipsetConsensus() {
 	if !allNodesPastEpoch(f3MinEpoch) {
 		return
 	}
+	if partitionActive.Load() {
+		return
+	}
 
 	snap := getFinalizedSnapshots()
 	finalizedHeight, anchorKey := snapshotMinHeight(snap)
@@ -260,7 +263,7 @@ func DoTipsetConsensus() {
 
 	consensusReached := len(tipsetKeys) == 1
 
-	assert.Sometimes(consensusReached, "All nodes agree on the same finalized tipset", map[string]any{
+	details := map[string]any{
 		"height":         checkHeight,
 		"finalized_at":   finalizedHeight,
 		"tipset_keys":    tipsetKeys,
@@ -268,7 +271,15 @@ func DoTipsetConsensus() {
 		"nodes_checked":  responded,
 		"nodes":          nodeKeys,
 		"errors":         errs,
-	})
+	}
+
+	// Heights well below the finalization frontier are deeply finalized —
+	// nodes MUST agree. Near the frontier, transient disagreement is tolerable.
+	if checkHeight < finalizedHeight-10 {
+		assert.Always(consensusReached, "All nodes agree on deeply finalized tipset", details)
+	} else {
+		assert.Sometimes(consensusReached, "All nodes agree on the same finalized tipset", details)
+	}
 
 	if errs > 0 {
 		log.Printf("[chain-monitor] %d/%d nodes had query errors at height %d (finalized=%d)",
@@ -431,6 +442,9 @@ func DoStateRootComparison() {
 	if !allNodesPastEpoch(f3MinEpoch) {
 		return
 	}
+	if partitionActive.Load() {
+		return
+	}
 
 	snap := getFinalizedSnapshots()
 	finalizedHeight, anchorKey := snapshotMinHeight(snap)
@@ -463,17 +477,22 @@ func DoStateRootComparison() {
 
 	statesMatch := len(stateRoots) == 1
 
-	// Sometimes: with shallow EC finality, nodes on different fork branches
-	// will have different state roots at the same height. This is expected
-	// during transient forks and should resolve after convergence.
-	assert.Sometimes(statesMatch, "Chain state is consistent across all nodes", map[string]any{
+	details := map[string]any{
 		"height":        checkHeight,
 		"finalized_at":  finalizedHeight,
 		"state_roots":   stateRoots,
 		"unique_states": len(stateRoots),
 		"nodes_checked": len(nodeKeys),
 		"nodes":         nodeKeys,
-	})
+	}
+
+	// Heights well below the finalization frontier are deeply finalized —
+	// nodes MUST agree on state. Near the frontier, transient divergence is tolerable.
+	if checkHeight < finalizedHeight-10 {
+		assert.Always(statesMatch, "Chain state consistent at deeply finalized height", details)
+	} else {
+		assert.Sometimes(statesMatch, "Chain state is consistent across all nodes", details)
+	}
 
 	if statesMatch {
 		debugLog("  [chain-monitor] OK: all %d nodes agree at height %d (finalized=%d)", len(nodeKeys), checkHeight, finalizedHeight)
