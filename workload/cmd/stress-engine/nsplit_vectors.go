@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -122,10 +123,12 @@ type attackResult struct {
 	attack     attackType
 	fromAddr   address.Address
 	nonce      uint64
-	cidA       cid.Cid // sent to honest node
-	cidB       cid.Cid // sent to adversary node
+	cidA       cid.Cid         // sent to honest node
+	cidB       cid.Cid         // sent to adversary node
 	honestNode string
 	advNode    string
+	amount     abi.TokenAmount // transfer amount for balance verification
+	preBalance abi.TokenAmount // sender balance snapshot before attack
 }
 
 // ---------------------------------------------------------------------------
@@ -216,14 +219,10 @@ func runConsensusCycle(cycleNum int) {
 	attack := attackType((cycleNum / int(splitCount)) % int(attackCount))
 
 	// --- Header ---
-	log.Printf("[consensus-test] ╔══════════════════════════════════════════════╗")
-	log.Printf("[consensus-test] ║   CONSENSUS TEST — CYCLE %-3d                ║", cycleNum)
-	log.Printf("[consensus-test] ╚══════════════════════════════════════════════╝")
-	log.Printf("[consensus-test] F3 active: %v", f3Active)
+	log.Printf("[consensus-test] === CYCLE %d === strategy=%s attack=%s f3=%v", cycleNum, split, attack, f3Active)
 	for _, m := range table {
 		log.Printf("[consensus-test]   %s: %.1f%% power", minerToNodeName(m.addr), m.pct)
 	}
-	log.Printf("[consensus-test] strategy: %s | attack: %s", split, attack)
 
 	// --- Snapshot ---
 	var preF3Inst uint64
@@ -274,6 +273,7 @@ func runConsensusCycle(cycleNum int) {
 
 	// --- Verify ---
 	landed := verifyOutcome(lotusNode, ar, cycleNum, sr, f3Active, attack)
+	verifyEconomicImpact(lotusNode, ar, sr, landed)
 
 	// --- F3 health ---
 	if f3Active {
@@ -298,17 +298,20 @@ func runConsensusCycle(cycleNum int) {
 		verdict = "INCONCLUSIVE — neither tx landed"
 	}
 
-	log.Printf("[consensus-test] ╔══════════════════════════════════════════╗")
-	log.Printf("[consensus-test] ║         CYCLE %-3d SUMMARY                ║", cycleNum)
-	log.Printf("[consensus-test] ╠══════════════════════════════════════════╣")
-	log.Printf("[consensus-test] ║ Strategy:      %-25s ║", split)
-	log.Printf("[consensus-test] ║ Adversary:     %-10s (%.0f%%)          ║", sr.adversaryName, sr.adversaryPct)
-	log.Printf("[consensus-test] ║ Attack:        %-25s ║", attack)
-	log.Printf("[consensus-test] ║ F3 active:     %-5v  quorum: %-5v      ║", f3Active, sr.f3HasQuorum)
-	log.Printf("[consensus-test] ║ EC vulnerable: %-5v                     ║", sr.ecVulnerable)
-	log.Printf("[consensus-test] ║ Landed:        %d/2                      ║", landed)
-	log.Printf("[consensus-test] ║ Verdict:       %-25s ║", verdict)
-	log.Printf("[consensus-test] ╚══════════════════════════════════════════╝")
+	summaryJSON, _ := json.Marshal(map[string]any{
+		"event":         "consensus_cycle_result",
+		"cycle":         cycleNum,
+		"strategy":      split.String(),
+		"adversary":     sr.adversaryName,
+		"adversary_pct": sr.adversaryPct,
+		"attack":        attack.String(),
+		"f3_active":     f3Active,
+		"f3_has_quorum": sr.f3HasQuorum,
+		"ec_vulnerable": sr.ecVulnerable,
+		"landed":        landed,
+		"verdict":       verdict,
+	})
+	log.Printf("[consensus-test] RESULT %s", string(summaryJSON))
 }
 
 // ---------------------------------------------------------------------------
@@ -695,8 +698,16 @@ func injectAttack(attack attackType, honestName, advName string, advNode api.Ful
 	fromAddr, fromKI := pickWallet()
 	nonce := nonces[fromAddr]
 
+	// Snapshot sender balance before attack for economic verification
+	var preBalance abi.TokenAmount
+	actor, err := nodes[honestName].StateGetActor(ctx, fromAddr, types.EmptyTSK)
+	if err == nil && actor != nil {
+		preBalance = actor.Balance
+	}
+
 	var cidA, cidB cid.Cid
 	var okA, okB bool
+	var attackAmount abi.TokenAmount
 
 	switch attack {
 	case attackDoubleSpend:
@@ -708,10 +719,11 @@ func injectAttack(attack attackType, honestName, advName string, advNode api.Ful
 			toB, _ = pickWallet()
 		}
 
-		msgA := baseMsg(fromAddr, toA, abi.NewTokenAmount(1_000_000_000))
+		attackAmount = abi.NewTokenAmount(1_000_000_000)
+		msgA := baseMsg(fromAddr, toA, attackAmount)
 		cidA, okA = pushMsgManualNonce(nodes[honestName], msgA, fromKI, nonce, "test-honest")
 
-		msgB := baseMsg(fromAddr, toB, abi.NewTokenAmount(1_000_000_000))
+		msgB := baseMsg(fromAddr, toB, attackAmount)
 		cidB, okB = pushMsgManualNonce(advNode, msgB, fromKI, nonce, "test-adversary")
 
 		log.Printf("[consensus-test] ATTACK: double-spend")
@@ -725,12 +737,13 @@ func injectAttack(attack attackType, honestName, advName string, advNode api.Ful
 			toAddr, _ = pickWallet()
 		}
 
-		msgLow := baseMsg(fromAddr, toAddr, abi.NewTokenAmount(1_000_000_000))
+		attackAmount = abi.NewTokenAmount(1_000_000_000)
+		msgLow := baseMsg(fromAddr, toAddr, attackAmount)
 		msgLow.GasPremium = abi.NewTokenAmount(100)
 		msgLow.GasFeeCap = abi.NewTokenAmount(100_000)
 		cidA, okA = pushMsgManualNonce(nodes[honestName], msgLow, fromKI, nonce, "test-lowfee")
 
-		msgHigh := baseMsg(fromAddr, toAddr, abi.NewTokenAmount(1_000_000_000))
+		msgHigh := baseMsg(fromAddr, toAddr, attackAmount)
 		msgHigh.GasPremium = abi.NewTokenAmount(50_000)
 		msgHigh.GasFeeCap = abi.NewTokenAmount(200_000)
 		cidB, okB = pushMsgManualNonce(advNode, msgHigh, fromKI, nonce, "test-highfee")
@@ -748,20 +761,21 @@ func injectAttack(attack attackType, honestName, advName string, advNode api.Ful
 			toB, _ = pickWallet()
 		}
 
-		// Query balance
-		actor, err := nodes[honestName].StateGetActor(ctx, fromAddr, types.EmptyTSK)
-		if err != nil || actor == nil || actor.Balance.IsZero() {
+		// Query balance (use fresh query; preBalance snapshot may be stale)
+		drainActor, drainErr := nodes[honestName].StateGetActor(ctx, fromAddr, types.EmptyTSK)
+		if drainErr != nil || drainActor == nil || drainActor.Balance.IsZero() {
 			log.Printf("[consensus-test] cannot query balance for %s", fromAddr)
 			return nil
 		}
 
 		// Reserve 1 FIL for gas
 		gasBudget := abi.NewTokenAmount(1_000_000_000_000_000_000)
-		if actor.Balance.LessThanEqual(gasBudget) {
-			log.Printf("[consensus-test] insufficient balance for drain (%s)", actor.Balance)
+		if drainActor.Balance.LessThanEqual(gasBudget) {
+			log.Printf("[consensus-test] insufficient balance for drain (%s)", drainActor.Balance)
 			return nil
 		}
-		drainAmt := abi.TokenAmount{Int: new(big.Int).Sub(actor.Balance.Int, gasBudget.Int)}
+		drainAmt := abi.TokenAmount{Int: new(big.Int).Sub(drainActor.Balance.Int, gasBudget.Int)}
+		attackAmount = drainAmt
 
 		msgA := baseMsg(fromAddr, toA, drainAmt)
 		cidA, okA = pushMsgManualNonce(nodes[honestName], msgA, fromKI, nonce, "test-drain-honest")
@@ -791,6 +805,8 @@ func injectAttack(attack attackType, honestName, advName string, advNode api.Ful
 		cidB:       cidB,
 		honestNode: honestName,
 		advNode:    advName,
+		amount:     attackAmount,
+		preBalance: preBalance,
 	}
 }
 
@@ -801,17 +817,24 @@ func injectAttack(attack attackType, honestName, advName string, advNode api.Ful
 func verifyOutcome(refNode api.FullNode, ar *attackResult, cycleNum int,
 	sr *splitResult, f3Active bool, attack attackType) int {
 
-	log.Printf("[consensus-test] ═══ VERIFICATION ═══")
+	log.Printf("[consensus-test] verifying outcome...")
 
-	// Wait for mining
-	log.Printf("[consensus-test] waiting for txs to settle...")
-	time.Sleep(30 * time.Second)
+	// Wait for finalized height to advance so txs have time to be included
+	// and finalized. More reliable than a fixed sleep.
+	waitForFinalizedAdvance(refNode, 5, 2*time.Minute)
 
 	finalA, _ := refNode.StateSearchMsg(ctx, types.EmptyTSK, ar.cidA, 200, false)
 	finalB, _ := refNode.StateSearchMsg(ctx, types.EmptyTSK, ar.cidB, 200, false)
 
-	aLanded := finalA != nil
-	bLanded := finalB != nil
+	aLanded := finalA != nil && finalA.Receipt.ExitCode.IsSuccess()
+	bLanded := finalB != nil && finalB.Receipt.ExitCode.IsSuccess()
+
+	if finalA != nil && !finalA.Receipt.ExitCode.IsSuccess() {
+		log.Printf("[consensus-test]   tx A included but reverted (exit=%d)", finalA.Receipt.ExitCode)
+	}
+	if finalB != nil && !finalB.Receipt.ExitCode.IsSuccess() {
+		log.Printf("[consensus-test]   tx B included but reverted (exit=%d)", finalB.Receipt.ExitCode)
+	}
 	landed := 0
 	if aLanded {
 		landed++
@@ -865,6 +888,70 @@ func verifyOutcome(refNode api.FullNode, ar *attackResult, cycleNum int,
 	}
 
 	return landed
+}
+
+// ---------------------------------------------------------------------------
+// Economic Impact Verification
+// ---------------------------------------------------------------------------
+
+// verifyEconomicImpact checks that the sender's balance decreased by at most
+// one transaction's worth. This is the economic proof that a double-spend was
+// prevented (or, when EC is vulnerable, that it actually moved excess funds).
+func verifyEconomicImpact(refNode api.FullNode, ar *attackResult, sr *splitResult, landed int) {
+	if ar.preBalance.IsZero() || ar.amount.IsZero() {
+		return // no snapshot available
+	}
+
+	finHeight, finTsk := getFinalizedHeight()
+	if finHeight < finalizedMinHeight {
+		return
+	}
+
+	actor, err := refNode.StateGetActor(ctx, ar.fromAddr, finTsk)
+	if err != nil || actor == nil {
+		log.Printf("[consensus-test] cannot query post-attack balance: %v", err)
+		return
+	}
+
+	postBalance := actor.Balance
+	balanceDrop := new(big.Int).Sub(ar.preBalance.Int, postBalance.Int)
+
+	// Max cost of ONE tx: amount + gasLimit(1M) * gasFeeCap(100K) = ~100B attoFIL
+	maxGasCost := big.NewInt(100_000_000_000)
+	maxSingleTxCost := new(big.Int).Add(ar.amount.Int, maxGasCost)
+
+	details := map[string]any{
+		"from":          ar.fromAddr.String(),
+		"pre_balance":   ar.preBalance.String(),
+		"post_balance":  postBalance.String(),
+		"balance_drop":  balanceDrop.String(),
+		"max_single_tx": maxSingleTxCost.String(),
+		"amount":        ar.amount.String(),
+		"landed":        landed,
+		"f3_has_quorum": sr.f3HasQuorum,
+		"ec_vulnerable": sr.ecVulnerable,
+	}
+
+	if sr.f3HasQuorum || !sr.ecVulnerable {
+		// Safety: balance should not drop more than one tx's worth
+		safe := balanceDrop.Cmp(maxSingleTxCost) <= 0
+		assert.Always(safe, "No double-spend: balance bounded by single tx cost", details)
+		if !safe {
+			log.Printf("[consensus-test] ECONOMIC VIOLATION: balance dropped by %s, max expected %s",
+				balanceDrop, maxSingleTxCost)
+		}
+	} else {
+		// EC-vulnerable: check whether double-spend actually moved excess money
+		doubleSpent := balanceDrop.Cmp(maxSingleTxCost) > 0
+		if doubleSpent {
+			log.Printf("[consensus-test] ECONOMIC CONFIRMATION: double-spend moved excess funds (drop=%s > max=%s)",
+				balanceDrop, maxSingleTxCost)
+			assert.Sometimes(true, "EC vulnerability: double-spend economic impact confirmed", details)
+		}
+	}
+
+	log.Printf("[consensus-test] balance: pre=%s post=%s drop=%s max_single=%s",
+		ar.preBalance, postBalance, balanceDrop, maxSingleTxCost)
 }
 
 // ---------------------------------------------------------------------------
@@ -932,6 +1019,39 @@ func waitForSettlement(refNode api.FullNode, preHeight abi.ChainEpoch) {
 	}
 }
 
+
+// waitForFinalizedAdvance waits until the finalized tipset advances by at least
+// `epochs` epochs from its current height, or until the timeout expires.
+func waitForFinalizedAdvance(node api.FullNode, epochs int, timeout time.Duration) {
+	startTs, err := node.ChainGetFinalizedTipSet(ctx)
+	if err != nil {
+		log.Printf("[consensus-test] cannot get finalized tipset, falling back to sleep")
+		time.Sleep(30 * time.Second)
+		return
+	}
+
+	target := startTs.Height() + abi.ChainEpoch(epochs)
+	deadline := time.After(timeout)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-deadline:
+			log.Printf("[consensus-test] finalized advance timeout (target=%d)", target)
+			return
+		case <-time.After(5 * time.Second):
+			ts, err := node.ChainGetFinalizedTipSet(ctx)
+			if err != nil {
+				continue
+			}
+			if ts.Height() >= target {
+				log.Printf("[consensus-test] finalized height advanced to %d (target was %d)", ts.Height(), target)
+				return
+			}
+		}
+	}
+}
 
 func fmtHeight(result *api.MsgLookup) string {
 	if result == nil {
