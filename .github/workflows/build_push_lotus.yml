@@ -2,8 +2,8 @@ name: Build & Push Lotus
 
 on: 
   schedule:
-    # 6 PM EST daily
-    - cron: '0 22 * * *'
+    # 12:30 PM EST daily
+    - cron: '30 17 * * *'
   workflow_dispatch:
     inputs:
       lotus_tag:
