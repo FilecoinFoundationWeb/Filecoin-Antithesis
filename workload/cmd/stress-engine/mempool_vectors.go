@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"sync"
+	"time"
 
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 
@@ -133,6 +134,11 @@ func doDoubleSpend() {
 	if len(nodeKeys) < 2 {
 		return
 	}
+	// Skip during intentional partitions — both txs could land on different
+	// forks, creating a false positive after heal.
+	if partitionActive.Load() {
+		return
+	}
 
 	fromAddr, fromKI := pickWallet()
 	toAddrA, _ := pickWallet()
@@ -183,7 +189,54 @@ func doDoubleSpend() {
 	// Nonce is consumed regardless
 	nonces[fromAddr]++
 
-	debugLog("[adversarial] double-spend: nodeA=%s err=%v, nodeB=%s err=%v", nodeA, errA, nodeB, errB)
+	if errA != nil && errB != nil {
+		debugLog("[adversarial] double-spend: both pushes failed (nodeA=%v, nodeB=%v)", errA, errB)
+		return
+	}
+
+	// On-chain verification: at most one same-nonce tx should land
+	cidA := smsgA.Cid()
+	cidB := smsgB.Cid()
+	refNode := nodes[nodeKeys[0]]
+
+	time.Sleep(30 * time.Second)
+
+	resultA, _ := refNode.StateSearchMsg(ctx, types.EmptyTSK, cidA, 200, false)
+	resultB, _ := refNode.StateSearchMsg(ctx, types.EmptyTSK, cidB, 200, false)
+
+	aLanded := resultA != nil && resultA.Receipt.ExitCode.IsSuccess()
+	bLanded := resultB != nil && resultB.Receipt.ExitCode.IsSuccess()
+
+	landed := 0
+	if aLanded {
+		landed++
+	}
+	if bLanded {
+		landed++
+	}
+
+	safe := landed <= 1
+	assert.Always(safe, "At most one double-spend tx lands on chain", map[string]any{
+		"from":     fromAddr.String(),
+		"nonce":    currentNonce,
+		"node_a":   nodeA,
+		"node_b":   nodeB,
+		"a_landed": aLanded,
+		"b_landed": bLanded,
+		"total":    landed,
+	})
+
+	if landed > 1 {
+		log.Printf("[adversarial] DOUBLE-SPEND VIOLATION: both txs landed for nonce %d", currentNonce)
+	}
+
+	assert.Sometimes(landed >= 1, "At least one double-spend tx lands", map[string]any{
+		"from":  fromAddr.String(),
+		"nonce": currentNonce,
+		"total": landed,
+	})
+
+	debugLog("[adversarial] double-spend: nodeA=%s nodeB=%s landed=%d/2", nodeA, nodeB, landed)
 }
 
 // doInvalidSignature constructs a message with garbage signature bytes
