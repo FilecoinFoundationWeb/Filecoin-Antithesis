@@ -113,7 +113,7 @@ services:
     healthcheck:
       <<: *healthcheck_settings
       test: curl --fail http://lotus2:1234/health/livez
-    profiles: [ full ]
+    profiles: [ full, foc ]
 
   lotus3:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
@@ -242,7 +242,7 @@ services:
     image: lotus:${LOTUS_MINER_2_TAG:-${LOTUS_TAG:-latest}}
     container_name: lotus-miner2
     entrypoint: [ "./scripts/start-lotus-miner.sh", "2" ]
-    profiles: [ full ]
+    profiles: [ full, foc ]
 
   lotus-miner3:
     <<: [ *filecoin_service, *needs_lotus3_healthy ]
