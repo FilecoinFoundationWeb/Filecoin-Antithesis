@@ -2,8 +2,8 @@ name: Build & Push Workload
 
 on:
   schedule:
-    # 12:30 PM EST daily
-    - cron: '30 17 * * *'
+    # 9:30 AM EST daily (3 hours before nightly Antithesis run)
+    - cron: '30 14 * * *'
   workflow_dispatch:
     inputs:
       workload_tag:
