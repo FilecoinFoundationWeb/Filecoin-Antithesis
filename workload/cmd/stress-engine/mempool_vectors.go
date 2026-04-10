@@ -199,10 +199,35 @@ func doDoubleSpend() {
 	cidB := smsgB.Cid()
 	refNode := nodes[nodeKeys[0]]
 
-	time.Sleep(30 * time.Second)
+	// Wait for chain to advance 5 epochs rather than wall-clock time.
+	// Antithesis runs on a single core with time dilation, so wall-clock
+	// sleeps don't reliably correspond to block production.
+	startHead, headErr := refNode.ChainHead(ctx)
+	chainAdvanced := false
+	if headErr == nil {
+		targetHeight := startHead.Height() + 5
+		deadline := time.After(120 * time.Second)
+	waitLoop:
+		for {
+			select {
+			case <-deadline:
+				break waitLoop
+			case <-time.After(2 * time.Second):
+				head, err := refNode.ChainHead(ctx)
+				if err == nil && head.Height() >= targetHeight {
+					chainAdvanced = true
+					break waitLoop
+				}
+			}
+		}
+	} else {
+		// Fallback: if ChainHead fails, sleep and hope
+		time.Sleep(30 * time.Second)
+	}
 
-	resultA, _ := refNode.StateSearchMsg(ctx, types.EmptyTSK, cidA, 200, false)
-	resultB, _ := refNode.StateSearchMsg(ctx, types.EmptyTSK, cidB, 200, false)
+	// allowReplaced=true: the nonce may have been consumed by a replacement msg
+	resultA, _ := refNode.StateSearchMsg(ctx, types.EmptyTSK, cidA, 200, true)
+	resultB, _ := refNode.StateSearchMsg(ctx, types.EmptyTSK, cidB, 200, true)
 
 	aLanded := resultA != nil && resultA.Receipt.ExitCode.IsSuccess()
 	bLanded := resultB != nil && resultB.Receipt.ExitCode.IsSuccess()
@@ -230,13 +255,18 @@ func doDoubleSpend() {
 		log.Printf("[adversarial] DOUBLE-SPEND VIOLATION: both txs landed for nonce %d", currentNonce)
 	}
 
-	assert.Sometimes(landed >= 1, "At least one double-spend tx lands", map[string]any{
-		"from":  fromAddr.String(),
-		"nonce": currentNonce,
-		"total": landed,
-	})
+	// Only assert liveness if the chain actually advanced — if no blocks were
+	// produced during our wait (e.g., drand killed, partition), the assertion
+	// is meaningless noise.
+	if chainAdvanced {
+		assert.Sometimes(landed >= 1, "At least one double-spend tx lands", map[string]any{
+			"from":  fromAddr.String(),
+			"nonce": currentNonce,
+			"total": landed,
+		})
+	}
 
-	debugLog("[adversarial] double-spend: nodeA=%s nodeB=%s landed=%d/2", nodeA, nodeB, landed)
+	debugLog("[adversarial] double-spend: nodeA=%s nodeB=%s landed=%d/2 chainAdvanced=%v", nodeA, nodeB, landed, chainAdvanced)
 }
 
 // doInvalidSignature constructs a message with garbage signature bytes

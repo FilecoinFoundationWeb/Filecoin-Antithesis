@@ -17,6 +17,13 @@ export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
+# Map per-node miner API listen address to the env var lotus-miner reads.
+# Uses DNS hostname so the api file is IP-change resilient.
+miner_api_listen="LOTUS_MINER_${node_number}_API_LISTENADDRESS"
+if [ -n "${!miner_api_listen:-}" ]; then
+    export LOTUS_MINER_API_LISTENADDRESS="${!miner_api_listen}"
+fi
+
 lotus-miner --version
 lotus wallet import --as-default "${SHARED_CONFIGS}/.genesis-sector-${node_number}/pre-seal-${LOTUS_MINER_ACTOR_ADDRESS}.key" || echo "lotus-miner${node_number}: wallet key already imported (restart)"
 
@@ -75,12 +82,34 @@ for sys in "${LOG_SYSTEMS[@]}"; do
     SYSTEM_FLAGS+=("--system" "$sys")
 done
 
-lotus-miner log set-level "${SYSTEM_FLAGS[@]}" error
-lotus-miner log set-level "${SYSTEM_FLAGS[@]}" warn
+# Wait for backing lotus node to be reachable before starting miner daemon
+LOTUS_NODE_HOST="lotus${node_number}"
+LOTUS_NODE_RPC="http://${LOTUS_NODE_HOST}:${LOTUS_RPC_PORT}/rpc/v1"
+MAX_RETRIES=120
+attempt=0
+while true; do
+    if curl -sf -X POST -H "Content-Type: application/json" \
+        --data '{"jsonrpc":"2.0","method":"Filecoin.Version","params":[],"id":1}' \
+        "$LOTUS_NODE_RPC" >/dev/null 2>&1; then
+        echo "lotus-miner${node_number}: backing lotus node reachable at ${LOTUS_NODE_HOST}"
+        break
+    fi
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge "$MAX_RETRIES" ]; then
+        echo "lotus-miner${node_number}: WARNING: lotus node not reachable after ${MAX_RETRIES} attempts, starting anyway"
+        break
+    fi
+    if [ $((attempt % 15)) -eq 0 ]; then
+        echo "lotus-miner${node_number}: waiting for lotus node (attempt ${attempt}/${MAX_RETRIES})..."
+    fi
+    sleep 2
+done
 
-# Signal readiness in the background once the miner API is up
+# Signal readiness and set log levels in the background once the miner API is up
 (
     while ! lotus-miner auth api-info --perm admin >/dev/null 2>&1; do sleep 1; done
+    lotus-miner log set-level "${SYSTEM_FLAGS[@]}" error
+    lotus-miner log set-level "${SYSTEM_FLAGS[@]}" warn
     touch "${SHARED_CONFIGS}/miner-${node_number}-ready"
     echo "lotus-miner${node_number}: readiness marker written"
 ) &

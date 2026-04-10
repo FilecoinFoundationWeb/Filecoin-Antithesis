@@ -20,6 +20,15 @@ export LOTUS_SKIP_GENESIS_CHECK=${LOTUS_SKIP_GENESIS_CHECK}
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
+# Map per-node API listen address to the env var lotus actually reads.
+# Uses DNS hostname (e.g. /dns/lotus1/tcp/1234/http) so the api file
+# is IP-change resilient across container restarts.
+lotus_api_listen="LOTUS_${node_number}_API_LISTENADDRESS"
+if [ -n "${!lotus_api_listen:-}" ]; then
+    export LOTUS_API_LISTENADDRESS="${!lotus_api_listen}"
+    echo "lotus${node_number}: API listen=${LOTUS_API_LISTENADDRESS} (DNS-based)"
+fi
+
 # F3 toggle: per-node override (LOTUS_N_F3_ENABLED) falls back to global (LOTUS_F3_ENABLED)
 per_node_f3="LOTUS_${node_number}_F3_ENABLED"
 if [ -n "${!per_node_f3:-}" ]; then
