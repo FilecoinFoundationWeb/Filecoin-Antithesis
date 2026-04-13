@@ -265,6 +265,16 @@ func runConsensusCycle(cycleNum int) {
 	partitionActive.Store(false)
 	healPartition(sr)
 
+	// Check adversary is still alive after heal — Antithesis may have killed it
+	_, advAliveErr := sr.advNode.ChainHead(ctx)
+	if advAliveErr != nil {
+		log.Printf("[consensus-test] adversary %s unreachable after heal: %v — skipping hard assertions", sr.adversaryName, advAliveErr)
+		assert.Sometimes(true, "Consensus cycle ran but adversary was killed by Antithesis", map[string]any{
+			"cycle": cycleNum, "adversary": sr.adversaryName,
+		})
+		return
+	}
+
 	converged := waitForConvergence(sr.adversaryName)
 	log.Printf("[consensus-test] convergence: %v", converged)
 
@@ -532,7 +542,7 @@ func createStarSplit(table []minerPowerInfo, f3Active bool) *splitResult {
 }
 
 // createBisection splits the network into two roughly equal halves.
-// With 3:3:2:2 power: groupA = lotus0(30%)+lotus3(20%) = 50%,
+// With 4:3:2:1 power: groupA = lotus0(40%)+lotus3(10%) = 50%,
 //                      groupB = lotus1(30%)+lotus2(20%) = 50%.
 // Neither side has majority. Tests fork resolution under maximum ambiguity.
 func createBisection(table []minerPowerInfo, f3Active bool) *splitResult {
@@ -992,6 +1002,9 @@ func waitForDivergence(honestName, advName string, advNode api.FullNode) {
 				honestName, hHead.Height(), advName, aHead.Height(), diff)
 			if diff >= divergeMinEpochs {
 				log.Printf("[consensus-test] chains diverged by %d epochs", diff)
+				assert.Reachable("Partition achieved chain divergence", map[string]any{
+					"honest": honestName, "adversary": advName, "diff": diff,
+				})
 				return
 			}
 		}
