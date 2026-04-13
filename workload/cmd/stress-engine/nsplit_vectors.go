@@ -281,14 +281,24 @@ func runConsensusCycle(cycleNum int) {
 	// --- Settlement ---
 	waitForSettlement(lotusNode, preHead.Height())
 
-	// --- Verify ---
-	landed := verifyOutcome(lotusNode, ar, cycleNum, sr, f3Active, attack)
-	verifyEconomicImpact(lotusNode, ar, sr, landed)
+	// --- Re-check F3 (may have stalled during partition — don't assume pre-partition state) ---
+	postF3Active := isF3Active()
+	if f3Active && !postF3Active {
+		log.Printf("[consensus-test] WARNING: F3 was active pre-partition but stalled during cycle")
+		// Downgrade: if F3 stalled, don't assert F3 safety guarantees
+		sr.f3HasQuorum = false
+		sr.expected = classifyExpected(sr.adversaryPct, false)
+	}
+
+	// --- Verify on honest-side node (not random — avoids adversary's divergent view) ---
+	verifyNode := nodes[sr.honestNode]
+	landed := verifyOutcome(verifyNode, ar, cycleNum, sr, postF3Active, attack)
+	verifyEconomicImpact(verifyNode, ar, sr, landed)
 
 	// --- F3 health ---
 	if f3Active {
-		postF3, _ := getF3Instance(lotusNode)
-		log.Printf("[consensus-test] F3 post-heal: %d→%d", preF3Inst, postF3)
+		postF3, _ := getF3Instance(verifyNode)
+		log.Printf("[consensus-test] F3 post-heal: %d→%d (active=%v)", preF3Inst, postF3, postF3Active)
 	}
 
 	// --- Structured summary ---
@@ -397,10 +407,10 @@ func createFullIsolation(table []minerPowerInfo, f3Active bool) *splitResult {
 		}
 	}
 
-	// Block adversary on each honest node
+	// Block adversary on each honest node (including forest — prevents gossip bridge)
 	advAddrInfo, _ := advNode.NetAddrsListen(ctx)
 	for _, name := range nodeKeys {
-		if name == advName || nodeType(name) != "lotus" {
+		if name == advName {
 			continue
 		}
 		if err := nodes[name].NetBlockAdd(ctx, api.NetBlockList{Peers: []peer.ID{advAddrInfo.ID}}); err != nil {
@@ -408,8 +418,25 @@ func createFullIsolation(table []minerPowerInfo, f3Active bool) *splitResult {
 		} else {
 			blocked = append(blocked, blockedPeer{onNode: name, peerID: advAddrInfo.ID})
 		}
-		// Also disconnect existing connection from honest→adversary
+		// Also disconnect existing connection
 		nodes[name].NetDisconnect(ctx, advAddrInfo.ID)
+	}
+
+	// Block forest on adversary too (bidirectional — forest can't relay)
+	for _, name := range nodeKeys {
+		if nodeType(name) != "forest" {
+			continue
+		}
+		forestAddrInfo, err := nodes[name].NetAddrsListen(ctx)
+		if err != nil {
+			continue
+		}
+		if err := advNode.NetBlockAdd(ctx, api.NetBlockList{Peers: []peer.ID{forestAddrInfo.ID}}); err != nil {
+			log.Printf("[consensus-test] NetBlockAdd(forest) on %s failed: %v", advName, err)
+		} else {
+			blocked = append(blocked, blockedPeer{onNode: advName, peerID: forestAddrInfo.ID})
+		}
+		advNode.NetDisconnect(ctx, forestAddrInfo.ID)
 	}
 
 	honestPct := 100.0 - adversary.pct
@@ -431,15 +458,22 @@ func createFullIsolation(table []minerPowerInfo, f3Active bool) *splitResult {
 	}
 }
 
-// createStarSplit implements the n-split attack from Wang et al. 2023.
-// Every node is fully isolated from every other node — each miner mines
-// alone on its own fork. The adversary (largest miner at 40%) has more
-// power than any individual honest miner (30%, 20%, 10%), even though
-// total honest power (60%) exceeds the adversary.
+// createStarSplit implements the n-split attack from Wang et al. 2023 §6.
+// Topology: adversary (hub) stays connected to ALL honest miners, but
+// honest miners are isolated FROM EACH OTHER. Each honest miner can only
+// communicate with the adversary.
 //
-// This is the core insight of the n-split attack: fragmenting honest
-// power into N solo partitions lets a minority adversary outmine each
-// fragment individually.
+// This is stronger than full fragmentation because the adversary:
+//   - Receives blocks from all honest miners (information advantage)
+//   - Can selectively relay or withhold blocks
+//   - Honest miners see only their own blocks + what the adversary sends
+//
+// With 4:3:2:1 power:
+//   - Adversary (40%) sees everyone's blocks
+//   - lotus1 (30%) sees only adversary blocks
+//   - lotus2 (20%) sees only adversary blocks
+//   - lotus3 (10%) sees only adversary blocks
+//   - F3 cannot reach quorum: no honest miner can talk to another
 func createStarSplit(table []minerPowerInfo, f3Active bool) *splitResult {
 	adversary := table[0] // largest miner
 	advName := minerToNodeName(adversary.addr)
@@ -447,51 +481,68 @@ func createStarSplit(table []minerPowerInfo, f3Active bool) *splitResult {
 		return nil
 	}
 
-	// Gather all node names and peer IDs
-	allNames := []string{}
+	// Gather honest node names and peer IDs
+	honestNames := []string{}
 	peerIDs := map[string]peer.ID{} // nodeName -> peerID
 	for _, m := range table {
 		name := minerToNodeName(m.addr)
 		if name == "" {
 			continue
 		}
-		allNames = append(allNames, name)
 		addrInfo, err := nodes[name].NetAddrsListen(ctx)
 		if err == nil {
 			peerIDs[name] = addrInfo.ID
 		}
+		if name != advName {
+			honestNames = append(honestNames, name)
+		}
 	}
 
-	// Isolate every node from every other node
+	// Isolate honest miners from each other (but NOT from adversary).
+	// For each honest node: block all OTHER honest nodes, keep adversary connected.
 	var allSavedPeers []peer.AddrInfo
 	var blocked []blockedPeer
 	totalDisconnected := 0
 
-	for _, name := range allNames {
-		// Build block list: all other nodes
+	for _, name := range honestNames {
+		// Build block list: all other HONEST nodes (not adversary)
 		var toBlock []peer.ID
-		for _, otherName := range allNames {
-			if otherName == name {
+		for _, otherHonest := range honestNames {
+			if otherHonest == name {
 				continue
 			}
-			if pid, ok := peerIDs[otherName]; ok {
+			if pid, ok := peerIDs[otherHonest]; ok {
 				toBlock = append(toBlock, pid)
 			}
 		}
 
-		// Disconnect all peers
+		// Also block forest0 if present (prevents gossip bridge — see audit issue #3)
+		for _, n := range nodeKeys {
+			if nodeType(n) == "forest" {
+				if fAddrInfo, err := nodes[n].NetAddrsListen(ctx); err == nil {
+					toBlock = append(toBlock, fAddrInfo.ID)
+					blocked = append(blocked, blockedPeer{onNode: name, peerID: fAddrInfo.ID})
+				}
+			}
+		}
+
+		// Disconnect honest→honest peers (but keep honest→adversary)
+		advPID := peerIDs[advName]
 		peers, err := nodes[name].NetPeers(ctx)
 		if err != nil {
 			continue
 		}
 		for _, p := range peers {
+			if p.ID == advPID {
+				continue // keep adversary connection
+			}
 			if err := nodes[name].NetDisconnect(ctx, p.ID); err == nil {
 				totalDisconnected++
 				allSavedPeers = append(allSavedPeers, p)
 			}
 		}
 
-		// Block all other nodes
+		// Block other honest nodes
 		if len(toBlock) > 0 {
 			if err := nodes[name].NetBlockAdd(ctx, api.NetBlockList{Peers: toBlock}); err != nil {
 				log.Printf("[consensus-test] NetBlockAdd on %s failed: %v", name, err)
@@ -503,10 +554,33 @@ func createStarSplit(table []minerPowerInfo, f3Active bool) *splitResult {
 		}
 	}
 
+	// Also block forest on each honest node's REVERSE direction:
+	// forest blocks all honest nodes (only keeps adversary if connected)
+	for _, n := range nodeKeys {
+		if nodeType(n) != "forest" {
+			continue
+		}
+		var forestBlock []peer.ID
+		for _, honestName := range honestNames {
+			if pid, ok := peerIDs[honestName]; ok {
+				forestBlock = append(forestBlock, pid)
+			}
+		}
+		if len(forestBlock) > 0 {
+			if err := nodes[n].NetBlockAdd(ctx, api.NetBlockList{Peers: forestBlock}); err != nil {
+				log.Printf("[consensus-test] NetBlockAdd on %s (forest) failed: %v", n, err)
+			} else {
+				for _, pid := range forestBlock {
+					blocked = append(blocked, blockedPeer{onNode: n, peerID: pid})
+				}
+			}
+		}
+	}
+
 	honestPct := 100.0 - adversary.pct
-	log.Printf("[consensus-test] n-split: %d nodes fully isolated, disconnected %d + blocked %d connections",
-		len(allNames), totalDisconnected, len(blocked))
-	for _, name := range allNames {
+	log.Printf("[consensus-test] n-split (star): adversary=%s (%.1f%%) as hub, %d honest miners isolated from each other",
+		advName, adversary.pct, len(honestNames))
+	for _, name := range honestNames {
 		pct := 0.0
 		for _, m := range table {
 			if minerToNodeName(m.addr) == name {
@@ -514,16 +588,13 @@ func createStarSplit(table []minerPowerInfo, f3Active bool) *splitResult {
 				break
 			}
 		}
-		log.Printf("[consensus-test]   solo: %s (%.1f%%)", name, pct)
+		log.Printf("[consensus-test]   spoke: %s (%.1f%%) ←→ %s only", name, pct, advName)
 	}
 
 	// Pick first honest node for attack injection
 	honestTarget := ""
-	for _, name := range allNames {
-		if name != advName {
-			honestTarget = name
-			break
-		}
+	if len(honestNames) > 0 {
+		honestTarget = honestNames[0]
 	}
 
 	return &splitResult{
@@ -536,7 +607,7 @@ func createStarSplit(table []minerPowerInfo, f3Active bool) *splitResult {
 		savedPeers:    allSavedPeers,
 		blocked:       blocked,
 		ecVulnerable:  adversary.pct >= ecThresholdPct,
-		f3HasQuorum:   false, // no node has >67% alone — F3 cannot reach quorum
+		f3HasQuorum:   false, // honest miners can't communicate — F3 cannot reach quorum
 		expected:      classifyExpected(adversary.pct, false),
 	}
 }
@@ -552,7 +623,7 @@ func createBisection(table []minerPowerInfo, f3Active bool) *splitResult {
 	}
 
 	// Split: biggest + smallest vs middle two
-	// With sorted desc [30, 30, 20, 20]: groupA = [0]+[3] = 50%, groupB = [1]+[2] = 50%
+	// With sorted desc [40, 30, 20, 10]: groupA = [0]+[3] = 50%, groupB = [1]+[2] = 50%
 	groupA := []minerPowerInfo{table[0], table[len(table)-1]}
 	groupB := []minerPowerInfo{}
 	for i := 1; i < len(table)-1; i++ {
@@ -650,6 +721,33 @@ func createBisection(table []minerPowerInfo, f3Active bool) *splitResult {
 				log.Printf("[consensus-test] NetBlockAdd on %s failed: %v", name, err)
 			} else {
 				for _, pid := range groupAPeerList {
+					blocked = append(blocked, blockedPeer{onNode: name, peerID: pid})
+				}
+			}
+		}
+	}
+
+	// Block forest from both groups (prevents gossip bridge between partitions)
+	for _, name := range nodeKeys {
+		if nodeType(name) != "forest" {
+			continue
+		}
+		forestAddrInfo, err := nodes[name].NetAddrsListen(ctx)
+		if err != nil {
+			continue
+		}
+		// Block forest on all miners
+		for _, mName := range append(groupANames, groupBNames...) {
+			if err := nodes[mName].NetBlockAdd(ctx, api.NetBlockList{Peers: []peer.ID{forestAddrInfo.ID}}); err == nil {
+				blocked = append(blocked, blockedPeer{onNode: mName, peerID: forestAddrInfo.ID})
+			}
+			nodes[mName].NetDisconnect(ctx, forestAddrInfo.ID)
+		}
+		// Block all miners on forest
+		allPeerIDs := append(groupAPeerList, groupBPeerList...)
+		if len(allPeerIDs) > 0 {
+			if err := nodes[name].NetBlockAdd(ctx, api.NetBlockList{Peers: allPeerIDs}); err == nil {
+				for _, pid := range allPeerIDs {
 					blocked = append(blocked, blockedPeer{onNode: name, peerID: pid})
 				}
 			}
@@ -798,12 +896,12 @@ func injectAttack(attack attackType, honestName, advName string, advNode api.Ful
 		log.Printf("[consensus-test]   tx B (drain→B):   %s amount=%s via %s", cidStr(cidB), drainAmt, advName)
 	}
 
-	nonces[fromAddr]++
-
 	if !okA || !okB {
 		log.Printf("[consensus-test] push failed (okA=%v okB=%v)", okA, okB)
 		return nil
 	}
+
+	nonces[fromAddr]++
 
 	log.Printf("[consensus-test]   from=%s nonce=%d", fromAddr, nonce)
 
@@ -893,7 +991,8 @@ func verifyOutcome(refNode api.FullNode, ar *attackResult, cycleNum int,
 			log.Printf("[consensus-test] EC resolved fork — honest majority won")
 			assert.Sometimes(true, "EC resolved fork correctly", details)
 		} else {
-			log.Printf("[consensus-test] Neither tx landed")
+			log.Printf("[consensus-test] Neither tx landed under EC-vulnerable partition")
+			assert.Sometimes(landed > 0, "Attack landed at least one tx under EC-vulnerable partition", details)
 		}
 	}
 
@@ -978,7 +1077,7 @@ func pickHonestNode(adversaryName string) string {
 }
 
 func waitForDivergence(honestName, advName string, advNode api.FullNode) {
-	log.Printf("[consensus-test] waiting for divergence (need %d epoch diff)...", divergeMinEpochs)
+	log.Printf("[consensus-test] waiting for divergence (need %d epoch diff OR tipset fork)...", divergeMinEpochs)
 
 	deadline := time.After(divergeTimeout)
 	for {
@@ -994,16 +1093,34 @@ func waitForDivergence(honestName, advName string, advNode api.FullNode) {
 			if e1 != nil || e2 != nil {
 				continue
 			}
+
+			// Check height difference
 			diff := hHead.Height() - aHead.Height()
 			if diff < 0 {
 				diff = -diff
 			}
-			log.Printf("[consensus-test]   %s=%d  %s=%d  diff=%d",
-				honestName, hHead.Height(), advName, aHead.Height(), diff)
-			if diff >= divergeMinEpochs {
-				log.Printf("[consensus-test] chains diverged by %d epochs", diff)
+
+			// Check actual tipset fork at the lower height (more reliable than height diff)
+			minH := hHead.Height()
+			if aHead.Height() < minH {
+				minH = aHead.Height()
+			}
+			forked := false
+			if minH > 0 {
+				hTs, e1 := nodes[honestName].ChainGetTipSetByHeight(ctx, minH, hHead.Key())
+				aTs, e2 := advNode.ChainGetTipSetByHeight(ctx, minH, aHead.Key())
+				if e1 == nil && e2 == nil {
+					forked = hTs.Key() != aTs.Key()
+				}
+			}
+
+			log.Printf("[consensus-test]   %s=%d  %s=%d  diff=%d forked=%v",
+				honestName, hHead.Height(), advName, aHead.Height(), diff, forked)
+
+			if diff >= divergeMinEpochs || forked {
+				log.Printf("[consensus-test] chains diverged (diff=%d, forked=%v)", diff, forked)
 				assert.Reachable("Partition achieved chain divergence", map[string]any{
-					"honest": honestName, "adversary": advName, "diff": diff,
+					"honest": honestName, "adversary": advName, "diff": diff, "forked": forked,
 				})
 				return
 			}
