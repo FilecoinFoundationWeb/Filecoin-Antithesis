@@ -304,7 +304,7 @@ func DoMessageOrderingAttack() {
 
 	statesMatch := len(stateRoots) == 1
 
-	assert.Sometimes(statesMatch, "State roots match after message ordering attack", map[string]any{
+	assert.Reachable("State roots match after message ordering attack", map[string]any{
 		"finalized_height": finalizedHeight,
 		"messages_sent":    len(sent),
 		"unique_states":    len(stateRoots),
@@ -387,7 +387,7 @@ func DoNonceBombard() {
 	}
 
 	allLanded := true
-	assert.Sometimes(true, "Nonce bombard sentinel landed", map[string]any{
+	assert.Reachable("Nonce bombard sentinel landed", map[string]any{
 		"base_nonce":    baseNonce,
 		"sentinel":      sentinelNonce,
 		"messages_sent": len(sent),
@@ -505,7 +505,7 @@ func DoGasExhaustionEdge() {
 		return
 	}
 
-	assert.Sometimes(true, "Gas exhaustion edge big message included", map[string]any{
+	assert.Reachable("Gas exhaustion edge big message included", map[string]any{
 		"iterations":   iterations,
 		"small_pushed": len(smallCids),
 		"exit_code":    bigResult.Receipt.ExitCode,

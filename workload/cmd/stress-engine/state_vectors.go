@@ -81,7 +81,7 @@ func DoActorMigrationStress() {
 	}
 
 	someDeployed := len(contracts) > 0
-	assert.Sometimes(someDeployed, "Actor migration deployed at least one contract", map[string]any{
+	assert.Reachable("Actor migration deployed at least one contract", map[string]any{
 		"attempted": numDeploys,
 		"deployed":  len(contracts),
 	})
@@ -118,7 +118,7 @@ func DoActorMigrationStress() {
 		}
 	}
 
-	assert.Sometimes(destroyedCount > 0, "Actor migration destroyed at least one contract", map[string]any{
+	assert.Reachable("Actor migration destroyed at least one contract", map[string]any{
 		"attempted": numDestroy,
 		"destroyed": destroyedCount,
 	})
@@ -235,7 +235,7 @@ func DoActorLifecycleStress() {
 		}
 	}
 
-	assert.Sometimes(true, "Actor lifecycle completed all 5 phases", map[string]any{
+	assert.Reachable("Actor lifecycle completed all 5 phases", map[string]any{
 		"contract": contractAddr.String(),
 	})
 

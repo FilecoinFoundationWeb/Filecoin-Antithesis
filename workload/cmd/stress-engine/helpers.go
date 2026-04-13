@@ -240,7 +240,7 @@ func verifyActorConsistency(addr address.Address, phase string) {
 		details["state_"+r.node] = r.state
 	}
 
-	assert.Sometimes(allMatch, "Actor state consistent across nodes", details)
+	assert.Reachable("Actor state consistent across nodes", details)
 
 	if !allMatch {
 		log.Printf("[actor-verify] DIVERGENCE %s actor=%s: %v", phase, addr, details)
