@@ -38,13 +38,14 @@ import (
 // ===========================================================================
 
 const (
-	ecThresholdPct    = 20.0           // EC vulnerability threshold (Wang 2023, m=5)
-	f3QuorumPct       = 67.0           // F3 honest power requirement
-	convergenceBuffer = 25             // epochs past heal before verification
-	divergeMinEpochs  = 5              // min epoch diff before injecting attack
+	ecThresholdPct    = 20.0            // EC vulnerability threshold (Wang 2023, m=5)
+	f3QuorumPct       = 67.0            // F3 honest power requirement
+	convergenceBuffer = 25              // epochs past heal before verification
+	divergeMinEpochs  = 15              // min epoch diff before injecting attack (was 5 — too shallow for txs to land)
 	divergeTimeout    = 5 * time.Minute
 	settlementTimeout = 10 * time.Minute
 	testCooldown      = 30 * time.Second
+	attackMineTimeout = 60 * time.Second // max wait for attack txs to be mined before healing
 )
 
 // partitionActive signals to deck vectors that a test partition is active.
@@ -259,6 +260,13 @@ func runConsensusCycle(cycleNum int) {
 		healPartition(sr)
 		return
 	}
+
+	// --- Wait for attack txs to be mined on their respective forks ---
+	// Without this, healing immediately after injection means the honest majority
+	// reconverges before the adversary's tx is included in a block, so the tx
+	// is pruned from the mempool and never lands on the final chain.
+	mined := waitForAttackMined(ar, sr)
+	log.Printf("[consensus-test] attack mining: honest=%v adversary=%v", mined.honestMined, mined.advMined)
 
 	// --- Heal ---
 	log.Printf("[consensus-test] HEALING partition...")
@@ -1066,6 +1074,48 @@ func verifyEconomicImpact(refNode api.FullNode, ar *attackResult, sr *splitResul
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+type attackMineResult struct {
+	honestMined bool
+	advMined    bool
+}
+
+// waitForAttackMined polls both sides of the partition to check if the attack
+// transactions have been included in blocks. Returns when both are mined or timeout.
+func waitForAttackMined(ar *attackResult, sr *splitResult) attackMineResult {
+	deadline := time.After(attackMineTimeout)
+	result := attackMineResult{}
+	log.Printf("[consensus-test] waiting for attack txs to be mined (timeout=%v)...", attackMineTimeout)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return result
+		case <-deadline:
+			log.Printf("[consensus-test] attack mine timeout — proceeding with heal")
+			return result
+		case <-time.After(4 * time.Second):
+			if !result.honestMined {
+				r, _ := nodes[ar.honestNode].StateSearchMsg(ctx, types.EmptyTSK, ar.cidA, 50, false)
+				if r != nil {
+					result.honestMined = true
+					log.Printf("[consensus-test]   tx A mined on honest side at height %d", r.Height)
+				}
+			}
+			if !result.advMined {
+				r, _ := sr.advNode.StateSearchMsg(ctx, types.EmptyTSK, ar.cidB, 50, false)
+				if r != nil {
+					result.advMined = true
+					log.Printf("[consensus-test]   tx B mined on adversary side at height %d", r.Height)
+				}
+			}
+			if result.honestMined && result.advMined {
+				log.Printf("[consensus-test] both attack txs mined — healing partition")
+				return result
+			}
+		}
+	}
+}
 
 func pickHonestNode(adversaryName string) string {
 	for _, name := range nodeKeys {
