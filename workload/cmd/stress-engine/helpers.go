@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/big"
 	"os"
 	"time"
 
@@ -178,6 +179,33 @@ func pushMsgManualNonce(node api.FullNode, msg *types.Message, ki *types.KeyInfo
 		return cid.Undef, false
 	}
 	return msgCid, true
+}
+
+// estimateGas fills in viable gas parameters on msg by querying the target node.
+// On estimation failure, falls back to computing gas from the node's chain head
+// base fee. This prevents "non-positive gas performance" rejections by miners.
+func estimateGas(node api.FullNode, msg *types.Message, tag string) {
+	estMsg := *msg
+	estMsg.Nonce = 0
+	estMsg.GasLimit = 0
+	estMsg.GasFeeCap = abi.NewTokenAmount(0)
+	estMsg.GasPremium = abi.NewTokenAmount(0)
+	gasMsg, err := node.GasEstimateMessageGas(ctx, &estMsg, nil, types.EmptyTSK)
+	if err == nil {
+		msg.GasLimit = gasMsg.GasLimit
+		msg.GasFeeCap = gasMsg.GasFeeCap
+		msg.GasPremium = gasMsg.GasPremium
+		return
+	}
+	debugLog("[%s] GasEstimateMessageGas failed: %v, using basefee fallback", tag, err)
+	head, hErr := node.ChainHead(ctx)
+	if hErr != nil || len(head.Blocks()) == 0 {
+		return // keep caller-provided gas as last resort
+	}
+	bf := head.Blocks()[0].ParentBaseFee
+	msg.GasLimit = 10_000_000
+	msg.GasFeeCap = abi.TokenAmount{Int: new(big.Int).Mul(bf.Int, big.NewInt(2))}
+	msg.GasPremium = abi.TokenAmount{Int: new(big.Int).Set(bf.Int)}
 }
 
 // pickTwoDistinctNodes returns two different nodes. Returns empty strings if <2 nodes.

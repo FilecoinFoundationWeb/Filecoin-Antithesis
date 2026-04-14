@@ -837,17 +837,22 @@ func injectAttack(attack attackType, honestName, advName string, advNode api.Ful
 
 		attackAmount = abi.NewTokenAmount(1_000_000_000)
 		msgA := baseMsg(fromAddr, toA, attackAmount)
+		estimateGas(nodes[honestName], msgA, "test-honest")
 		cidA, okA = pushMsgManualNonce(nodes[honestName], msgA, fromKI, nonce, "test-honest")
 
 		msgB := baseMsg(fromAddr, toB, attackAmount)
+		estimateGas(advNode, msgB, "test-adversary")
 		cidB, okB = pushMsgManualNonce(advNode, msgB, fromKI, nonce, "test-adversary")
 
 		log.Printf("[consensus-test] ATTACK: double-spend")
-		log.Printf("[consensus-test]   tx A (honest):    %s → recipient A via %s", cidStr(cidA), honestName)
-		log.Printf("[consensus-test]   tx B (adversary):  %s → recipient B via %s", cidStr(cidB), advName)
+		log.Printf("[consensus-test]   tx A (honest):    %s → recipient A via %s (gas=%d feecap=%s prem=%s)",
+			cidStr(cidA), honestName, msgA.GasLimit, msgA.GasFeeCap, msgA.GasPremium)
+		log.Printf("[consensus-test]   tx B (adversary):  %s → recipient B via %s (gas=%d feecap=%s prem=%s)",
+			cidStr(cidB), advName, msgB.GasLimit, msgB.GasFeeCap, msgB.GasPremium)
 
 	case attackGasPremiumFrontrun:
-		// Same nonce, same recipient, different gas premiums
+		// Same nonce, same recipient, different gas premiums.
+		// Estimate gas first for viable GasFeeCap/GasLimit, then set divergent premiums.
 		toAddr, _ := pickWallet()
 		for fromAddr == toAddr {
 			toAddr, _ = pickWallet()
@@ -855,18 +860,22 @@ func injectAttack(attack attackType, honestName, advName string, advNode api.Ful
 
 		attackAmount = abi.NewTokenAmount(1_000_000_000)
 		msgLow := baseMsg(fromAddr, toAddr, attackAmount)
+		estimateGas(nodes[honestName], msgLow, "test-lowfee")
+		// Keep estimated GasLimit/GasFeeCap but set a low premium
 		msgLow.GasPremium = abi.NewTokenAmount(100)
-		msgLow.GasFeeCap = abi.NewTokenAmount(100_000)
 		cidA, okA = pushMsgManualNonce(nodes[honestName], msgLow, fromKI, nonce, "test-lowfee")
 
 		msgHigh := baseMsg(fromAddr, toAddr, attackAmount)
+		estimateGas(advNode, msgHigh, "test-highfee")
+		// Keep estimated GasLimit/GasFeeCap but set a high premium
 		msgHigh.GasPremium = abi.NewTokenAmount(50_000)
-		msgHigh.GasFeeCap = abi.NewTokenAmount(200_000)
 		cidB, okB = pushMsgManualNonce(advNode, msgHigh, fromKI, nonce, "test-highfee")
 
 		log.Printf("[consensus-test] ATTACK: gas-premium-frontrun")
-		log.Printf("[consensus-test]   tx A (low fee):   %s premium=100 via %s", cidStr(cidA), honestName)
-		log.Printf("[consensus-test]   tx B (high fee):  %s premium=50000 via %s", cidStr(cidB), advName)
+		log.Printf("[consensus-test]   tx A (low fee):   %s premium=%s feecap=%s via %s",
+			cidStr(cidA), msgLow.GasPremium, msgLow.GasFeeCap, honestName)
+		log.Printf("[consensus-test]   tx B (high fee):  %s premium=%s feecap=%s via %s",
+			cidStr(cidB), msgHigh.GasPremium, msgHigh.GasFeeCap, advName)
 
 	case attackBalanceExhaustion:
 		// Same nonce, full balance to different recipients
@@ -894,9 +903,11 @@ func injectAttack(attack attackType, honestName, advName string, advNode api.Ful
 		attackAmount = drainAmt
 
 		msgA := baseMsg(fromAddr, toA, drainAmt)
+		estimateGas(nodes[honestName], msgA, "test-drain-honest")
 		cidA, okA = pushMsgManualNonce(nodes[honestName], msgA, fromKI, nonce, "test-drain-honest")
 
 		msgB := baseMsg(fromAddr, toB, drainAmt)
+		estimateGas(advNode, msgB, "test-drain-adv")
 		cidB, okB = pushMsgManualNonce(advNode, msgB, fromKI, nonce, "test-drain-adv")
 
 		log.Printf("[consensus-test] ATTACK: balance-exhaustion")
