@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"time"
 
 	"workload/internal/foc"
 
@@ -464,10 +465,11 @@ func DoFOCAddPieces() {
 		}
 	} else {
 		// Curio confirmed the piece was added but didn't return IDs.
-		// Track by CID so retrieval verification can still work.
+		// Mark with -1 so delete/retrieve skip this piece.
+		log.Printf("[foc-add] WARNING: no confirmed pieceIDs returned for %s", piece.PieceCID)
 		focState.AddedPieces = append(focState.AddedPieces, pieceRef{
 			PieceCID: piece.PieceCID,
-			PieceID:  0,
+			PieceID:  -1,
 		})
 	}
 	focStateMu.Unlock()
@@ -513,6 +515,39 @@ func DoFOCMonitorProofSet() {
 
 	log.Printf("[foc-monitor] dataset=%d live=%v activePieces=%s nextChallenge=%s",
 		s.OnChainDataSetID, live, activePieces, nextChallenge)
+
+	// Safety: active proofset must be live on-chain
+	assert.Always(live, "Active proofset is live on-chain", map[string]any{
+		"dataSetID":    s.OnChainDataSetID,
+		"activePieces": activePieces.String(),
+		"nextChallenge": nextChallenge.String(),
+	})
+
+	// Safety: piece count should not exceed what we've tracked
+	if activePieces != nil {
+		trackedCount := len(s.AddedPieces)
+		onChainCount := activePieces.Int64()
+		assert.Always(onChainCount <= int64(trackedCount)+1, "Active piece count does not exceed tracked count", map[string]any{
+			"dataSetID":    s.OnChainDataSetID,
+			"onChainCount": onChainCount,
+			"trackedCount": trackedCount,
+		})
+	}
+
+	// Solvency: FilecoinPay should hold enough to cover client funds
+	if focCfg.USDFCAddr != nil && focCfg.FilPayAddr != nil && focCfg.ClientEthAddr != nil {
+		fpBalCalldata := foc.BuildCalldata(foc.SigBalanceOf, foc.EncodeAddress(focCfg.FilPayAddr))
+		fpBalance, fpErr := foc.EthCallUint256(ctx, node, focCfg.USDFCAddr, fpBalCalldata)
+		clientFunds := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, focCfg.ClientEthAddr)
+		if fpErr == nil && fpBalance != nil && clientFunds != nil {
+			solvent := fpBalance.Cmp(clientFunds) >= 0
+			assert.Always(solvent, "FilecoinPay holds sufficient USDFC (solvency)", map[string]any{
+				"fpBalance":   fpBalance.String(),
+				"clientFunds": clientFunds.String(),
+				"dataSetID":   s.OnChainDataSetID,
+			})
+		}
+	}
 }
 
 // DoFOCTransfer performs an ERC-20 USDFC transfer between client and deployer.
@@ -588,6 +623,9 @@ func DoFOCSettle() {
 	}
 	untilEpoch := big.NewInt(int64(head.Height()))
 
+	// Snapshot client funds before settlement
+	preFunds := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, focCfg.ClientEthAddr)
+
 	settleCalldata := foc.BuildCalldata(foc.SigSettleRail,
 		foc.EncodeBigInt(railID),
 		foc.EncodeBigInt(untilEpoch),
@@ -600,6 +638,19 @@ func DoFOCSettle() {
 		"railID":     railID.String(),
 		"untilEpoch": untilEpoch.String(),
 	})
+
+	// Verify settlement didn't increase client funds (should decrease or stay same)
+	if ok && preFunds != nil {
+		postFunds := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, focCfg.ClientEthAddr)
+		if postFunds != nil {
+			safe := postFunds.Cmp(preFunds) <= 0
+			assert.Always(safe, "Settlement decreases or maintains client funds", map[string]any{
+				"railID":    railID.String(),
+				"preFunds":  preFunds.String(),
+				"postFunds": postFunds.String(),
+			})
+		}
+	}
 }
 
 // DoFOCWithdraw withdraws a small portion of available USDFC from FilecoinPay.
@@ -667,6 +718,12 @@ func DoFOCDeletePiece() {
 		return
 	}
 
+	// Skip pieces with invalid PieceID (unconfirmed from AddPieces)
+	if piece.PieceID <= 0 {
+		log.Printf("[foc-delete-piece] skipping piece with invalid PieceID=%d (CID=%s)", piece.PieceID, piece.PieceCID)
+		return
+	}
+
 	node := focNode()
 
 	pieceIDBig := big.NewInt(int64(piece.PieceID))
@@ -696,6 +753,23 @@ func DoFOCDeletePiece() {
 		"pieceID":  piece.PieceID,
 		"pieceCID": piece.PieceCID,
 	})
+
+	// Exercise curio/issues/1039: check if deleted piece is still retrievable.
+	// Currently byte-level deletion is NOT implemented (GUARANTEED per risk DB).
+	// This tracks the behavior so we know when the fix lands.
+	if ok {
+		time.Sleep(10 * time.Second)
+		data, dlErr := foc.DownloadPiece(ctx, piece.PieceCID)
+		if dlErr == nil && len(data) > 0 {
+			log.Printf("[foc-delete-piece] deleted piece %s still retrievable (%d bytes) — curio/issues/1039",
+				piece.PieceCID, len(data))
+			assert.Reachable("Deleted piece still retrievable (curio/issues/1039)", map[string]any{
+				"pieceCID": piece.PieceCID,
+				"pieceID":  piece.PieceID,
+				"dataLen":  len(data),
+			})
+		}
+	}
 }
 
 // DoFOCDeleteDataSet deletes the entire dataset following the proper FWSS
@@ -828,6 +902,41 @@ func DoFOCRetrieveAndVerify() {
 			piece.PieceCID, computedCID, len(data))
 	} else {
 		log.Printf("[foc-retrieve] verified: cid=%s len=%d", piece.PieceCID, len(data))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Post-Reorg FOC State Verification
+// ---------------------------------------------------------------------------
+
+// verifyFOCStateAfterReorg checks that on-chain FOC state survived a reorg.
+// Called from DoReorgChaos after partition heal + convergence.
+func verifyFOCStateAfterReorg() {
+	if focCfg == nil || focCfg.PDPAddr == nil {
+		return
+	}
+	s := snap()
+	if s.State != focStateReady || s.OnChainDataSetID == 0 {
+		return
+	}
+
+	node := focNode()
+	dsIDBytes := foc.EncodeBigInt(big.NewInt(int64(s.OnChainDataSetID)))
+
+	live, err := foc.EthCallBool(ctx, node, focCfg.PDPAddr, foc.BuildCalldata(foc.SigDataSetLive, dsIDBytes))
+	if err != nil {
+		log.Printf("[foc-reorg-verify] dataSetLive call failed: %v", err)
+		return
+	}
+
+	assert.Always(live, "Proofset still live after reorg", map[string]any{
+		"dataSetID": s.OnChainDataSetID,
+	})
+
+	if !live {
+		log.Printf("[foc-reorg-verify] CRITICAL: dataset %d no longer live after reorg!", s.OnChainDataSetID)
+	} else {
+		debugLog("[foc-reorg-verify] OK: dataset %d still live after reorg", s.OnChainDataSetID)
 	}
 }
 
