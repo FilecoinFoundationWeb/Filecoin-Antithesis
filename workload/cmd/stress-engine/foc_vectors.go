@@ -26,8 +26,9 @@ import (
 // Steady-state vectors (upload, add pieces, monitor, transfer, settle, withdraw)
 // are independent deck entries that only fire once state == Ready.
 //
-// Safety invariants (assert.Always) live in the foc-sidecar, not here.
-// Vectors here use assert.Sometimes — under fault injection any tx can fail.
+// Transaction success uses assert.Sometimes (any tx can fail under fault injection).
+// Safety invariants use assert.Always (proofset liveness, solvency, data integrity).
+// Additional Always invariants live in the foc-sidecar.
 // ===========================================================================
 
 const focUSDFCUnit = 1e18
@@ -516,25 +517,36 @@ func DoFOCMonitorProofSet() {
 	log.Printf("[foc-monitor] dataset=%d live=%v activePieces=%s nextChallenge=%s",
 		s.OnChainDataSetID, live, activePieces, nextChallenge)
 
-	// Safety: active proofset must be live on-chain
+	// Safety assertions — guard against transient chain state during partitions
+	// or reorgs. Skip if a partition is active (fork state would false-positive).
+	if partitionActive.Load() {
+		return
+	}
+
+	// Proofset liveness: active dataset must be live on-chain.
+	// This is a hard safety invariant — if the dataset we created is no longer
+	// live and we didn't delete it, something is seriously wrong.
 	assert.Always(live, "Active proofset is live on-chain", map[string]any{
-		"dataSetID":    s.OnChainDataSetID,
-		"activePieces": activePieces.String(),
+		"dataSetID":     s.OnChainDataSetID,
+		"activePieces":  activePieces.String(),
 		"nextChallenge": nextChallenge.String(),
 	})
 
-	// Safety: piece count should not exceed what we've tracked
+	// Piece count sanity: on-chain count should not wildly exceed our tracked count.
+	// +2 buffer for race between AddPieces on-chain confirmation and focState update,
+	// plus potential concurrent AddPieces calls.
 	if activePieces != nil {
 		trackedCount := len(s.AddedPieces)
 		onChainCount := activePieces.Int64()
-		assert.Always(onChainCount <= int64(trackedCount)+1, "Active piece count does not exceed tracked count", map[string]any{
+		assert.Always(onChainCount <= int64(trackedCount)+2, "Active piece count does not exceed tracked count", map[string]any{
 			"dataSetID":    s.OnChainDataSetID,
 			"onChainCount": onChainCount,
 			"trackedCount": trackedCount,
 		})
 	}
 
-	// Solvency: FilecoinPay should hold enough to cover client funds
+	// Solvency: FilecoinPay's USDFC token balance must cover all client funds.
+	// Both reads go to the same node in sequence — close enough for the invariant.
 	if focCfg.USDFCAddr != nil && focCfg.FilPayAddr != nil && focCfg.ClientEthAddr != nil {
 		fpBalCalldata := foc.BuildCalldata(foc.SigBalanceOf, foc.EncodeAddress(focCfg.FilPayAddr))
 		fpBalance, fpErr := foc.EthCallUint256(ctx, node, focCfg.USDFCAddr, fpBalCalldata)
@@ -639,8 +651,12 @@ func DoFOCSettle() {
 		"untilEpoch": untilEpoch.String(),
 	})
 
-	// Verify settlement didn't increase client funds (should decrease or stay same)
-	if ok && preFunds != nil {
+	// Verify settlement didn't increase client funds (should decrease or stay same).
+	// Guard: skip if partition active (stale reads) or if SendEthTx failed.
+	// Note: concurrent DoFOCDeposit could increase funds between pre/post reads,
+	// but deposits only happen during lifecycle setup (state != Ready), so when
+	// settle runs (requires Ready), no deposits are in-flight.
+	if ok && preFunds != nil && !partitionActive.Load() {
 		postFunds := foc.ReadAccountFunds(ctx, node, focCfg.FilPayAddr, focCfg.USDFCAddr, focCfg.ClientEthAddr)
 		if postFunds != nil {
 			safe := postFunds.Cmp(preFunds) <= 0
@@ -891,7 +907,9 @@ func DoFOCRetrieveAndVerify() {
 
 	match := computedCID == piece.PieceCID
 
-	assert.Sometimes(match, "piece retrieval integrity verified", map[string]any{
+	// Data integrity is a hard safety invariant — if the CID doesn't match,
+	// Curio returned corrupted data. This is never a transient condition.
+	assert.Always(match, "piece retrieval integrity verified", map[string]any{
 		"pieceCID":    piece.PieceCID,
 		"computedCID": computedCID,
 		"dataLen":     len(data),
@@ -901,7 +919,7 @@ func DoFOCRetrieveAndVerify() {
 		log.Printf("[foc-retrieve] INTEGRITY MISMATCH: expected=%s computed=%s len=%d",
 			piece.PieceCID, computedCID, len(data))
 	} else {
-		log.Printf("[foc-retrieve] verified: cid=%s len=%d", piece.PieceCID, len(data))
+		debugLog("[foc-retrieve] verified: cid=%s len=%d", piece.PieceCID, len(data))
 	}
 }
 
