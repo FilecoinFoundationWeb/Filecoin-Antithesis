@@ -230,6 +230,10 @@ func DoReorgChaos() {
 
 	if converged {
 		verifyPostReorgState(victimName, successfulCycles)
+		// FOC: verify proofset survived the reorg
+		if focCfg != nil {
+			verifyFOCStateAfterReorg()
+		}
 	}
 
 	// Check F3 progress after reorg cycles
