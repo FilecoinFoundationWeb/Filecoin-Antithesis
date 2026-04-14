@@ -49,7 +49,21 @@ func pickReorgVictim() (victimName string, powerPct float64) {
 		table := getF3PowerTable(lotusNode)
 		if len(table) >= 2 {
 			var target minerPowerInfo
-			if rngIntn(2) == 0 {
+			if focCfg != nil {
+				// FOC active: protect lotus0 (Curio's backend).
+				// Only target non-lotus0 miners for benign reorgs.
+				var candidates []minerPowerInfo
+				for _, m := range table {
+					if minerToNodeName(m.addr) != "lotus0" {
+						candidates = append(candidates, m)
+					}
+				}
+				if len(candidates) > 0 {
+					target = candidates[rngIntn(len(candidates))]
+				} else {
+					target = table[len(table)-1]
+				}
+			} else if rngIntn(2) == 0 {
 				target = table[0] // biggest
 			} else {
 				target = table[len(table)-1] // smallest
@@ -77,8 +91,13 @@ func DoReorgChaos() {
 	victimName, victimPowerPct := pickReorgVictim()
 	victim := nodes[victimName]
 
-	// Random number of rapid split-heal cycles: 1-10
-	numCycles := rngIntn(reorgMaxCyclesPerCall) + 1
+	// Random number of rapid split-heal cycles.
+	// FOC: lighter reorgs (1-3) to avoid disrupting Curio lifecycle.
+	maxCycles := reorgMaxCyclesPerCall
+	if focCfg != nil {
+		maxCycles = 3
+	}
+	numCycles := rngIntn(maxCycles) + 1
 
 	if victimPowerPct > 0 {
 		log.Printf("[reorg-chaos] starting %d rapid partition cycles, victim=%s (%.1f%% power)", numCycles, victimName, victimPowerPct)
