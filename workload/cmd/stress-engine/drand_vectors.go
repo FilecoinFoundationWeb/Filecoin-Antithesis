@@ -29,9 +29,12 @@ func DoDrandBeaconAudit() {
 	if !allNodesPastEpoch(f3MinEpoch) {
 		return
 	}
+	if partitionActive.Load() {
+		return
+	}
 
 	snap := getFinalizedSnapshots()
-	finalizedHeight, _ := snapshotMinHeight(snap)
+	finalizedHeight, anchorKey := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight {
 		return
 	}
@@ -56,7 +59,7 @@ func DoDrandBeaconAudit() {
 			continue
 		}
 
-		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, s.key)
+		ts, err := nodes[name].ChainGetTipSetByHeight(ctx, checkHeight, anchorKey)
 		if err != nil {
 			log.Printf("[drand-audit] ChainGetTipSetByHeight(%d) failed on %s: %v", checkHeight, name, err)
 			errs++
