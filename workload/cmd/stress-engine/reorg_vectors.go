@@ -218,6 +218,11 @@ func DoReorgChaos() {
 		return
 	}
 
+	// Full mesh reconnect: Antithesis fault injection can sever connections
+	// between ANY nodes (not just the victim), so after all cycles we must
+	// ensure every node is connected to every other node.
+	ensureFullMesh()
+
 	// Wait for convergence by polling finalized heights
 	log.Printf("[reorg-chaos] waiting for convergence after %d cycles...", successfulCycles)
 	converged := waitForConvergence(victimName)
@@ -294,6 +299,22 @@ func waitForConvergence(victimName string) bool {
 		}
 
 		if (maxH - minH) <= reorgConvergeMaxSpread {
+			// Verify peer connectivity — spread can look OK while nodes
+			// are isolated (each advancing their own fork independently).
+			isolated := 0
+			for _, name := range nodeKeys {
+				peers, err := nodes[name].NetPeers(ctx)
+				if err != nil || len(peers) == 0 {
+					isolated++
+				}
+			}
+			if isolated > 0 {
+				log.Printf("[reorg-chaos] spread OK but %d/%d nodes have no peers, re-meshing...",
+					isolated, len(nodeKeys))
+				ensureFullMesh()
+				time.Sleep(reorgConvergePollRate)
+				continue
+			}
 			log.Printf("[reorg-chaos] converged: spread=%d epochs, %d/%d nodes responded (victim=%s)",
 				maxH-minH, responded, len(nodeKeys), victimName)
 			return true
@@ -319,6 +340,33 @@ func waitForConvergence(victimName string) bool {
 	}
 	log.Printf("[reorg-chaos] convergence timeout after %s", reorgConvergeTimeout)
 	return false
+}
+
+// ensureFullMesh connects every node to every other node and clears all
+// blocklists. Antithesis fault injection can sever connections between any
+// pair of nodes at any time, so after reorg cycles we must restore the
+// full mesh rather than only reconnecting the victim.
+func ensureFullMesh() {
+	// Step 1: Clear all blocklists on all nodes
+	for _, name := range nodeKeys {
+		bl, err := nodes[name].NetBlockList(ctx)
+		if err != nil || (len(bl.Peers) == 0 && len(bl.IPAddrs) == 0 && len(bl.IPSubnets) == 0) {
+			continue
+		}
+		if err := nodes[name].NetBlockRemove(ctx, bl); err != nil {
+			debugLog("[reorg-chaos] NetBlockRemove on %s failed: %v", name, err)
+		}
+	}
+
+	// Step 2: Collect all node addresses
+	allAddrs := collectNodeAddrInfos("")
+
+	// Step 3: Connect every node to every other node
+	for _, name := range nodeKeys {
+		for _, addr := range allAddrs {
+			nodes[name].NetConnect(ctx, addr)
+		}
+	}
 }
 
 // collectNodeAddrInfos gets the listening addresses of all known nodes
