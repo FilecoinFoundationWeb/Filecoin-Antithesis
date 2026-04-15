@@ -811,7 +811,10 @@ func healPartition(sr *splitResult) {
 // ---------------------------------------------------------------------------
 
 func injectAttack(attack attackType, honestName, advName string, advNode api.FullNode) *attackResult {
-	fromAddr, fromKI := pickWallet()
+	// Use attack-reserved wallets whose nonces aren't advanced by deck
+	// operations during the partition. This is critical for full-isolation
+	// where the adversary's chain is frozen and can't accept future nonces.
+	fromAddr, fromKI := pickAttackWallet()
 	nonce := nonces[fromAddr]
 
 	// Snapshot sender balance before attack for economic verification

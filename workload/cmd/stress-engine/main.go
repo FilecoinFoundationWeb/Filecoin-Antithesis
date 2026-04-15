@@ -38,7 +38,8 @@ var (
 
 	// Wallet state loaded from stress_keystore.json
 	keystore map[address.Address]*types.KeyInfo
-	addrs    []address.Address
+	addrs    []address.Address // deck wallets (background operations)
+	atkAddrs []address.Address // attack-reserved wallets (nsplit only)
 
 	// Per-address monotonic nonce counter
 	nonces map[address.Address]uint64
@@ -132,6 +133,14 @@ func pickWallet() (address.Address, *types.KeyInfo) {
 	return addr, keystore[addr]
 }
 
+// pickAttackWallet returns a wallet from the attack-reserved pool.
+// These wallets are never used by deck vectors, so their nonces remain
+// stable on isolated nodes during network partitions.
+func pickAttackWallet() (address.Address, *types.KeyInfo) {
+	addr := rngChoice(atkAddrs)
+	return addr, keystore[addr]
+}
+
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
@@ -193,7 +202,24 @@ func loadKeystore() {
 	if len(addrs) == 0 {
 		log.Fatal("[init] FATAL: no valid keys loaded from keystore")
 	}
-	log.Printf("[init] loaded %d keys from keystore", len(addrs))
+
+	// Reserve last 10 wallets (or 10% if fewer) for attack injection.
+	// These are never used by deck vectors, so their nonces stay stable
+	// across network partitions — critical for full-isolation nsplit tests.
+	atkCount := 10
+	if atkCount > len(addrs)/5 {
+		atkCount = len(addrs) / 5
+	}
+	if atkCount < 2 {
+		atkCount = 2
+	}
+	if atkCount > len(addrs) {
+		atkCount = len(addrs) / 2
+	}
+	splitIdx := len(addrs) - atkCount
+	atkAddrs = addrs[splitIdx:]
+	addrs = addrs[:splitIdx]
+	log.Printf("[init] loaded %d deck keys + %d attack-reserved keys from keystore", len(addrs), len(atkAddrs))
 }
 
 func waitForChain() {
@@ -219,7 +245,11 @@ func waitForChain() {
 
 func initNonces() {
 	node := nodes[nodeKeys[0]]
-	for _, addr := range addrs {
+	// Don't use append(addrs, atkAddrs...) — they share a backing array.
+	allAddrs := make([]address.Address, 0, len(addrs)+len(atkAddrs))
+	allAddrs = append(allAddrs, addrs...)
+	allAddrs = append(allAddrs, atkAddrs...)
+	for _, addr := range allAddrs {
 		n, err := node.MpoolGetNonce(ctx, addr)
 		if err != nil {
 			log.Printf("[init] WARN: cannot get nonce for %s: %v, starting at 0", addr, err)
@@ -228,7 +258,8 @@ func initNonces() {
 		}
 		nonces[addr] = n
 	}
-	log.Printf("[init] initialized nonces for %d addresses", len(addrs))
+	log.Printf("[init] initialized nonces for %d addresses (%d deck + %d attack)",
+		len(allAddrs), len(addrs), len(atkAddrs))
 }
 
 // ---------------------------------------------------------------------------
