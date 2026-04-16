@@ -923,10 +923,14 @@ func DoF3FinalityAgreement() {
 	// Query ALL nodes (including Forest) for the F3 certificate at this instance.
 	// Cross-implementation divergence in F3 finality is the highest-severity consensus bug.
 	type nodeResult struct {
-		name     string
-		nodeImpl string // "lotus" or "forest"
-		chainKey string // hex-encoded ECChain key digest
-		err      error
+		name           string
+		nodeImpl       string // "lotus" or "forest"
+		chainKey       string // hex-encoded ECChain key digest
+		powerTableCID  string // CID of power table for next instance
+		commitments    string // hex of supplemental data commitments
+		signerCount    int    // number of signers in bitfield
+		signatureShort string // first 16 bytes of aggregate signature (hex)
+		err            error
 	}
 
 	var results []nodeResult
@@ -941,11 +945,27 @@ func DoF3FinalityAgreement() {
 			continue
 		}
 		key := cert.ECChain.Key()
-		results = append(results, nodeResult{name: name, nodeImpl: nodeType(name), chainKey: hex.EncodeToString(key[:])})
+		sigCount, _ := cert.Signers.Count()
+		sigShort := ""
+		if len(cert.Signature) >= 16 {
+			sigShort = hex.EncodeToString(cert.Signature[:16])
+		} else if len(cert.Signature) > 0 {
+			sigShort = hex.EncodeToString(cert.Signature)
+		}
+		results = append(results, nodeResult{
+			name:           name,
+			nodeImpl:       nodeType(name),
+			chainKey:       hex.EncodeToString(key[:]),
+			powerTableCID:  cert.SupplementalData.PowerTable.String(),
+			commitments:    hex.EncodeToString(cert.SupplementalData.Commitments[:]),
+			signerCount:    int(sigCount),
+			signatureShort: sigShort,
+			err:            nil,
+		})
 	}
 
 	// Group by finalized ECChain key
-	chainKeys := map[string][]string{} // chain key hex -> node names
+	chainKeys := map[string][]string{}
 	var errors int
 	for _, r := range results {
 		if r.err != nil {
@@ -984,6 +1004,49 @@ func DoF3FinalityAgreement() {
 		log.Printf("[f3-agreement] FINALITY DISAGREEMENT at instance %d: %v (cross_impl=%v)", checkInst, chainKeys, crossImpl)
 	} else {
 		debugLog("[f3-agreement] instance %d: all %d nodes agree (cross_impl=%v)", checkInst, responded, crossImpl)
+	}
+
+	// Deep cert comparison: power table, supplemental data, signature
+	// These should be identical across all nodes for the same instance.
+	if agreed && responded >= 2 {
+		ptCIDs := map[string][]string{}
+		commitMap := map[string][]string{}
+		sigMap := map[string][]string{}
+		for _, r := range results {
+			if r.err != nil {
+				continue
+			}
+			ptCIDs[r.powerTableCID] = append(ptCIDs[r.powerTableCID], r.name)
+			commitMap[r.commitments] = append(commitMap[r.commitments], r.name)
+			sigMap[r.signatureShort] = append(sigMap[r.signatureShort], r.name)
+		}
+
+		ptAgreed := len(ptCIDs) == 1
+		commitAgreed := len(commitMap) == 1
+		sigAgreed := len(sigMap) == 1
+
+		assert.Always(ptAgreed, "F3 cert power table CID agrees across all nodes", map[string]any{
+			"instance":     checkInst,
+			"power_tables": ptCIDs,
+			"cross_impl":   crossImpl,
+		})
+
+		assert.Always(commitAgreed, "F3 cert supplemental data agrees across all nodes", map[string]any{
+			"instance":    checkInst,
+			"commitments": commitMap,
+			"cross_impl":  crossImpl,
+		})
+
+		assert.Always(sigAgreed, "F3 cert aggregate signature agrees across all nodes", map[string]any{
+			"instance":   checkInst,
+			"signatures": sigMap,
+			"cross_impl": crossImpl,
+		})
+
+		if !ptAgreed || !commitAgreed || !sigAgreed {
+			log.Printf("[f3-agreement] DEEP CERT DIVERGENCE at instance %d: pt=%v commit=%v sig=%v",
+				checkInst, ptCIDs, commitMap, sigMap)
+		}
 	}
 
 	// Cross-implementation F3 agreement is the highest-value safety check.

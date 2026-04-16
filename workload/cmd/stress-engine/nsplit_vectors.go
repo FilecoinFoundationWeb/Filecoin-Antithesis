@@ -562,27 +562,31 @@ func createStarSplit(table []minerPowerInfo, f3Active bool) *splitResult {
 		}
 	}
 
-	// Also block forest on each honest node's REVERSE direction:
-	// forest blocks all honest nodes (only keeps adversary if connected)
+	// Isolate Forest from honest miners. Forest doesn't support NetBlockAdd,
+	// so we must disconnect bidirectionally and rely on the Lotus-side blocks
+	// to prevent reconnection. Without this, Forest acts as a gossip bridge
+	// that defeats the star-split partition.
 	for _, n := range nodeKeys {
 		if nodeType(n) != "forest" {
 			continue
 		}
-		var forestBlock []peer.ID
+		forestAddrInfo, err := nodes[n].NetAddrsListen(ctx)
+		if err != nil {
+			continue
+		}
+		// Disconnect forest from all honest miners (both directions)
 		for _, honestName := range honestNames {
-			if pid, ok := peerIDs[honestName]; ok {
-				forestBlock = append(forestBlock, pid)
-			}
+			// Honest→forest already blocked via NetBlockAdd above.
+			// Forest→honest: disconnect explicitly since NetBlockAdd won't work.
+			nodes[n].NetDisconnect(ctx, peerIDs[honestName])
+			nodes[honestName].NetDisconnect(ctx, forestAddrInfo.ID)
 		}
-		if len(forestBlock) > 0 {
-			if err := nodes[n].NetBlockAdd(ctx, api.NetBlockList{Peers: forestBlock}); err != nil {
-				log.Printf("[consensus-test] NetBlockAdd on %s (forest) failed: %v", n, err)
-			} else {
-				for _, pid := range forestBlock {
-					blocked = append(blocked, blockedPeer{onNode: n, peerID: pid})
-				}
-			}
-		}
+		// Also disconnect forest from adversary so it can't relay
+		nodes[n].NetDisconnect(ctx, peerIDs[advName])
+		nodes[advName].NetDisconnect(ctx, forestAddrInfo.ID)
+		// Save for heal
+		allSavedPeers = append(allSavedPeers, forestAddrInfo)
+		log.Printf("[consensus-test] star-split: disconnected forest %s from all nodes (NetBlockAdd unsupported)", n)
 	}
 
 	honestPct := 100.0 - adversary.pct
@@ -735,7 +739,8 @@ func createBisection(table []minerPowerInfo, f3Active bool) *splitResult {
 		}
 	}
 
-	// Block forest from both groups (prevents gossip bridge between partitions)
+	// Isolate Forest from both groups. Forest doesn't support NetBlockAdd,
+	// so we disconnect bidirectionally and rely on Lotus-side blocks.
 	for _, name := range nodeKeys {
 		if nodeType(name) != "forest" {
 			continue
@@ -744,22 +749,20 @@ func createBisection(table []minerPowerInfo, f3Active bool) *splitResult {
 		if err != nil {
 			continue
 		}
-		// Block forest on all miners
-		for _, mName := range append(groupANames, groupBNames...) {
+		// Block forest on all Lotus miners (Lotus supports NetBlockAdd)
+		allMinerNames := append(groupANames, groupBNames...)
+		for _, mName := range allMinerNames {
 			if err := nodes[mName].NetBlockAdd(ctx, api.NetBlockList{Peers: []peer.ID{forestAddrInfo.ID}}); err == nil {
 				blocked = append(blocked, blockedPeer{onNode: mName, peerID: forestAddrInfo.ID})
 			}
 			nodes[mName].NetDisconnect(ctx, forestAddrInfo.ID)
 		}
-		// Block all miners on forest
+		// Disconnect forest from all miners (Forest side — NetDisconnect works)
 		allPeerIDs := append(groupAPeerList, groupBPeerList...)
-		if len(allPeerIDs) > 0 {
-			if err := nodes[name].NetBlockAdd(ctx, api.NetBlockList{Peers: allPeerIDs}); err == nil {
-				for _, pid := range allPeerIDs {
-					blocked = append(blocked, blockedPeer{onNode: name, peerID: pid})
-				}
-			}
+		for _, pid := range allPeerIDs {
+			nodes[name].NetDisconnect(ctx, pid)
 		}
+		log.Printf("[consensus-test] bisection: disconnected forest %s from all groups", name)
 	}
 
 	log.Printf("[consensus-test] 50/50-bisection: groupA=%v (%.0f%%) vs groupB=%v (%.0f%%), %d disconnected, %d blocked",
