@@ -14,6 +14,11 @@ export FOREST_TARGET_PEER_COUNT=$(($NUM_LOTUS_CLIENTS + $NUM_FOREST_CLIENTS - 1)
 f3_sidecar_var="FOREST_${node_number}_F3_SIDECAR_RPC_ENDPOINT"
 export FOREST_F3_SIDECAR_RPC_ENDPOINT="${!f3_sidecar_var}"
 
+f3_miner_var="FOREST_${node_number}_F3_PARTICIPATING_MINER_ADDRESSES"
+if [ -n "${!f3_miner_var}" ]; then
+    export FOREST_F3_PERMANENT_PARTICIPATING_MINER_ADDRESSES="${!f3_miner_var}"
+fi
+
 export FOREST_F3_BOOTSTRAP_EPOCH=5
 export FOREST_F3_FINALITY=2
 export FOREST_CHAIN_INDEXER_ENABLED=true
