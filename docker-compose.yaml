@@ -5,7 +5,7 @@ x-templates:
     environment:
       - NUM_LOTUS_CLIENTS=${NUM_LOTUS_CLIENTS:-4}
       - NUM_LOTUS_MINERS=${NUM_LOTUS_MINERS:-4}
-      - NUM_FOREST_CLIENTS=${NUM_FOREST_CLIENTS:-2}
+      - NUM_FOREST_CLIENTS=${NUM_FOREST_CLIENTS:-1}
       - SECTORS_PER_MINER=${SECTORS_PER_MINER:-4,3,2,1}
     volumes:
       - ./data/lotus0:${LOTUS_0_DATA_DIR}
@@ -13,7 +13,6 @@ x-templates:
       - ./data/lotus2:${LOTUS_2_DATA_DIR}
       - ./data/lotus3:${LOTUS_3_DATA_DIR}
       - ./data/forest0:${FOREST_0_DATA_DIR}
-      - ./data/forest1:${FOREST_1_DATA_DIR}
       - ./shared/configs:${SHARED_CONFIGS}
       - ./data/curio:/var/lib/curio:rw
     pull_policy: never
@@ -133,19 +132,12 @@ services:
     entrypoint: [ "./scripts/start-forest.sh", "0" ]
     profiles: [ full ]
 
-  forest1:
-    <<: [ *filecoin_service, *needs_lotus0_healthy ]
-    image: forest:latest
-    container_name: forest1
-    entrypoint: [ "./scripts/start-forest.sh", "1" ]
-    profiles: [ full ]
-
   workload:
     <<: [ *filecoin_service ]
     image: workload:latest
     container_name: workload
     environment:
-      - STRESS_NODES=${STRESS_NODES:-lotus0,lotus1,lotus2,lotus3,forest0,forest1}
+      - STRESS_NODES=${STRESS_NODES:-lotus0,lotus1,lotus2,lotus3,forest0}
       - STRESS_RPC_PORT=1234
       - STRESS_FOREST_RPC_PORT=3456
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
@@ -231,7 +223,6 @@ services:
       - ./data/lotus2:/root/devgen/lotus2
       - ./data/lotus3:/root/devgen/lotus3
       - ./data/forest0:/root/devgen/forest0
-      - ./data/forest1:/root/devgen/forest1
       - ./data/curio:/root/devgen/curio
 
   lotus-miner0:
