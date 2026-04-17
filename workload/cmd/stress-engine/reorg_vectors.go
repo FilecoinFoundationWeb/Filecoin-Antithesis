@@ -438,7 +438,7 @@ func verifyPostReorgState(victimName string, cycles int) {
 		}
 		hasPeers := len(peers) > 0
 
-		assert.Sometimes(hasPeers, name+": Network connectivity restored after reorg", map[string]any{
+		assert.Sometimes(hasPeers, "Network connectivity restored after reorg", map[string]any{
 			"node":       name,
 			"node_type":  nodeType(name),
 			"victim":     victimName,

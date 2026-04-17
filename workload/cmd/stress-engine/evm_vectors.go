@@ -375,7 +375,7 @@ func DoSelfDestructCycle() {
 
 		// Coverage: cross-node check from traffic generator. Real consistency
 		// assertions are in DoStateRootComparison / DoStateAudit.
-		assert.Reachable("Actor state is consistent after self-destruct", map[string]any{
+		assert.Reachable("Self-destruct consistency check executed", map[string]any{
 			"contract":    contractAddr.String(),
 			"node_states": nodeStates,
 			"nodes":       nodeKeys,

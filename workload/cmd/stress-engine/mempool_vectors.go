@@ -104,30 +104,6 @@ func DoGasWar() {
 		currentNonce, errA == nil, errB == nil)
 }
 
-// ===========================================================================
-// Vector 5: DoAdversarial (Safety / Auth)
-//
-// Three sub-actions picked randomly:
-//   1. Double-spend race: same nonce, different recipients, different nodes
-//   2. Invalid signature: garbage sig bytes, must be rejected
-//   3. Nonce race: same nonce, different gas premiums, different nodes
-// ===========================================================================
-
-func DoAdversarial() {
-	subAction := rngIntn(3)
-	subNames := []string{"double-spend", "invalid-sig", "nonce-race"}
-	debugLog("  [adversarial] sub-action: %s", subNames[subAction])
-
-	switch subAction {
-	case 0:
-		doDoubleSpend()
-	case 1:
-		doInvalidSignature()
-	case 2:
-		doNonceRace()
-	}
-}
-
 // doDoubleSpend sends conflicting transactions (same nonce, different recipients)
 // to two different nodes. Asserts at most one should be included on-chain.
 func doDoubleSpend() {

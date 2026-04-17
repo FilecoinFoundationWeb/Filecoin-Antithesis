@@ -304,7 +304,7 @@ func DoMessageOrderingAttack() {
 
 	statesMatch := len(stateRoots) == 1
 
-	assert.Reachable("State roots match after message ordering attack", map[string]any{
+	assert.Reachable("Message ordering state comparison executed", map[string]any{
 		"finalized_height": finalizedHeight,
 		"messages_sent":    len(sent),
 		"unique_states":    len(stateRoots),
