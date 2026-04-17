@@ -117,6 +117,11 @@ const (
 	// snapshotTTL controls how long a finalized-tipset snapshot is reused.
 	// Multiple consensus checks hitting the same deck tick share one fetch round.
 	snapshotTTL = 2 * time.Second
+
+	// EC finality fallback: when F3 stalls (e.g. quorum loss from miner slash),
+	// consensus vectors fall back to EC-based finality so assertions keep working.
+	ecFinalityDepth    = abi.ChainEpoch(30) // depth below head for EC fallback
+	f3StallGraceEpochs = abi.ChainEpoch(50) // head must advance this far past last F3 finalization before fallback activates
 )
 
 // ---------------------------------------------------------------------------
@@ -139,11 +144,46 @@ var (
 	snapCache   map[string]nodeSnapshot // nodeName -> snapshot
 	snapCacheMu sync.Mutex
 	snapCacheAt time.Time
+
+	// F3 stall detection state (protected by snapCacheMu)
+	f3LastFinalizedH    abi.ChainEpoch // highest observed minimum finalized height
+	f3HeadAtLastAdvance abi.ChainEpoch // max chain head when f3LastFinalizedH last changed
+	f3FallbackActive    bool           // true when EC fallback is in use
 )
+
+// f3StallState holds the F3 stall detection state machine inputs/outputs.
+type f3StallState struct {
+	lastFinalizedH    abi.ChainEpoch
+	headAtLastAdvance abi.ChainEpoch
+	fallbackActive    bool
+}
+
+// updateF3StallDetection is a pure function implementing the F3 stall detection
+// state machine. Separated from getFinalizedSnapshots for testability.
+func updateF3StallDetection(prev f3StallState, minFinH, maxHead abi.ChainEpoch, finCount int) f3StallState {
+	s := prev
+	if minFinH > s.lastFinalizedH {
+		s.lastFinalizedH = minFinH
+		s.headAtLastAdvance = maxHead
+		if s.fallbackActive {
+			log.Printf("[finalized] F3 resumed at height %d — deactivating EC fallback", minFinH)
+			s.fallbackActive = false
+		}
+	} else if finCount >= 2 && maxHead-s.headAtLastAdvance >= f3StallGraceEpochs && !s.fallbackActive {
+		log.Printf("[finalized] F3 stall detected: finalized stuck at %d, head at %d (+%d epochs since last F3 advance) — activating EC fallback (head-%d)",
+			s.lastFinalizedH, maxHead, maxHead-s.headAtLastAdvance, ecFinalityDepth)
+		s.fallbackActive = true
+	}
+	return s
+}
 
 // getFinalizedSnapshots returns a cached-or-fresh map of each node's finalized
 // tipset. Safe to call from any deck vector — concurrent callers within the
 // TTL window share the same result.
+//
+// When F3 stalls (finalized height frozen while chain head advances), falls
+// back to EC-based finality (head - ecFinalityDepth) so consensus vectors
+// keep checking new state instead of going blind.
 func getFinalizedSnapshots() map[string]nodeSnapshot {
 	snapCacheMu.Lock()
 	defer snapCacheMu.Unlock()
@@ -165,6 +205,65 @@ func getFinalizedSnapshots() map[string]nodeSnapshot {
 			key:    ts.Key(),
 		}
 	}
+
+	// --- F3 stall detection ---
+	var minFinH abi.ChainEpoch
+	finCount := 0
+	for _, s := range snap {
+		if s.err != nil {
+			continue
+		}
+		finCount++
+		if finCount == 1 || s.height < minFinH {
+			minFinH = s.height
+		}
+	}
+
+	var maxHead abi.ChainEpoch
+	for _, name := range nodeKeys {
+		head, err := nodes[name].ChainHead(ctx)
+		if err != nil {
+			continue
+		}
+		if head.Height() > maxHead {
+			maxHead = head.Height()
+		}
+	}
+
+	state := f3StallState{
+		lastFinalizedH:    f3LastFinalizedH,
+		headAtLastAdvance: f3HeadAtLastAdvance,
+		fallbackActive:    f3FallbackActive,
+	}
+	state = updateF3StallDetection(state, minFinH, maxHead, finCount)
+	f3LastFinalizedH = state.lastFinalizedH
+	f3HeadAtLastAdvance = state.headAtLastAdvance
+	f3FallbackActive = state.fallbackActive
+
+	if f3FallbackActive && maxHead > ecFinalityDepth {
+		for _, name := range nodeKeys {
+			head, err := nodes[name].ChainHead(ctx)
+			if err != nil {
+				snap[name] = nodeSnapshot{err: err}
+				continue
+			}
+			ecHeight := head.Height() - ecFinalityDepth
+			if ecHeight < 1 {
+				ecHeight = 1
+			}
+			ts, err := nodes[name].ChainGetTipSetByHeight(ctx, ecHeight, head.Key())
+			if err != nil {
+				snap[name] = nodeSnapshot{err: err}
+				continue
+			}
+			snap[name] = nodeSnapshot{
+				finTs:  ts,
+				height: ts.Height(),
+				key:    ts.Key(),
+			}
+		}
+	}
+
 	snapCache = snap
 	snapCacheAt = time.Now()
 	return snap
