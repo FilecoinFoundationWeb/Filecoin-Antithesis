@@ -318,6 +318,10 @@ func buildDeck() {
 		// State tree stress
 		{"DoActorMigrationStress", "STRESS_WEIGHT_ACTOR_MIGRATION", DoActorMigrationStress, 1},
 		{"DoActorLifecycleStress", "STRESS_WEIGHT_ACTOR_LIFECYCLE", DoActorLifecycleStress, 1},
+		// Cross-implementation (Lotus ↔ Forest)
+		{"DoCrossImplStateCompute", "STRESS_WEIGHT_CROSS_IMPL_COMPUTE", DoCrossImplStateCompute, 2},
+		{"DoDeepActorStateComparison", "STRESS_WEIGHT_DEEP_ACTOR_STATE", DoDeepActorStateComparison, 1},
+		{"DoCrossImplEthCall", "STRESS_WEIGHT_CROSS_IMPL_ETH_CALL", DoCrossImplEthCall, 1},
 		// Reorg chaos (guarded by partitionActive to avoid stomping n-split)
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
 	}
