@@ -22,7 +22,9 @@ entrypoint.sh → stress-engine binary
 |--------|---------|-------------|
 | `DoTransferMarket` | `STRESS_WEIGHT_TRANSFER` | Random FIL transfers between wallets via random nodes |
 | `DoGasWar` | `STRESS_WEIGHT_GAS_WAR` | Mempool replacement: low-premium tx followed by same-nonce high-premium tx |
-| `DoAdversarial` | `STRESS_WEIGHT_ADVERSARIAL` | Double-spend races, invalid signatures, nonce races across nodes |
+| `DoDoubleSpend` | `STRESS_WEIGHT_DOUBLE_SPEND` | Same-nonce conflicting txs to different nodes; asserts at most one lands |
+| `DoInvalidSignature` | `STRESS_WEIGHT_INVALID_SIG` | Garbage signature must be rejected by every node |
+| `DoNonceRace` | `STRESS_WEIGHT_NONCE_RACE` | Same nonce, different gas premiums to different nodes |
 
 ### EVM/FVM Contracts (`evm_vectors.go`)
 

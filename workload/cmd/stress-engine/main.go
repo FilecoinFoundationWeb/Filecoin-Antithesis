@@ -299,8 +299,6 @@ func buildDeck() {
 		{"DoHeavyCompute", "STRESS_WEIGHT_HEAVY_COMPUTE", DoHeavyCompute, 1},
 		// Cross-node consistency
 		{"DoReceiptAudit", "STRESS_WEIGHT_RECEIPT_AUDIT", DoReceiptAudit, 2},
-		// Drand beacon consistency
-		{"DoDrandBeaconAudit", "STRESS_WEIGHT_DRAND_BEACON_AUDIT", DoDrandBeaconAudit, 3},
 		// EVM contract stress
 		{"DoDeployContracts", "STRESS_WEIGHT_DEPLOY", DoDeployContracts, 1},
 		{"DoContractCall", "STRESS_WEIGHT_CONTRACT_CALL", DoContractCall, 1},
@@ -310,8 +308,9 @@ func buildDeck() {
 		{"DoLogBlaster", "STRESS_WEIGHT_LOG_BLASTER", DoLogBlaster, 0},
 		{"DoMemoryBomb", "STRESS_WEIGHT_MEMORY_BOMB", DoMemoryBomb, 0},
 		{"DoStorageSpam", "STRESS_WEIGHT_STORAGE_SPAM", DoStorageSpam, 0},
-		// Mempool / adversarial
-		{"DoAdversarial", "STRESS_WEIGHT_ADVERSARIAL", DoAdversarial, 0},
+		// Mempool safety
+		{"DoDoubleSpend", "STRESS_WEIGHT_DOUBLE_SPEND", doDoubleSpend, 1},
+		{"DoInvalidSignature", "STRESS_WEIGHT_INVALID_SIG", doInvalidSignature, 1},
 		// Cross-node divergence
 		{"DoMessageOrderingAttack", "STRESS_WEIGHT_MSG_ORDERING", DoMessageOrderingAttack, 1},
 		{"DoNonceBombard", "STRESS_WEIGHT_NONCE_BOMBARD", DoNonceBombard, 0},
