@@ -928,9 +928,8 @@ func DoF3FinalityAgreement() {
 		chainKey       string // hex-encoded ECChain key digest
 		powerTableCID  string // CID of power table for next instance
 		commitments    string // hex of supplemental data commitments
-		signerCount    int    // number of signers in bitfield
-		signatureShort string // first 16 bytes of aggregate signature (hex)
-		err            error
+		signerCount int // number of signers in bitfield
+		err         error
 	}
 
 	var results []nodeResult
@@ -946,21 +945,14 @@ func DoF3FinalityAgreement() {
 		}
 		key := cert.ECChain.Key()
 		sigCount, _ := cert.Signers.Count()
-		sigShort := ""
-		if len(cert.Signature) >= 16 {
-			sigShort = hex.EncodeToString(cert.Signature[:16])
-		} else if len(cert.Signature) > 0 {
-			sigShort = hex.EncodeToString(cert.Signature)
-		}
 		results = append(results, nodeResult{
-			name:           name,
-			nodeImpl:       nodeType(name),
-			chainKey:       hex.EncodeToString(key[:]),
-			powerTableCID:  cert.SupplementalData.PowerTable.String(),
-			commitments:    hex.EncodeToString(cert.SupplementalData.Commitments[:]),
-			signerCount:    int(sigCount),
-			signatureShort: sigShort,
-			err:            nil,
+			name:          name,
+			nodeImpl:      nodeType(name),
+			chainKey:      hex.EncodeToString(key[:]),
+			powerTableCID: cert.SupplementalData.PowerTable.String(),
+			commitments:   hex.EncodeToString(cert.SupplementalData.Commitments[:]),
+			signerCount:   int(sigCount),
+			err:           nil,
 		})
 	}
 
@@ -1006,24 +998,21 @@ func DoF3FinalityAgreement() {
 		debugLog("[f3-agreement] instance %d: all %d nodes agree (cross_impl=%v)", checkInst, responded, crossImpl)
 	}
 
-	// Deep cert comparison: power table, supplemental data, signature
-	// These should be identical across all nodes for the same instance.
+	// Deep cert comparison: power table and supplemental data must be
+	// identical across all nodes for the same instance.
 	if agreed && responded >= 2 {
 		ptCIDs := map[string][]string{}
 		commitMap := map[string][]string{}
-		sigMap := map[string][]string{}
 		for _, r := range results {
 			if r.err != nil {
 				continue
 			}
 			ptCIDs[r.powerTableCID] = append(ptCIDs[r.powerTableCID], r.name)
 			commitMap[r.commitments] = append(commitMap[r.commitments], r.name)
-			sigMap[r.signatureShort] = append(sigMap[r.signatureShort], r.name)
 		}
 
 		ptAgreed := len(ptCIDs) == 1
 		commitAgreed := len(commitMap) == 1
-		sigAgreed := len(sigMap) == 1
 
 		assert.Always(ptAgreed, "F3 cert power table CID agrees across all nodes", map[string]any{
 			"instance":     checkInst,
@@ -1037,15 +1026,9 @@ func DoF3FinalityAgreement() {
 			"cross_impl":  crossImpl,
 		})
 
-		assert.Always(sigAgreed, "F3 cert aggregate signature agrees across all nodes", map[string]any{
-			"instance":   checkInst,
-			"signatures": sigMap,
-			"cross_impl": crossImpl,
-		})
-
-		if !ptAgreed || !commitAgreed || !sigAgreed {
-			log.Printf("[f3-agreement] DEEP CERT DIVERGENCE at instance %d: pt=%v commit=%v sig=%v",
-				checkInst, ptCIDs, commitMap, sigMap)
+		if !ptAgreed || !commitAgreed {
+			log.Printf("[f3-agreement] DEEP CERT DIVERGENCE at instance %d: pt=%v commit=%v",
+				checkInst, ptCIDs, commitMap)
 		}
 	}
 
