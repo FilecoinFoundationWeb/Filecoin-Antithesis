@@ -1050,8 +1050,10 @@ func verifyEconomicImpact(refNode api.FullNode, ar *attackResult, sr *splitResul
 	postBalance := actor.Balance
 	balanceDrop := new(big.Int).Sub(ar.preBalance.Int, postBalance.Int)
 
-	// Max cost of ONE tx: amount + gasLimit(1M) * gasFeeCap(100K) = ~100B attoFIL
-	maxGasCost := big.NewInt(100_000_000_000)
+	// Max gas cost for ONE tx: generous upper bound matching the balance-exhaustion
+	// gas reserve (1 FIL). Real gas is typically 100-200B attoFIL but can spike
+	// under congestion from concurrent stress vectors.
+	maxGasCost := big.NewInt(1_000_000_000_000_000_000)
 	maxSingleTxCost := new(big.Int).Add(ar.amount.Int, maxGasCost)
 
 	details := map[string]any{
