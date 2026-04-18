@@ -23,8 +23,9 @@ import (
 // at finalized heights. They catch non-deterministic execution bugs (Dec 2020
 // chain halt class), HAMT divergence, and FEVM interpreter mismatches.
 //
-// All comparisons anchor to ChainGetFinalizedTipSet so Forest lag does not
-// cause false positives.
+// All comparisons anchor to snapshotMinHeight (shared minimum finalized
+// tipset across all nodes) and re-check partitionActive before assertions
+// to avoid false positives from n-split aftermath.
 // ===========================================================================
 
 // ===========================================================================
@@ -51,7 +52,7 @@ func DoCrossImplStateCompute() {
 	}
 
 	snap := getFinalizedSnapshots()
-	finalizedHeight, _ := snapshotMinHeight(snap)
+	finalizedHeight, anchorKey := snapshotMinHeight(snap)
 	if finalizedHeight < finalizedMinHeight+5 {
 		return
 	}
@@ -69,17 +70,7 @@ func DoCrossImplStateCompute() {
 	for _, name := range nodeKeys {
 		node := nodes[name]
 
-		nodeFinTs, err := node.ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			debugLog("[cross-compute] ChainGetFinalizedTipSet failed on %s: %v", name, err)
-			continue
-		}
-		if nodeFinTs.Height() < checkHeight {
-			debugLog("[cross-compute] %s finalized height %d < check %d, skipping", name, nodeFinTs.Height(), checkHeight)
-			continue
-		}
-
-		ts, err := node.ChainGetTipSetByHeight(ctx, checkHeight, nodeFinTs.Key())
+		ts, err := node.ChainGetTipSetByHeight(ctx, checkHeight, anchorKey)
 		if err != nil {
 			debugLog("[cross-compute] ChainGetTipSetByHeight(%d) failed on %s: %v", checkHeight, name, err)
 			continue
@@ -129,6 +120,11 @@ func DoCrossImplStateCompute() {
 		"unique_roots":   len(rootGroups),
 		"nodes_checked":  len(okResults),
 		"cross_impl":     crossImpl,
+	}
+
+	if partitionActive.Load() {
+		debugLog("[cross-compute] partition became active mid-check, skipping assertions")
+		return
 	}
 
 	if checkHeight < finalizedHeight-10 {
@@ -233,14 +229,6 @@ func compareActorState(actor address.Address, finHeight abi.ChainEpoch, finTsk t
 	for _, name := range nodeKeys {
 		node := nodes[name]
 
-		nodeFinTs, err := node.ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			continue
-		}
-		if nodeFinTs.Height() < finHeight {
-			continue
-		}
-
 		actorState, err := node.StateReadState(ctx, actor, finTsk)
 		if err != nil {
 			debugLog("[deep-actor] StateReadState(%s) failed on %s: %v", actor, name, err)
@@ -311,6 +299,11 @@ func compareActorState(actor address.Address, finHeight abi.ChainEpoch, finTsk t
 		"balance_match":  balanceMatch,
 		"code_match":     codeMatch,
 		"node_states":    stateMap,
+	}
+
+	if partitionActive.Load() {
+		debugLog("[deep-actor] partition became active mid-check, skipping assertions")
+		return
 	}
 
 	assert.Always(allMatch, "Deep actor state matches across all nodes at finalized height", details)
@@ -394,15 +387,6 @@ func DoCrossImplEthCall() {
 	for _, name := range nodeKeys {
 		node := nodes[name]
 
-		nodeFinTs, err := node.ChainGetFinalizedTipSet(ctx)
-		if err != nil {
-			continue
-		}
-		if nodeFinTs.Height() < finHeight {
-			debugLog("[cross-ethcall] %s finalized height %d < check %d, skipping", name, nodeFinTs.Height(), finHeight)
-			continue
-		}
-
 		ret, err := node.EthCall(ctx, ethtypes.EthCall{
 			To:   &ethAddr,
 			Data: ethtypes.EthBytes(calldata),
@@ -445,6 +429,11 @@ func DoCrossImplEthCall() {
 		"unique_results": len(resultGroups),
 		"nodes_checked":  len(okResults),
 		"cross_impl":     crossImpl,
+	}
+
+	if partitionActive.Load() {
+		debugLog("[cross-ethcall] partition became active mid-check, skipping assertions")
+		return
 	}
 
 	assert.Always(agreed, "Cross-impl EthCall: all nodes return identical bytes for view function at finalized height", details)
