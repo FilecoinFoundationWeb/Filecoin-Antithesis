@@ -528,7 +528,12 @@ func DoF3FinalityMonitor() {
 		debugLog("[f3-monitor] %s F3 instance %d → %d", nodeName, prevInst, inst)
 	}
 
-	// Cross-node consistency: check all lotus nodes
+	// Cross-node consistency: skip during partitions — F3 instance spread is
+	// expected when nodes are isolated. Post-heal checks verify recovery.
+	if partitionActive.Load() {
+		return
+	}
+
 	var minInst, maxInst uint64
 	first := true
 	for _, name := range nodeKeys {

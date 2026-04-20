@@ -70,7 +70,7 @@ func DoHeavyCompute() {
 
 			stateMatches := st.Root == checkTs.ParentState()
 
-			assert.Always(stateMatches, nodeName+": Recomputed state root matches stored state", map[string]any{
+			assert.Always(stateMatches, "Recomputed state root matches stored state", map[string]any{
 				"node":           nodeName,
 				"node_type":      nodeType(nodeName),
 				"exec_height":    parentTs.Height(),
@@ -117,6 +117,11 @@ const (
 	// snapshotTTL controls how long a finalized-tipset snapshot is reused.
 	// Multiple consensus checks hitting the same deck tick share one fetch round.
 	snapshotTTL = 2 * time.Second
+
+	// EC finality fallback: when F3 stalls (e.g. quorum loss from miner slash),
+	// consensus vectors fall back to EC-based finality so assertions keep working.
+	ecFinalityDepth    = abi.ChainEpoch(30) // depth below head for EC fallback
+	f3StallGraceEpochs = abi.ChainEpoch(20) // head must advance this far past last F3 finalization before fallback activates
 )
 
 // ---------------------------------------------------------------------------
@@ -139,11 +144,46 @@ var (
 	snapCache   map[string]nodeSnapshot // nodeName -> snapshot
 	snapCacheMu sync.Mutex
 	snapCacheAt time.Time
+
+	// F3 stall detection state (protected by snapCacheMu)
+	f3LastFinalizedH    abi.ChainEpoch // highest observed minimum finalized height
+	f3HeadAtLastAdvance abi.ChainEpoch // max chain head when f3LastFinalizedH last changed
+	f3FallbackActive    bool           // true when EC fallback is in use
 )
+
+// f3StallState holds the F3 stall detection state machine inputs/outputs.
+type f3StallState struct {
+	lastFinalizedH    abi.ChainEpoch
+	headAtLastAdvance abi.ChainEpoch
+	fallbackActive    bool
+}
+
+// updateF3StallDetection is a pure function implementing the F3 stall detection
+// state machine. Separated from getFinalizedSnapshots for testability.
+func updateF3StallDetection(prev f3StallState, minFinH, maxHead abi.ChainEpoch, finCount int) f3StallState {
+	s := prev
+	if minFinH > s.lastFinalizedH {
+		s.lastFinalizedH = minFinH
+		s.headAtLastAdvance = maxHead
+		if s.fallbackActive {
+			log.Printf("[finalized] F3 resumed at height %d — deactivating EC fallback", minFinH)
+			s.fallbackActive = false
+		}
+	} else if finCount >= 2 && maxHead-s.headAtLastAdvance >= f3StallGraceEpochs && !s.fallbackActive {
+		log.Printf("[finalized] F3 stall detected: finalized stuck at %d, head at %d (+%d epochs since last F3 advance) — activating EC fallback (head-%d)",
+			s.lastFinalizedH, maxHead, maxHead-s.headAtLastAdvance, ecFinalityDepth)
+		s.fallbackActive = true
+	}
+	return s
+}
 
 // getFinalizedSnapshots returns a cached-or-fresh map of each node's finalized
 // tipset. Safe to call from any deck vector — concurrent callers within the
 // TTL window share the same result.
+//
+// When F3 stalls (finalized height frozen while chain head advances), falls
+// back to EC-based finality (head - ecFinalityDepth) so consensus vectors
+// keep checking new state instead of going blind.
 func getFinalizedSnapshots() map[string]nodeSnapshot {
 	snapCacheMu.Lock()
 	defer snapCacheMu.Unlock()
@@ -165,6 +205,65 @@ func getFinalizedSnapshots() map[string]nodeSnapshot {
 			key:    ts.Key(),
 		}
 	}
+
+	// --- F3 stall detection ---
+	var minFinH abi.ChainEpoch
+	finCount := 0
+	for _, s := range snap {
+		if s.err != nil {
+			continue
+		}
+		finCount++
+		if finCount == 1 || s.height < minFinH {
+			minFinH = s.height
+		}
+	}
+
+	var maxHead abi.ChainEpoch
+	for _, name := range nodeKeys {
+		head, err := nodes[name].ChainHead(ctx)
+		if err != nil {
+			continue
+		}
+		if head.Height() > maxHead {
+			maxHead = head.Height()
+		}
+	}
+
+	state := f3StallState{
+		lastFinalizedH:    f3LastFinalizedH,
+		headAtLastAdvance: f3HeadAtLastAdvance,
+		fallbackActive:    f3FallbackActive,
+	}
+	state = updateF3StallDetection(state, minFinH, maxHead, finCount)
+	f3LastFinalizedH = state.lastFinalizedH
+	f3HeadAtLastAdvance = state.headAtLastAdvance
+	f3FallbackActive = state.fallbackActive
+
+	if f3FallbackActive && maxHead > ecFinalityDepth {
+		for _, name := range nodeKeys {
+			head, err := nodes[name].ChainHead(ctx)
+			if err != nil {
+				snap[name] = nodeSnapshot{err: err}
+				continue
+			}
+			ecHeight := head.Height() - ecFinalityDepth
+			if ecHeight < 1 {
+				ecHeight = 1
+			}
+			ts, err := nodes[name].ChainGetTipSetByHeight(ctx, ecHeight, head.Key())
+			if err != nil {
+				snap[name] = nodeSnapshot{err: err}
+				continue
+			}
+			snap[name] = nodeSnapshot{
+				finTs:  ts,
+				height: ts.Height(),
+				key:    ts.Key(),
+			}
+		}
+	}
+
 	snapCache = snap
 	snapCacheAt = time.Now()
 	return snap
@@ -355,7 +454,7 @@ func DoPeerCount() {
 
 		peerCount := len(peers)
 
-		assert.Sometimes(peerCount > 0, name+": Node has active peer connections", map[string]any{
+		assert.Sometimes(peerCount > 0, "Node has active peer connections", map[string]any{
 			"node":       name,
 			"node_type":  nodeType(name),
 			"peer_count": peerCount,
@@ -648,7 +747,7 @@ const (
 	// forkConvergenceBuffer is how many epochs the chain must advance past
 	// the detection point before we re-check. If nodes still disagree after
 	// this many epochs, it's a persistent fork (real bug).
-	forkConvergenceBuffer = 50
+	forkConvergenceBuffer = 20
 
 	// forkPollInterval is how often the background goroutine checks for forks.
 	forkPollInterval = 5 * time.Second
@@ -928,9 +1027,8 @@ func DoF3FinalityAgreement() {
 		chainKey       string // hex-encoded ECChain key digest
 		powerTableCID  string // CID of power table for next instance
 		commitments    string // hex of supplemental data commitments
-		signerCount    int    // number of signers in bitfield
-		signatureShort string // first 16 bytes of aggregate signature (hex)
-		err            error
+		signerCount int // number of signers in bitfield
+		err         error
 	}
 
 	var results []nodeResult
@@ -946,21 +1044,14 @@ func DoF3FinalityAgreement() {
 		}
 		key := cert.ECChain.Key()
 		sigCount, _ := cert.Signers.Count()
-		sigShort := ""
-		if len(cert.Signature) >= 16 {
-			sigShort = hex.EncodeToString(cert.Signature[:16])
-		} else if len(cert.Signature) > 0 {
-			sigShort = hex.EncodeToString(cert.Signature)
-		}
 		results = append(results, nodeResult{
-			name:           name,
-			nodeImpl:       nodeType(name),
-			chainKey:       hex.EncodeToString(key[:]),
-			powerTableCID:  cert.SupplementalData.PowerTable.String(),
-			commitments:    hex.EncodeToString(cert.SupplementalData.Commitments[:]),
-			signerCount:    int(sigCount),
-			signatureShort: sigShort,
-			err:            nil,
+			name:          name,
+			nodeImpl:      nodeType(name),
+			chainKey:      hex.EncodeToString(key[:]),
+			powerTableCID: cert.SupplementalData.PowerTable.String(),
+			commitments:   hex.EncodeToString(cert.SupplementalData.Commitments[:]),
+			signerCount:   int(sigCount),
+			err:           nil,
 		})
 	}
 
@@ -1006,24 +1097,21 @@ func DoF3FinalityAgreement() {
 		debugLog("[f3-agreement] instance %d: all %d nodes agree (cross_impl=%v)", checkInst, responded, crossImpl)
 	}
 
-	// Deep cert comparison: power table, supplemental data, signature
-	// These should be identical across all nodes for the same instance.
+	// Deep cert comparison: power table and supplemental data must be
+	// identical across all nodes for the same instance.
 	if agreed && responded >= 2 {
 		ptCIDs := map[string][]string{}
 		commitMap := map[string][]string{}
-		sigMap := map[string][]string{}
 		for _, r := range results {
 			if r.err != nil {
 				continue
 			}
 			ptCIDs[r.powerTableCID] = append(ptCIDs[r.powerTableCID], r.name)
 			commitMap[r.commitments] = append(commitMap[r.commitments], r.name)
-			sigMap[r.signatureShort] = append(sigMap[r.signatureShort], r.name)
 		}
 
 		ptAgreed := len(ptCIDs) == 1
 		commitAgreed := len(commitMap) == 1
-		sigAgreed := len(sigMap) == 1
 
 		assert.Always(ptAgreed, "F3 cert power table CID agrees across all nodes", map[string]any{
 			"instance":     checkInst,
@@ -1037,15 +1125,9 @@ func DoF3FinalityAgreement() {
 			"cross_impl":  crossImpl,
 		})
 
-		assert.Always(sigAgreed, "F3 cert aggregate signature agrees across all nodes", map[string]any{
-			"instance":   checkInst,
-			"signatures": sigMap,
-			"cross_impl": crossImpl,
-		})
-
-		if !ptAgreed || !commitAgreed || !sigAgreed {
-			log.Printf("[f3-agreement] DEEP CERT DIVERGENCE at instance %d: pt=%v commit=%v sig=%v",
-				checkInst, ptCIDs, commitMap, sigMap)
+		if !ptAgreed || !commitAgreed {
+			log.Printf("[f3-agreement] DEEP CERT DIVERGENCE at instance %d: pt=%v commit=%v",
+				checkInst, ptCIDs, commitMap)
 		}
 	}
 

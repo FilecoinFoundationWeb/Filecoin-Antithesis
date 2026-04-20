@@ -13,7 +13,7 @@ on:
       setup:
         type: choice
         required: false
-        default: 'nightly'
+        default: 'consensus'
         description: 'Workload profile (selects .env for stress weights)'
         options:
           - nightly
@@ -138,7 +138,7 @@ jobs:
           github_token: ${{ secrets.GH_PAT }}
           images: ${{ steps.images.outputs.list }}
           config_image: config:${{ github.event.inputs.config }}
-          description: "Manual Test"
+          description: "Manual Test - ${{ inputs.setup }} profile"
           email_recipients: ${{ github.event.inputs.emails }}
           additional_parameters: |-
             custom.duration=${{ github.event.inputs.duration }}
@@ -172,16 +172,16 @@ jobs:
           github_token: ${{ secrets.GH_PAT }}
           images: drand:latest;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
-          description: "Nightly Profile: 12 hr balanced full-coverage run"
+          description: "Consensus Profile: 12 hr balanced full-coverage run"
           additional_parameters: |-
             custom.duration=12
-            custom.setup=nightly
-            antithesis.source=main-nightly
+            custom.setup=consensus
+            antithesis.source=main-consensus
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
       
   scheduled_run_b:
-    name: "Nightly @ 11 PM IST - FOC Team"
+    name: "Nightly @ 11 PM IST - Nightly Profile"
     if: github.event_name == 'schedule' && github.event.schedule == '30 18 * * *'
     runs-on: ubuntu-latest
     permissions:
@@ -190,17 +190,17 @@ jobs:
     steps:
       - uses: antithesishq/antithesis-trigger-action@main
         with:
-          notebook_name: filecoin-foc
+          notebook_name: filecoin
           tenant: cobalt-bunny
           username: filecoin
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          images: drand:latest;forest:latest;lotus:latest;workload:latest;curio:latest;filwizard:latest
+          images: drand:latest;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
-          description: "FOC Profile: 12 hr Curio PDP lifecycle run"
+          description: "Nightly Profile: 12 hr balanced full-coverage run"
           additional_parameters: |-
             custom.duration=12
-            custom.setup=foc
-            antithesis.source=main-foc
+            custom.setup=nightly
+            antithesis.source=main-nightly
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}

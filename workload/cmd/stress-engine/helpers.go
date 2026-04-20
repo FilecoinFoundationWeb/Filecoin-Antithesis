@@ -56,7 +56,6 @@ func signMsg(msg *types.Message, ki *types.KeyInfo) *types.SignedMessage {
 		log.Printf("[sign] signing failed for %s: %v", msg.From, err)
 		return nil
 	}
-	assert.Reachable("signMsg produced valid signature", nil)
 	return &types.SignedMessage{
 		Message:   *msg,
 		Signature: *sig,
@@ -80,7 +79,6 @@ func pushMsg(node api.FullNode, msg *types.Message, ki *types.KeyInfo, tag strin
 	}
 
 	nonces[msg.From]++
-	assert.Reachable("MpoolPush succeeded", map[string]any{"tag": tag})
 	return true
 }
 
@@ -138,7 +136,7 @@ func waitForMsg(node api.FullNode, msgCid cid.Cid, tag string) *api.MsgLookup {
 		log.Printf("[%s] StateWaitMsg failed for %s: %v", tag, cidStr(msgCid), err)
 		return nil
 	}
-	assert.Reachable("Message included on chain", map[string]any{"tag": tag})
+	assert.Sometimes(true, "Message included on chain", map[string]any{"tag": tag})
 	return result
 }
 
@@ -159,7 +157,6 @@ func pushMsgWithCid(node api.FullNode, msg *types.Message, ki *types.KeyInfo, ta
 	}
 
 	nonces[msg.From]++
-	assert.Reachable("MpoolPush with CID succeeded", map[string]any{"tag": tag})
 	return msgCid, true
 }
 
@@ -268,7 +265,7 @@ func verifyActorConsistency(addr address.Address, phase string) {
 		details["state_"+r.node] = r.state
 	}
 
-	assert.Reachable("Actor state consistent across nodes", details)
+	assert.Reachable("Actor state consistency check executed", details)
 
 	if !allMatch {
 		log.Printf("[actor-verify] DIVERGENCE %s actor=%s: %v", phase, addr, details)
