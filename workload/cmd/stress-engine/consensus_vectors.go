@@ -121,7 +121,7 @@ const (
 	// EC finality fallback: when F3 stalls (e.g. quorum loss from miner slash),
 	// consensus vectors fall back to EC-based finality so assertions keep working.
 	ecFinalityDepth    = abi.ChainEpoch(30) // depth below head for EC fallback
-	f3StallGraceEpochs = abi.ChainEpoch(50) // head must advance this far past last F3 finalization before fallback activates
+	f3StallGraceEpochs = abi.ChainEpoch(20) // head must advance this far past last F3 finalization before fallback activates
 )
 
 // ---------------------------------------------------------------------------
@@ -747,7 +747,7 @@ const (
 	// forkConvergenceBuffer is how many epochs the chain must advance past
 	// the detection point before we re-check. If nodes still disagree after
 	// this many epochs, it's a persistent fork (real bug).
-	forkConvergenceBuffer = 50
+	forkConvergenceBuffer = 20
 
 	// forkPollInterval is how often the background goroutine checks for forks.
 	forkPollInterval = 5 * time.Second
