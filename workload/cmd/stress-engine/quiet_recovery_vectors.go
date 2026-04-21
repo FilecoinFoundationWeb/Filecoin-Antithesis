@@ -116,7 +116,7 @@ func DoQuietRecovery() {
 	// ── Step 7: Assert tipset agreement at finalized height ──────────────────
 	// Use the minimum post-recovery height minus a small finality buffer as the
 	// comparison point. All converged nodes should agree on this tipset.
-	checkHeight := postMin - abi.ChainEpoch(finalityBuffer)
+	checkHeight := postMin - abi.ChainEpoch(quietFinalityBuffer)
 	if checkHeight <= 0 {
 		log.Println("[quiet-recovery] chain too short for finalized tipset check")
 		return
