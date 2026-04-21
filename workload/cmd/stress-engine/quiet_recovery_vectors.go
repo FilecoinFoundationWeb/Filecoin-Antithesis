@@ -57,7 +57,7 @@ func DoQuietRecovery() {
 	log.Printf("[quiet-recovery] pre-recovery max height: %d", preMax)
 
 	// ── Step 2: Pause fault injection ────────────────────────────────────────
-	log.Printf("[quiet-recovery] requesting %ss quiet period", quietDuration)
+	log.Printf("[quiet-recovery] requesting %ss quiet period via: %s", quietDuration, stopBin)
 	cmd := exec.CommandContext(ctx, stopBin, quietDuration)
 	if err := cmd.Run(); err != nil {
 		log.Printf("[quiet-recovery] ANTITHESIS_STOP_FAULTS failed: %v", err)
