@@ -29,6 +29,7 @@ const (
 	quietDuration      = "45" // seconds to pause faults (string for exec arg)
 	quietStabilizeSecs = 15   // seconds to wait for gossip/reconnection after faults pause
 	quietDriftThreshold = 3   // max block drift to consider nodes "converged"
+	quietFinalityBuffer = 10   // epochs below min post-recovery height to check tipset agreement
 )
 
 // DoQuietRecovery requests a fault-free window and verifies chain self-healing.
@@ -54,6 +55,9 @@ func DoQuietRecovery() {
 		log.Println("[quiet-recovery] no responsive nodes, skipping")
 		return
 	}
+	for name, h := range preHeights {
+		log.Printf("[quiet-recovery] pre-height %s: %d", name, h)
+	}
 	log.Printf("[quiet-recovery] pre-recovery max height: %d", preMax)
 
 	// ── Step 2: Pause fault injection ────────────────────────────────────────
@@ -71,6 +75,9 @@ func DoQuietRecovery() {
 	postHeights := queryNodeHeights()
 	postMax := maxEpoch(postHeights)
 	postMin := minEpoch(postHeights)
+	for name, h := range postHeights {
+		log.Printf("[quiet-recovery] post-height %s: %d", name, h)
+	}
 	log.Printf("[quiet-recovery] post-recovery max height: %d, min height: %d", postMax, postMin)
 
 	// ── Step 5: Assert chain advanced ────────────────────────────────────────
@@ -109,7 +116,6 @@ func DoQuietRecovery() {
 	// ── Step 7: Assert tipset agreement at finalized height ──────────────────
 	// Use the minimum post-recovery height minus a small finality buffer as the
 	// comparison point. All converged nodes should agree on this tipset.
-	const finalityBuffer = 5
 	checkHeight := postMin - abi.ChainEpoch(finalityBuffer)
 	if checkHeight <= 0 {
 		log.Println("[quiet-recovery] chain too short for finalized tipset check")
@@ -117,6 +123,7 @@ func DoQuietRecovery() {
 	}
 
 	var cidStrings []string
+	var cidByNode []string // "node=CIDs" for logging
 	var respondents int
 	for _, name := range nodeKeys {
 		h, ok := postHeights[name]
@@ -133,8 +140,11 @@ func DoQuietRecovery() {
 			cids += c.String() + ","
 		}
 		cidStrings = append(cidStrings, cids)
+		cidByNode = append(cidByNode, name+"="+cids)
 		respondents++
 	}
+	log.Printf("[quiet-recovery] tipsets at height %d: %v", checkHeight, cidByNode)
+
 
 	if respondents < 2 {
 		log.Printf("[quiet-recovery] only %d nodes returned tipsets at height %d, skipping agreement check", respondents, checkHeight)
@@ -159,6 +169,21 @@ func DoQuietRecovery() {
 		log.Printf("[quiet-recovery] all %d nodes agree on tipset at height %d", respondents, checkHeight)
 	} else {
 		log.Printf("[quiet-recovery] TIPSET DISAGREEMENT at height %d among %d nodes", checkHeight, respondents)
+		for _, entry := range cidByNode {
+			log.Printf("[quiet-recovery]   %s", entry)
+		}
+		// Also check head tipset to see if disagreement extends to the tip
+		for _, name := range nodeKeys {
+			head, err := nodes[name].ChainHead(ctx)
+			if err != nil {
+				continue
+			}
+			headCids := ""
+			for _, c := range head.Cids() {
+				headCids += c.String() + ","
+			}
+			log.Printf("[quiet-recovery] head-tipset %s (height=%d): %s", name, head.Height(), headCids)
+		}
 	}
 }
 
