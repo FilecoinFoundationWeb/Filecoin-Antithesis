@@ -5,10 +5,11 @@ FROM golang:$GO_VERSION
 # installing jq, opencl, and hwloc (required for make 2k step)
 RUN apt-get update && apt-get install -y jq libhwloc-dev ocl-icd-opencl-dev && rm -rf /var/lib/apt/lists/*
 
-# cloning lotus
-ARG REF="master"
-RUN git clone --depth=1 https://github.com/filecoin-project/lotus.git --branch=${REF} /lotus
+# cloning lotus — supports branch, tag, or commit SHA
+ARG REF="d036ad9521d6621b5393d3d1b707a9994e94feed"
+RUN git clone https://github.com/filecoin-project/lotus.git /lotus
 WORKDIR /lotus
+RUN git checkout ${REF}
 
 # copy & apply lotus patch (local drand; setting bootstrap and finality epoch)
 COPY patches/lotus.patch lotus.patch

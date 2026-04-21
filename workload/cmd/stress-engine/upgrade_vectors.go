@@ -19,61 +19,66 @@ import (
 // Generic Network Upgrade Test Suite
 //
 // Upgrade-agnostic vectors that validate state consistency across ANY network
-// version transition. Two categories:
+// version transition. All nodes upgrade in lockstep at each configured
+// boundary (no partial-migration handling).
+//
+// Two categories:
 //
 //   GENERIC — run for every upgrade, no FIP knowledge needed:
 //     - Network version agreement across nodes
-//     - State root agreement at migration epoch
-//     - Receipt consistency at boundary
-//     - Upgrade activation liveness
+//     - Per-node upgrade activation
+//     - State root agreement at migration epoch±1
+//     - Receipt root consistency at boundary
+//     - Chain progress across boundary (stall detector)
+//     - Boundary-timed message/actor-churn stress
 //
 //   FIP-SPECIFIC — registered by per-upgrade files (e.g. nv28_vectors.go):
 //     - Custom boundary stress functions
 //     - Precompile/opcode tests
 //     - Gas formula validation
 //
-// The suite self-gates: active around the upgrade boundary window, becomes
-// a no-op once the chain is 30+ epochs past the upgrade.
+// Self-gates per boundary: active in [epoch-10, epoch+30]; silent otherwise.
+// Every assertion payload carries `boundary` so the Antithesis report
+// distinguishes which upgrade broke.
+//
+// Known interaction: DoHeightProgression (consensus_vectors.go) tolerates
+// <=10-epoch cross-node spread. A slow-migrating impl may briefly exceed
+// this during migration. If that causes false positives, widen its
+// tolerance only while nearUpgrade is true; do not duplicate the check here.
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// Upgrade state tracking
+// Boundary configuration
 // ---------------------------------------------------------------------------
 
 const upgradeBoundaryWindow = 30 // epochs past upgrade before suite goes quiet
 
+type upgradeBoundary struct {
+	Name  string // e.g. "NV27", "NV28"
+	Epoch abi.ChainEpoch
+}
+
 var (
-	upgradeOnce     sync.Once
-	upgradeEpoch    abi.ChainEpoch
-	preUpgradeNV    network.Version
-	upgradeDetected bool
+	upgradeOnce        sync.Once
+	upgradeBoundaries  []upgradeBoundary
 )
 
 func initUpgradeState() {
 	upgradeOnce.Do(func() {
-		upgradeEpoch = abi.ChainEpoch(envInt("XX_HEIGHT", 99999))
+		// Only include boundaries with a real mid-test epoch (>0). Negative or
+		// zero values mean "already active at genesis" — nothing to test.
+		if g := abi.ChainEpoch(envInt("GOLDENWEEK_HEIGHT", 0)); g > 0 {
+			upgradeBoundaries = append(upgradeBoundaries, upgradeBoundary{"NV27", g})
+		}
+		if x := abi.ChainEpoch(envInt("FIREHORSE_HEIGHT", 0)); x > 0 {
+			upgradeBoundaries = append(upgradeBoundaries, upgradeBoundary{"NV28", x})
+		}
 	})
 }
 
-// extractActorID decodes a CreateExternalReturn from a message lookup result.
-func extractActorID(result *api.MsgLookup) *address.Address {
-	if result == nil || result.Receipt.Return == nil {
-		return nil
-	}
-	var ret eam.CreateExternalReturn
-	if err := ret.UnmarshalCBOR(bytes.NewReader(result.Receipt.Return)); err != nil {
-		return nil
-	}
-	addr, err := address.NewIDAddress(ret.ActorID)
-	if err != nil {
-		return nil
-	}
-	return &addr
-}
-
 // nearUpgrade returns true if height is within the active boundary window.
-func nearUpgrade(height abi.ChainEpoch) bool {
-	return height >= upgradeEpoch-10 && height <= upgradeEpoch+abi.ChainEpoch(upgradeBoundaryWindow)
+func nearUpgrade(height abi.ChainEpoch, b upgradeBoundary) bool {
+	return height >= b.Epoch-10 && height <= b.Epoch+abi.ChainEpoch(upgradeBoundaryWindow)
 }
 
 // ---------------------------------------------------------------------------
@@ -92,61 +97,84 @@ func RegisterFIPBoundaryFunc(fn UpgradeBoundaryFunc) {
 	fipBoundaryFuncs = append(fipBoundaryFuncs, fn)
 }
 
+// extractActorID decodes a CreateExternalReturn from a message lookup result.
+// Exposed for FIP-specific vectors that deploy actors at the boundary.
+func extractActorID(result *api.MsgLookup) *address.Address {
+	if result == nil || result.Receipt.Return == nil {
+		return nil
+	}
+	var ret eam.CreateExternalReturn
+	if err := ret.UnmarshalCBOR(bytes.NewReader(result.Receipt.Return)); err != nil {
+		return nil
+	}
+	addr, err := address.NewIDAddress(ret.ActorID)
+	if err != nil {
+		return nil
+	}
+	return &addr
+}
+
 // ---------------------------------------------------------------------------
 // DoUpgradeSuite — single deck entry
 //
-// Active from upgradeEpoch-10 through upgradeEpoch+30. Before and after
-// that window, returns immediately (no deck time wasted).
-//
-// Runs generic assertions first, then any registered FIP-specific functions.
+// For each configured boundary, if the current max-head is within the active
+// window, run the generic assertions and boundary-timed stress. FIP-specific
+// hooks run last, once per invocation (they self-gate internally).
 // ---------------------------------------------------------------------------
 
 func DoUpgradeSuite() {
 	initUpgradeState()
+	if len(upgradeBoundaries) == 0 {
+		return
+	}
 
-	// Use max chain head across all nodes — a crashed/restarted node shouldn't
-	// suppress the suite for everyone else.
-	var currentHeight abi.ChainEpoch
+	currentHeight := maxHeadAcrossNodes()
+	if currentHeight == 0 {
+		return
+	}
+
+	for _, b := range upgradeBoundaries {
+		if !nearUpgrade(currentHeight, b) {
+			continue
+		}
+		doNetworkVersionAgreement(b)
+		doUpgradeActivation(currentHeight, b)
+		doMigrationStateRootAgreement(b)
+		doReceiptConsistencyAtBoundary(b)
+		doChainProgressAcrossBoundary(currentHeight, b)
+		doPostUpgradeNodeHealth(currentHeight, b)
+		doBoundaryMessageBurst(currentHeight, b)
+		doActorChurnAtBoundary(currentHeight, b)
+	}
+
+	for _, fn := range fipBoundaryFuncs {
+		fn(currentHeight)
+	}
+}
+
+// maxHeadAcrossNodes returns the highest head height seen across all nodes.
+// A crashed/restarted node shouldn't suppress the suite for everyone else.
+func maxHeadAcrossNodes() abi.ChainEpoch {
+	var h abi.ChainEpoch
 	for _, name := range nodeKeys {
 		head, err := nodes[name].ChainHead(ctx)
 		if err != nil {
 			continue
 		}
-		if head.Height() > currentHeight {
-			currentHeight = head.Height()
+		if head.Height() > h {
+			h = head.Height()
 		}
 	}
-	if currentHeight == 0 {
-		return
-	}
-
-	// Self-gate: only active around the upgrade boundary
-	if currentHeight < upgradeEpoch-10 || currentHeight > upgradeEpoch+abi.ChainEpoch(upgradeBoundaryWindow) {
-		return
-	}
-
-	// --- Generic assertions (any upgrade) ---
-	doNetworkVersionAgreement()
-	doUpgradeActivation(currentHeight)
-	doMigrationStateRootAgreement()
-	doReceiptConsistencyAtBoundary()
-
-	// --- Generic boundary stress ---
-	doBoundaryMessageBurst(currentHeight)
-	doActorChurnAtBoundary(currentHeight)
-
-	// --- FIP-specific hooks ---
-	for _, fn := range fipBoundaryFuncs {
-		fn(currentHeight)
-	}
+	return h
 }
 
 // ===========================================================================
 // Generic Assertions
 // ===========================================================================
 
-// doNetworkVersionAgreement — all nodes must report the same NV at finalized height.
-func doNetworkVersionAgreement() {
+// doNetworkVersionAgreement — all nodes must report the same NV at a
+// finalized height near the boundary.
+func doNetworkVersionAgreement(b upgradeBoundary) {
 	if len(nodeKeys) < 2 {
 		return
 	}
@@ -188,84 +216,102 @@ func doNetworkVersionAgreement() {
 	agreed := len(versions) == 1
 
 	assert.Always(agreed, "Network version agrees across all nodes", map[string]any{
+		"boundary":     b.Name,
 		"height":       checkHeight,
 		"finalized_at": finalizedHeight,
 		"versions":     versions,
 		"responded":    responded,
-		"near_upgrade": nearUpgrade(checkHeight),
+		"near_boundary": nearUpgrade(checkHeight, b),
 	})
 
 	if !agreed {
-		log.Printf("[upgrade] NETWORK VERSION DIVERGENCE at height %d: %v", checkHeight, versions)
-	}
-
-	// Track NV for activation check
-	if checkHeight < upgradeEpoch && preUpgradeNV == 0 {
-		for nv := range versions {
-			preUpgradeNV = nv
-		}
-	}
-	if !upgradeDetected && checkHeight > upgradeEpoch && preUpgradeNV > 0 {
-		for nv := range versions {
-			if nv > preUpgradeNV {
-				upgradeDetected = true
-				log.Printf("[upgrade] detected: NV %d → %d at epoch %d", preUpgradeNV, nv, upgradeEpoch)
-			}
-		}
+		log.Printf("[upgrade/%s] NETWORK VERSION DIVERGENCE at height %d: %v", b.Name, checkHeight, versions)
 	}
 }
 
-// doUpgradeActivation — liveness: NV must advance after upgrade epoch.
-func doUpgradeActivation(currentHeight abi.ChainEpoch) {
-	if currentHeight <= upgradeEpoch+5 || upgradeEpoch < 2 {
+// doUpgradeActivation — every node's NV must advance across the boundary.
+// Catches a node that silently didn't activate the upgrade.
+func doUpgradeActivation(currentHeight abi.ChainEpoch, b upgradeBoundary) {
+	if currentHeight <= b.Epoch+5 || b.Epoch < 2 {
 		return
 	}
 
-	node := nodes[nodeKeys[0]]
-	head, err := node.ChainHead(ctx)
-	if err != nil {
+	perNode := make(map[string]map[string]network.Version)
+	allActivated := true
+	checked := 0
+
+	for _, name := range nodeKeys {
+		n := nodes[name]
+		head, err := n.ChainHead(ctx)
+		if err != nil {
+			continue
+		}
+
+		postTs, err := n.ChainGetTipSetByHeight(ctx, b.Epoch+1, head.Key())
+		if err != nil {
+			continue
+		}
+		// Null-round guard: ChainGetTipSetByHeight returns the most recent
+		// non-null tipset at or below the requested height. If epoch+1 is a
+		// null round, the returned tipset could be at epoch-N (pre-upgrade).
+		// Trusting its NV would falsely report "not activated." Skip.
+		if postTs.Height() < b.Epoch {
+			continue
+		}
+		postNV, err := n.StateNetworkVersion(ctx, postTs.Key())
+		if err != nil {
+			continue
+		}
+
+		preTs, err := n.ChainGetTipSetByHeight(ctx, b.Epoch-1, head.Key())
+		if err != nil {
+			continue
+		}
+		// Null-skip on the pre side is safe: returned tipset is still
+		// pre-boundary, so NV is still pre-upgrade.
+		preNV, err := n.StateNetworkVersion(ctx, preTs.Key())
+		if err != nil {
+			continue
+		}
+
+		perNode[name] = map[string]network.Version{"pre": preNV, "post": postNV}
+		if postNV <= preNV {
+			allActivated = false
+		}
+		checked++
+	}
+
+	if checked < 2 {
 		return
 	}
 
-	postTs, err := node.ChainGetTipSetByHeight(ctx, upgradeEpoch+1, head.Key())
-	if err != nil {
-		return
-	}
-	postNV, err := node.StateNetworkVersion(ctx, postTs.Key())
-	if err != nil {
-		return
-	}
-
-	preTs, err := node.ChainGetTipSetByHeight(ctx, upgradeEpoch-1, head.Key())
-	if err != nil {
-		return
-	}
-	preNV, err := node.StateNetworkVersion(ctx, preTs.Key())
-	if err != nil {
-		return
-	}
-
-	assert.Sometimes(postNV > preNV, "Network upgrade activated at configured epoch", map[string]any{
-		"upgrade_epoch": upgradeEpoch,
-		"pre_nv":        preNV,
-		"post_nv":       postNV,
+	assert.Always(allActivated, "All nodes activated upgrade across boundary", map[string]any{
+		"boundary":      b.Name,
+		"upgrade_epoch": b.Epoch,
+		"per_node":      perNode,
+		"checked":       checked,
 	})
+
+	if !allActivated {
+		log.Printf("[upgrade/%s] ACTIVATION DIVERGENCE at epoch %d: %v", b.Name, b.Epoch, perNode)
+	}
 }
 
 // doMigrationStateRootAgreement — state roots at epoch-1, epoch, epoch+1 must match.
-func doMigrationStateRootAgreement() {
+// Boundary-forced complement to STRESS_WEIGHT_STATE_ROOT which samples random heights.
+func doMigrationStateRootAgreement(b upgradeBoundary) {
 	if len(nodeKeys) < 2 {
 		return
 	}
 
 	snap := getFinalizedSnapshots()
 	finalizedHeight, anchorKey := snapshotMinHeight(snap)
-	if finalizedHeight < upgradeEpoch+2 {
+	if finalizedHeight < b.Epoch+2 {
 		return
 	}
 
 	for _, offset := range []abi.ChainEpoch{-1, 0, 1} {
-		checkHeight := upgradeEpoch + offset
+		checkHeight := b.Epoch + offset
 		if checkHeight < 1 {
 			continue
 		}
@@ -301,32 +347,34 @@ func doMigrationStateRootAgreement() {
 		}
 
 		assert.Always(agreed, "State root agrees "+phase+" upgrade migration", map[string]any{
+			"boundary":      b.Name,
 			"height":        checkHeight,
-			"upgrade_epoch": upgradeEpoch,
+			"upgrade_epoch": b.Epoch,
 			"phase":         phase,
 			"state_roots":   stateRoots,
 			"responded":     totalResponded,
 		})
 
 		if !agreed {
-			log.Printf("[upgrade] STATE ROOT DIVERGENCE %s migration (epoch %d): %v", phase, checkHeight, stateRoots)
+			log.Printf("[upgrade/%s] STATE ROOT DIVERGENCE %s migration (epoch %d): %v", b.Name, phase, checkHeight, stateRoots)
 		}
 	}
 }
 
 // doReceiptConsistencyAtBoundary — receipt roots at upgrade+1 must match.
-func doReceiptConsistencyAtBoundary() {
+// Complements DoStateAudit (receipt count) and DoReceiptAudit (per-message).
+func doReceiptConsistencyAtBoundary(b upgradeBoundary) {
 	if len(nodeKeys) < 2 {
 		return
 	}
 
 	snap := getFinalizedSnapshots()
 	finalizedHeight, anchorKey := snapshotMinHeight(snap)
-	if finalizedHeight < upgradeEpoch+2 {
+	if finalizedHeight < b.Epoch+2 {
 		return
 	}
 
-	checkHeight := upgradeEpoch + 1
+	checkHeight := b.Epoch + 1
 
 	receiptRoots := make(map[string][]string)
 	for name, s := range snap {
@@ -352,15 +400,95 @@ func doReceiptConsistencyAtBoundary() {
 	agreed := len(receiptRoots) == 1
 
 	assert.Always(agreed, "Receipt roots agree at first post-upgrade epoch", map[string]any{
+		"boundary":      b.Name,
 		"height":        checkHeight,
-		"upgrade_epoch": upgradeEpoch,
+		"upgrade_epoch": b.Epoch,
 		"receipt_roots": receiptRoots,
 		"responded":     totalResponded,
 	})
 
 	if !agreed {
-		log.Printf("[upgrade] RECEIPT DIVERGENCE at post-upgrade epoch %d: %v", checkHeight, receiptRoots)
+		log.Printf("[upgrade/%s] RECEIPT DIVERGENCE at post-upgrade epoch %d: %v", b.Name, checkHeight, receiptRoots)
 	}
+}
+
+// doChainProgressAcrossBoundary — samples max head now and ~30s later in the
+// [epoch, epoch+20] window. Catches migration stalls that make all the other
+// boundary assertions skip silently (they short-circuit on finalizedHeight
+// < epoch+2). DoHeightProgression checks cross-node spread, not time delta.
+//
+// Uses assert.Sometimes (liveness): Antithesis fault injection includes
+// global pauses and time dilation, so a single observation of "no progress
+// over 30s wall-clock" is expected under faults and must not fail the run.
+// A true migration stall manifests as *no* observation ever seeing progress
+// across the whole [epoch, epoch+20] window — that's what Sometimes catches.
+func doChainProgressAcrossBoundary(currentHeight abi.ChainEpoch, b upgradeBoundary) {
+	if currentHeight < b.Epoch || currentHeight > b.Epoch+20 {
+		return
+	}
+
+	before := maxHeadAcrossNodes()
+	if before == 0 {
+		return
+	}
+	time.Sleep(30 * time.Second)
+	after := maxHeadAcrossNodes()
+	if after == 0 {
+		return
+	}
+
+	progressed := after > before
+
+	assert.Sometimes(progressed, "Chain makes progress across upgrade boundary", map[string]any{
+		"boundary":      b.Name,
+		"upgrade_epoch": b.Epoch,
+		"before":        before,
+		"after":         after,
+		"delta":         int64(after - before),
+	})
+
+	if !progressed {
+		log.Printf("[upgrade/%s] no progress in 30s window at epoch %d (before=%d, after=%d) — may be fault-injection pause", b.Name, b.Epoch, before, after)
+	}
+}
+
+// doPostUpgradeNodeHealth — in the post-boundary window, verifies every
+// declared node has at some point been observed responsive AND past the
+// upgrade epoch. Uses Sometimes (liveness) so that transient Antithesis
+// faults (crash/pause/restart of a single node at the moment we query) do
+// not false-positive. A node that stays unreachable or stuck below the
+// boundary for the *entire* window will fail this assertion.
+func doPostUpgradeNodeHealth(currentHeight abi.ChainEpoch, b upgradeBoundary) {
+	if currentHeight <= b.Epoch+5 {
+		return
+	}
+
+	perNode := make(map[string]map[string]any)
+	allHealthy := true
+
+	for _, name := range nodeKeys {
+		head, err := nodes[name].ChainHead(ctx)
+		if err != nil {
+			perNode[name] = map[string]any{"responsive": false, "err": err.Error()}
+			allHealthy = false
+			continue
+		}
+		pastBoundary := head.Height() > b.Epoch
+		perNode[name] = map[string]any{
+			"responsive":    true,
+			"height":        int64(head.Height()),
+			"past_boundary": pastBoundary,
+		}
+		if !pastBoundary {
+			allHealthy = false
+		}
+	}
+
+	assert.Sometimes(allHealthy, "All nodes responsive and past upgrade boundary", map[string]any{
+		"boundary":      b.Name,
+		"upgrade_epoch": b.Epoch,
+		"per_node":      perNode,
+	})
 }
 
 // ===========================================================================
@@ -369,13 +497,13 @@ func doReceiptConsistencyAtBoundary() {
 
 // doBoundaryMessageBurst — submits messages right before upgrade so they're
 // in-flight when the state migration runs.
-func doBoundaryMessageBurst(currentHeight abi.ChainEpoch) {
-	epochsUntilUpgrade := upgradeEpoch - currentHeight
+func doBoundaryMessageBurst(currentHeight abi.ChainEpoch, b upgradeBoundary) {
+	epochsUntilUpgrade := b.Epoch - currentHeight
 	if epochsUntilUpgrade < 0 || epochsUntilUpgrade > 5 {
 		return
 	}
 
-	log.Printf("[upgrade-stress] boundary burst: %d epochs until upgrade", epochsUntilUpgrade)
+	log.Printf("[upgrade-stress/%s] boundary burst: %d epochs until upgrade", b.Name, epochsUntilUpgrade)
 
 	burstCount := rngIntn(6) + 5
 	sent := 0
@@ -389,29 +517,29 @@ func doBoundaryMessageBurst(currentHeight abi.ChainEpoch) {
 		msg := baseMsg(fromAddr, toAddr, abi.NewTokenAmount(int64(rngIntn(1000)+1)))
 		if pushMsg(n, msg, fromKI, "upgrade-burst") {
 			sent++
-			debugLog("[upgrade-stress] burst msg %d via %s", i, nodeName)
+			debugLog("[upgrade-stress/%s] burst msg %d via %s", b.Name, i, nodeName)
 		}
 	}
 
 	if sent > 0 {
 		assert.Reachable("Boundary message burst submitted before upgrade", map[string]any{
-			"sent":           sent,
-			"epochs_until":   epochsUntilUpgrade,
-			"upgrade_epoch":  upgradeEpoch,
+			"boundary":      b.Name,
+			"sent":          sent,
+			"epochs_until":  epochsUntilUpgrade,
+			"upgrade_epoch": b.Epoch,
 		})
 	}
 
-	// Verify state after burst lands
 	time.Sleep(15 * time.Second)
 	for _, addr := range addrs[:min(5, len(addrs))] {
-		verifyActorConsistency(addr, "post-upgrade-burst")
+		verifyActorConsistency(addr, "post-upgrade-burst-"+b.Name)
 	}
 }
 
 // doActorChurnAtBoundary — burst deploy/destroy around the upgrade epoch
 // to stress HAMT during migration.
-func doActorChurnAtBoundary(currentHeight abi.ChainEpoch) {
-	distance := currentHeight - upgradeEpoch
+func doActorChurnAtBoundary(currentHeight abi.ChainEpoch, b upgradeBoundary) {
+	distance := currentHeight - b.Epoch
 	if distance < 0 {
 		distance = -distance
 	}
@@ -419,7 +547,7 @@ func doActorChurnAtBoundary(currentHeight abi.ChainEpoch) {
 		return
 	}
 
-	log.Printf("[upgrade-stress] actor churn: height=%d upgrade=%d", currentHeight, upgradeEpoch)
+	log.Printf("[upgrade-stress/%s] actor churn: height=%d upgrade=%d", b.Name, currentHeight, b.Epoch)
 
 	bytecode := contractBytecodes["selfdestruct"]
 	if bytecode == nil {
@@ -464,14 +592,15 @@ func doActorChurnAtBoundary(currentHeight abi.ChainEpoch) {
 
 	if deployed > 0 {
 		assert.Reachable("Actor churn executed at upgrade boundary", map[string]any{
-			"height":       currentHeight,
-			"upgrade_epoch": upgradeEpoch,
-			"deployed":     deployed,
-			"destroyed":    destroyed,
+			"boundary":      b.Name,
+			"height":        currentHeight,
+			"upgrade_epoch": b.Epoch,
+			"deployed":      deployed,
+			"destroyed":     destroyed,
 		})
 	}
 
 	for _, addr := range addrs[:min(3, len(addrs))] {
-		verifyActorConsistency(addr, "post-upgrade-churn")
+		verifyActorConsistency(addr, "post-upgrade-churn-"+b.Name)
 	}
 }
