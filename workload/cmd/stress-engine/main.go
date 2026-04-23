@@ -287,6 +287,11 @@ func buildDeck() {
 		{"DoDrandBeaconAudit", "STRESS_WEIGHT_DRAND_BEACON_AUDIT", DoDrandBeaconAudit, 3},
 	}
 
+	// Network upgrade suite — single entry, runs all sub-vectors per invocation.
+	upgrade := []weightedAction{
+		{"DoUpgradeSuite", "STRESS_WEIGHT_UPGRADE_SUITE", DoUpgradeSuite, 0},
+	}
+
 	// Non-FOC stress vectors — skipped when FOC profile is active.
 	// All weights are overridable via STRESS_WEIGHT_* env vars from the profile .env.
 	stress := []weightedAction{
@@ -326,8 +331,9 @@ func buildDeck() {
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
 	}
 
-	// Build actions list: consensus always, stress only when FOC is not active
+	// Build actions list: consensus always, upgrade always, stress only when FOC is not active
 	actions := append([]weightedAction{}, consensus...)
+	actions = append(actions, upgrade...)
 	if focCfg == nil {
 		actions = append(actions, stress...)
 	} else {
