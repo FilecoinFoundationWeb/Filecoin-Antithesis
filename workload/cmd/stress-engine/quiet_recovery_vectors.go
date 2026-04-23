@@ -26,14 +26,38 @@ import (
 // ===========================================================================
 
 const (
-	quietDuration      = "45" // seconds to pause faults (string for exec arg)
-	quietStabilizeSecs = 15   // seconds to wait for gossip/reconnection after faults pause
-	quietDriftThreshold = 3   // max block drift to consider nodes "converged"
+	quietDuration       = "45" // seconds to pause faults (string for exec arg)
+	quietStabilizeSecs  = 15   // seconds to wait for gossip/reconnection after faults pause
+	quietDriftThreshold = 3    // max block drift to consider nodes "converged"
 	quietFinalityBuffer = 10   // epochs below min post-recovery height to check tipset agreement
+)
+
+var (
+	quietRecoveryRemaining  = -1        // -1 = not yet initialized; 0–5 once set
+	quietRecoveryEarliestRun time.Time  // earliest wall-clock time the next execution is allowed
 )
 
 // DoQuietRecovery requests a fault-free window and verifies chain self-healing.
 func DoQuietRecovery() {
+	// One-time init: pick 0–5 total executions, delay first by 1–5 min
+	if quietRecoveryRemaining == -1 {
+		quietRecoveryRemaining = rngIntn(6)
+		quietRecoveryEarliestRun = time.Now().Add(time.Duration(60+rngIntn(240)) * time.Second)
+		log.Printf("[quiet-recovery] will fire at most %d times, first eligible at %v", quietRecoveryRemaining, quietRecoveryEarliestRun)
+	}
+
+	if quietRecoveryRemaining <= 0 {
+		return
+	}
+
+	if time.Now().Before(quietRecoveryEarliestRun) {
+		return
+	}
+
+	quietRecoveryRemaining--
+	quietRecoveryEarliestRun = time.Now().Add(time.Duration(120+rngIntn(300)) * time.Second)
+	log.Printf("[quiet-recovery] firing (remaining=%d, next eligible at %v)", quietRecoveryRemaining, quietRecoveryEarliestRun)
+
 	if os.Getenv("QUIET_RECOVERY_ENABLED") != "1" {
 		return
 	}
