@@ -34,7 +34,8 @@ while [ ! -f "${SHARED_CONFIGS}/genesis_allocs.json" ]; do
     echo "Waiting... ($count/$MAX_RETRIES)"
 done
 
-echo "File found! Injecting 100 wallets..."
+alloc_count=$(jq 'length' ${SHARED_CONFIGS}/genesis_allocs.json)
+echo "File found! Injecting ${alloc_count} wallets..."
 
 # Merge using jq
 jq --slurpfile allocs ${SHARED_CONFIGS}/genesis_allocs.json \
