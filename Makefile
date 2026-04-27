@@ -65,7 +65,7 @@ build-drand:
 build-lotus:
 	@echo "Building lotus for $(TARGET_ARCH)..."
 	@echo "  Git commit: $(lotus_tag)"
-	$(BUILD_CMD) --build-arg=GIT_BRANCH=$(lotus_tag) -t lotus:latest -f lotus/Dockerfile lotus
+	$(BUILD_CMD) --build-arg=REF=$(lotus_tag) -t lotus:latest -f lotus/Dockerfile lotus
 
 .PHONY: build-forest
 build-forest:

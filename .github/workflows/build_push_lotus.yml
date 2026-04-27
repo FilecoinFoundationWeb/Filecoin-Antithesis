@@ -59,7 +59,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         build-args: |
-          GIT_BRANCH=${{ github.event.inputs.lotus_tag || steps.latest-lotus-commit.outputs.commit-hash }}
+          REF=${{ github.event.inputs.lotus_tag || steps.latest-lotus-commit.outputs.commit-hash }}
         context: ./lotus
         file: ./lotus/Dockerfile
         push: true

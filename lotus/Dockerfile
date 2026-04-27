@@ -6,7 +6,7 @@ FROM golang:$GO_VERSION
 RUN apt-get update && apt-get install -y jq libhwloc-dev ocl-icd-opencl-dev && rm -rf /var/lib/apt/lists/*
 
 # cloning lotus — supports branch, tag, or commit SHA
-ARG REF="d036ad9521d6621b5393d3d1b707a9994e94feed"
+ARG REF="master"
 RUN git clone https://github.com/filecoin-project/lotus.git /lotus
 WORKDIR /lotus
 RUN git checkout ${REF}
