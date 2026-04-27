@@ -39,11 +39,14 @@ var (
 
 // DoQuietRecovery requests a fault-free window and verifies chain self-healing.
 func DoQuietRecovery() {
-	// One-time init: pick 0–5 total executions, delay first by 1–5 min
+	if os.Getenv("QUIET_RECOVERY_ENABLED") != "1" {
+		return
+	}
+
+	// One-time init: pick 0–5 total executions, first fires immediately
 	if quietRecoveryRemaining == -1 {
 		quietRecoveryRemaining = rngIntn(6)
-		quietRecoveryEarliestRun = time.Now().Add(time.Duration(60+rngIntn(240)) * time.Second)
-		log.Printf("[quiet-recovery] will fire at most %d times, first eligible at %v", quietRecoveryRemaining, quietRecoveryEarliestRun)
+		log.Printf("[quiet-recovery] will fire at most %d times", quietRecoveryRemaining)
 	}
 
 	if quietRecoveryRemaining <= 0 {
@@ -57,10 +60,6 @@ func DoQuietRecovery() {
 	quietRecoveryRemaining--
 	quietRecoveryEarliestRun = time.Now().Add(time.Duration(120+rngIntn(300)) * time.Second)
 	log.Printf("[quiet-recovery] firing (remaining=%d, next eligible at %v)", quietRecoveryRemaining, quietRecoveryEarliestRun)
-
-	if os.Getenv("QUIET_RECOVERY_ENABLED") != "1" {
-		return
-	}
 
 	stopBin := os.Getenv("ANTITHESIS_STOP_FAULTS")
 	if stopBin == "" {
