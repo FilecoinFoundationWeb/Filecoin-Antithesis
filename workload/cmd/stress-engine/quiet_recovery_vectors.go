@@ -43,6 +43,15 @@ func DoQuietRecovery() {
 		return
 	}
 
+	// Skip if a workload-driven partition is active (n-split lifecycle or
+	// reorg-chaos). ANTITHESIS_STOP_FAULTS only pauses the fault injector,
+	// not RPC-applied NetBlockAdd/NetDisconnect from other vectors, so the
+	// drift assertion would falsely fail on the still-isolated nodes.
+	if partitionActive.Load() {
+		debugLog("[quiet-recovery] skipping — partition already active")
+		return
+	}
+
 	// One-time init: pick 0–5 total executions, first fires immediately
 	if quietRecoveryRemaining == -1 {
 		quietRecoveryRemaining = rngIntn(6)
