@@ -86,8 +86,9 @@ func nearUpgrade(height abi.ChainEpoch, b upgradeBoundary) bool {
 // ---------------------------------------------------------------------------
 
 // UpgradeBoundaryFunc is a function that runs FIP-specific stress at the
-// upgrade boundary. It receives the current chain height so it can self-gate.
-type UpgradeBoundaryFunc func(currentHeight abi.ChainEpoch)
+// upgrade boundary. It receives the current chain height and boundary so it
+// can self-gate (e.g. only fire for b.Name == "NV28").
+type UpgradeBoundaryFunc func(currentHeight abi.ChainEpoch, b upgradeBoundary)
 
 var fipBoundaryFuncs []UpgradeBoundaryFunc
 
@@ -145,10 +146,9 @@ func DoUpgradeSuite() {
 		doPostUpgradeNodeHealth(currentHeight, b)
 		doBoundaryMessageBurst(currentHeight, b)
 		doActorChurnAtBoundary(currentHeight, b)
-	}
-
-	for _, fn := range fipBoundaryFuncs {
-		fn(currentHeight)
+		for _, fn := range fipBoundaryFuncs {
+			fn(currentHeight, b)
+		}
 	}
 }
 
