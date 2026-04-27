@@ -150,6 +150,11 @@ services:
       - STRESS_FOREST_RPC_PORT=3456
       - STRESS_KEYSTORE_PATH=/shared/configs/stress_keystore.json
       - STRESS_WAIT_HEIGHT=10
+      - GENESIS_WALLET_COUNT=${GENESIS_WALLET_COUNT:-100}
+      - FIP0115_MSG_COUNT=${FIP0115_MSG_COUNT:-6000}
+      - FIP0115_DURATION_SEC=${FIP0115_DURATION_SEC:-60}
+      - FIP0115_PREMIUM_ATTO=${FIP0115_PREMIUM_ATTO:-100000}
+      - FIP0115_PRE_LEAD_EPOCHS=${FIP0115_PRE_LEAD_EPOCHS:-2}
       # --- Consensus / health-check vectors (always active in both profiles) ---
       # All STRESS_WEIGHT_* vars use ${VAR:-default} so profile .env files can override.
       - STRESS_WEIGHT_TIPSET_CONSENSUS=${STRESS_WEIGHT_TIPSET_CONSENSUS:-3}

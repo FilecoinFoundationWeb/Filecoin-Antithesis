@@ -9,8 +9,9 @@ log_info() { echo -e "${GREEN}[WORKLOAD]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WORKLOAD]${NC} $1"; }
 
 # ── 1. Generate genesis wallets ──
-log_info "Generating pre-funded genesis wallets..."
-/opt/antithesis/genesis-prep --count 100 --out /shared/configs
+WALLET_COUNT="${GENESIS_WALLET_COUNT:-100}"
+log_info "Generating ${WALLET_COUNT} pre-funded genesis wallets..."
+/opt/antithesis/genesis-prep --count "${WALLET_COUNT}" --out /shared/configs
 log_info "Genesis wallet generation complete."
 
 # ── 2. Time sync ──
