@@ -181,7 +181,7 @@ jobs:
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
       
   scheduled_run_b:
-    name: "Nightly @ 8 PM EST - Nightly Profile"
+    name: "Nightly @ 8 PM EST - FIP Profile"
     if: github.event_name == 'schedule' && github.event.schedule == '0 1 * * *'
     runs-on: ubuntu-latest
     permissions:
@@ -197,10 +197,10 @@ jobs:
           github_token: ${{ secrets.GH_PAT }}
           images: drand:latest;forest:latest;lotus:latest;workload:latest
           config_image: config:latest
-          description: "Nightly Profile: 12 hr balanced full-coverage run"
+          description: "FIP Profile: 12 hr network-upgrade-focused run"
           additional_parameters: |-
             custom.duration=12
-            custom.setup=nightly
-            antithesis.source=main-nightly
+            custom.setup=fip
+            antithesis.source=main-fip
             antithesis.integrations.slack.callback_url=https://hooks.slack.com/services/TEHTVS1L6/B0984KRV33P
             antithesis.integrations.slack.token=${{ secrets.SLACK_TOKEN }}
