@@ -52,10 +52,11 @@ func DoQuietRecovery() {
 		return
 	}
 
-	// One-time init: pick 0–5 total executions, first fires immediately
+	// One-time init: pick 0–5 total executions, delay first by 0–3 min
 	if quietRecoveryRemaining == -1 {
 		quietRecoveryRemaining = rngIntn(6)
-		log.Printf("[quiet-recovery] will fire at most %d times", quietRecoveryRemaining)
+		quietRecoveryEarliestRun = time.Now().Add(time.Duration(rngIntn(180)) * time.Second)
+		log.Printf("[quiet-recovery] will fire at most %d times, first eligible at %v", quietRecoveryRemaining, quietRecoveryEarliestRun)
 	}
 
 	if quietRecoveryRemaining <= 0 {
