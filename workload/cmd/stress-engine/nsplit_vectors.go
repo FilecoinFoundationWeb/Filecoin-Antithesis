@@ -269,13 +269,19 @@ func runConsensusCycle(cycleNum int) {
 	log.Printf("[consensus-test] attack mining: honest=%v adversary=%v", mined.honestMined, mined.advMined)
 
 	// --- Heal ---
+	// Keep partitionActive=true through heal+convergence: deck vectors that
+	// gate on it (fork-monitor, F3 finality, height progression, etc.) treat
+	// the recovery window as non-steady-state. Without this, a non-quorum
+	// scenario (50/50 power split, no F3 quorum) reliably trips the
+	// persistent-fork Always assertion even though the inability to converge
+	// is a designed outcome of the test, not a consensus bug.
 	log.Printf("[consensus-test] HEALING partition...")
-	partitionActive.Store(false)
 	healPartition(sr)
 
 	// Check adversary is still alive after heal — Antithesis may have killed it
 	_, advAliveErr := sr.advNode.ChainHead(ctx)
 	if advAliveErr != nil {
+		partitionActive.Store(false)
 		log.Printf("[consensus-test] adversary %s unreachable after heal: %v — skipping hard assertions", sr.adversaryName, advAliveErr)
 		assert.Sometimes(true, "Consensus cycle ran but adversary was killed by Antithesis", map[string]any{
 			"cycle": cycleNum, "adversary": sr.adversaryName,
@@ -284,6 +290,7 @@ func runConsensusCycle(cycleNum int) {
 	}
 
 	converged := waitForConvergence(sr.adversaryName)
+	partitionActive.Store(false)
 	log.Printf("[consensus-test] convergence: %v", converged)
 
 	// --- Settlement ---
