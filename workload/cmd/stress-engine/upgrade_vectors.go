@@ -262,15 +262,24 @@ func doUpgradeActivation(_ abi.ChainEpoch, b upgradeBoundary) {
 		}
 		n := nodes[name]
 
-		postTs, err := n.ChainGetTipSetByHeight(ctx, b.Epoch+1, anchorKey)
+		// Sample the post-side at b.Epoch+5 instead of b.Epoch+1.
+		// ChainGetTipSetByHeight backfills null rounds by returning the most
+		// recent non-null tipset at or below the requested height. With +1 a
+		// null round at epoch+1 can drop us back onto the boundary tipset
+		// itself (height == b.Epoch), where StateNetworkVersion returns the
+		// pre-migration NV (Lotus/Forest both treat the boundary tipset as
+		// "applying the migration" — the NV at the start of processing it is
+		// the old one). A +5 cushion stays inside the gate above
+		// (finalizedHeight >= b.Epoch+5) so the query is always within the
+		// finalized chain.
+		postTs, err := n.ChainGetTipSetByHeight(ctx, b.Epoch+5, anchorKey)
 		if err != nil {
 			continue
 		}
-		// Null-round guard: ChainGetTipSetByHeight returns the most recent
-		// non-null tipset at or below the requested height. If epoch+1 is a
-		// null round, the returned tipset could be at epoch-N (pre-upgrade).
-		// Trusting its NV would falsely report "not activated." Skip.
-		if postTs.Height() < b.Epoch {
+		// Defensive: if backfill still landed at or before the boundary
+		// (e.g. a long null-round run), skip — we can't read post-state
+		// reliably here.
+		if postTs.Height() <= b.Epoch {
 			continue
 		}
 		postNV, err := n.StateNetworkVersion(ctx, postTs.Key())
