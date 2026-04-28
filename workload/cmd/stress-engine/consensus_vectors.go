@@ -389,6 +389,12 @@ func DoTipsetConsensus() {
 // doHeightProgression checks that all nodes are advancing.
 // Ported from node-health.go CheckHeightProgression.
 func DoHeightProgression() {
+	// Skip while a partition is active. DoReorgChaos and the n-split test
+	// both legitimately stall the victim's finalized height; sampling spread
+	// during the partition window reports expected lag as a failure.
+	if partitionActive.Load() {
+		return
+	}
 	if !allNodesPastEpoch(f3MinEpoch) {
 		return
 	}
