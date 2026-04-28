@@ -231,8 +231,24 @@ func doNetworkVersionAgreement(b upgradeBoundary) {
 
 // doUpgradeActivation — every node's NV must advance across the boundary.
 // Catches a node that silently didn't activate the upgrade.
-func doUpgradeActivation(currentHeight abi.ChainEpoch, b upgradeBoundary) {
-	if currentHeight <= b.Epoch+5 || b.Epoch < 2 {
+//
+// Anchored on the finalized chain: each node's `head.Key()` is unstable under
+// reorgs (FIP profile runs DoReorgChaos, and Antithesis fault-injection
+// adds further partitions). Walking back from a head that is mid-reorg can
+// sample a transient fork whose state hasn't applied the migration yet,
+// producing false ACTIVATION DIVERGENCE reports. By gating on a finalized
+// anchor we only check chain segments that consensus has agreed on.
+func doUpgradeActivation(_ abi.ChainEpoch, b upgradeBoundary) {
+	if b.Epoch < 2 {
+		return
+	}
+
+	snap := getFinalizedSnapshots()
+	finalizedHeight, anchorKey := snapshotMinHeight(snap)
+	// Require the boundary plus a buffer to be finalized on every responding
+	// node before sampling. The +5 buffer keeps the post-side query clear of
+	// short null-round runs near the boundary.
+	if finalizedHeight < b.Epoch+5 {
 		return
 	}
 
@@ -241,13 +257,12 @@ func doUpgradeActivation(currentHeight abi.ChainEpoch, b upgradeBoundary) {
 	checked := 0
 
 	for _, name := range nodeKeys {
-		n := nodes[name]
-		head, err := n.ChainHead(ctx)
-		if err != nil {
+		if s, ok := snap[name]; !ok || s.err != nil {
 			continue
 		}
+		n := nodes[name]
 
-		postTs, err := n.ChainGetTipSetByHeight(ctx, b.Epoch+1, head.Key())
+		postTs, err := n.ChainGetTipSetByHeight(ctx, b.Epoch+1, anchorKey)
 		if err != nil {
 			continue
 		}
@@ -263,7 +278,7 @@ func doUpgradeActivation(currentHeight abi.ChainEpoch, b upgradeBoundary) {
 			continue
 		}
 
-		preTs, err := n.ChainGetTipSetByHeight(ctx, b.Epoch-1, head.Key())
+		preTs, err := n.ChainGetTipSetByHeight(ctx, b.Epoch-1, anchorKey)
 		if err != nil {
 			continue
 		}
@@ -286,14 +301,15 @@ func doUpgradeActivation(currentHeight abi.ChainEpoch, b upgradeBoundary) {
 	}
 
 	assert.Always(allActivated, "All nodes activated upgrade across boundary", map[string]any{
-		"boundary":      b.Name,
-		"upgrade_epoch": b.Epoch,
-		"per_node":      perNode,
-		"checked":       checked,
+		"boundary":         b.Name,
+		"upgrade_epoch":    b.Epoch,
+		"finalized_height": finalizedHeight,
+		"per_node":         perNode,
+		"checked":          checked,
 	})
 
 	if !allActivated {
-		log.Printf("[upgrade/%s] ACTIVATION DIVERGENCE at epoch %d: %v", b.Name, b.Epoch, perNode)
+		log.Printf("[upgrade/%s] ACTIVATION DIVERGENCE at epoch %d (finalized=%d): %v", b.Name, b.Epoch, finalizedHeight, perNode)
 	}
 }
 
