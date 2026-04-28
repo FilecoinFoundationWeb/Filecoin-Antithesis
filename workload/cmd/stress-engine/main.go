@@ -327,6 +327,8 @@ func buildDeck() {
 		{"DoCrossImplStateCompute", "STRESS_WEIGHT_CROSS_IMPL_COMPUTE", DoCrossImplStateCompute, 2},
 		{"DoDeepActorStateComparison", "STRESS_WEIGHT_DEEP_ACTOR_STATE", DoDeepActorStateComparison, 1},
 		{"DoCrossImplEthCall", "STRESS_WEIGHT_CROSS_IMPL_ETH_CALL", DoCrossImplEthCall, 1},
+		// FIP-specific: post-activation behavior probes
+		{"DoFIP0115BaseFeeResponse", "STRESS_WEIGHT_FIP0115", DoFIP0115BaseFeeResponse, 0},
 		// Reorg chaos (guarded by partitionActive to avoid stomping n-split)
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
 	}
