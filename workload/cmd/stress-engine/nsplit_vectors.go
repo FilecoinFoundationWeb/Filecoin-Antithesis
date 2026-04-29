@@ -1023,8 +1023,13 @@ func verifyOutcome(refNode api.FullNode, ar *attackResult, cycleNum int,
 			log.Printf("[consensus-test] EC resolved fork — honest majority won")
 			assert.Sometimes(true, "EC resolved fork correctly", details)
 		} else {
+			// landed == 0: no assertion fires here. The "double-spend
+			// succeeded under EC-only" and "EC resolved fork correctly"
+			// Sometimes assertions above already cover the positive cases.
+			// A separate assertion in this branch can never satisfy
+			// `Sometimes` (the condition `landed > 0` is by definition
+			// false here), so it would be dead-by-design noise.
 			log.Printf("[consensus-test] Neither tx landed under EC-vulnerable partition")
-			assert.Sometimes(landed > 0, "Attack landed at least one tx under EC-vulnerable partition", details)
 		}
 	}
 
