@@ -131,7 +131,7 @@ services:
     image: forest:latest
     container_name: forest0
     entrypoint: [ "./scripts/start-forest.sh", "0" ]
-    profiles: [ full ]
+    profiles: [ full, forest ]
 
   forest1:
     <<: [ *filecoin_service, *needs_lotus0_healthy ]
