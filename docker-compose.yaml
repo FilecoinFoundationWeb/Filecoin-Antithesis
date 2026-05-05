@@ -206,6 +206,8 @@ services:
       - STRESS_WEIGHT_CROSS_IMPL_COMPUTE=${STRESS_WEIGHT_CROSS_IMPL_COMPUTE:-2}
       - STRESS_WEIGHT_DEEP_ACTOR_STATE=${STRESS_WEIGHT_DEEP_ACTOR_STATE:-1}
       - STRESS_WEIGHT_CROSS_IMPL_ETH_CALL=${STRESS_WEIGHT_CROSS_IMPL_ETH_CALL:-1}
+      # FIP-specific post-activation probes
+      - STRESS_WEIGHT_FIP0115=${STRESS_WEIGHT_FIP0115:-0}
       # --- FOC (Filecoin On-Chain Cloud) vectors ---
       # All FOC vectors require the `foc` compose profile to be active.
       # The lifecycle state machine must reach "Ready" before steady-state
