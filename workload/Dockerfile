@@ -2,7 +2,7 @@ FROM ubuntu:latest
 
 # Core dependencies only — no Foundry, no Rust, no pnpm, no Hardhat
 RUN apt-get update -y && \
-    apt-get install -y curl jq gcc ntpdate git && \
+    apt-get install -y curl jq gcc git && \
     ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && \
     curl -OL "https://golang.org/dl/go1.23.2.linux-${ARCH}.tar.gz" && \
     tar -C /usr/local -xzf "go1.23.2.linux-${ARCH}.tar.gz" && \

@@ -14,16 +14,7 @@ log_info "Generating ${WALLET_COUNT} pre-funded genesis wallets..."
 /opt/antithesis/genesis-prep --count "${WALLET_COUNT}" --out /shared/configs
 log_info "Genesis wallet generation complete."
 
-# ── 2. Time sync ──
-log_info "Synchronizing system time..."
-if ntpdate -q pool.ntp.org &>/dev/null; then
-    ntpdate -u pool.ntp.org || log_warn "Time sync failed."
-else
-    log_warn "Unable to query NTP servers."
-fi
-log_info "System time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-
-# ── 3. Wait for blockchain to reach minimum epoch ──
+# ── 2. Wait for blockchain to reach minimum epoch ──
 WAIT_HEIGHT="${STRESS_WAIT_HEIGHT:-10}"
 RPC_URL="http://lotus0:${STRESS_RPC_PORT:-1234}/rpc/v1"
 log_info "Waiting for block height to reach ${WAIT_HEIGHT}..."
@@ -39,7 +30,7 @@ while true; do
     sleep 5
 done
 
-# ── 4. Wait for filwizard if running (FOC profile, auto-detected via DNS) ──
+# ── 3. Wait for filwizard if running (FOC profile, auto-detected via DNS) ──
 ENV_FILE="/shared/environment.env"
 FILWIZARD_READY="/shared/filwizard_ready"
 if getent hosts filwizard &>/dev/null; then
@@ -61,7 +52,7 @@ else
     log_info "Non-FOC profile."
 fi
 
-# ── 5. Wait for all nodes and miners to be ready ──
+# ── 4. Wait for all nodes and miners to be ready ──
 NODES="${STRESS_NODES:-lotus0,lotus1,lotus2,lotus3}"
 IFS=',' read -ra NODE_LIST <<< "$NODES"
 
@@ -100,11 +91,11 @@ for (( i=0; i<NUM_MINERS; i++ )); do
     log_info "  lotus-miner${i} ready"
 done
 
-# ── 6. Signal setup complete to Antithesis ──
+# ── 5. Signal setup complete to Antithesis ──
 log_info "All nodes and miners ready, signaling setup complete to Antithesis..."
 /opt/antithesis/setup-complete
 
-# ── 7. Launch FOC sidecar if in FOC profile ──
+# ── 6. Launch FOC sidecar if in FOC profile ──
 if getent hosts filwizard &>/dev/null; then
     log_info "Starting FOC sidecar..."
     /opt/antithesis/foc-sidecar &
@@ -112,7 +103,7 @@ if getent hosts filwizard &>/dev/null; then
     log_info "FOC sidecar started (PID=$SIDECAR_PID)"
 fi
 
-# ── 8. Launch stress engine ──
+# ── 7. Launch stress engine ──
 log_info "Launching stress engine..."
 /opt/antithesis/stress-engine &
 STRESS_PID=$!
