@@ -1,5 +1,5 @@
 diff --git a/f3-sidecar/pubsub.go b/f3-sidecar/pubsub.go
-index 32e3410..dc8e018 100644
+index 32e34106c..dc8e01860 100644
 --- a/f3-sidecar/pubsub.go
 +++ b/f3-sidecar/pubsub.go
 @@ -28,13 +28,13 @@ var PubsubPeerScoreParams = &pubsub.PeerScoreParams{
@@ -33,7 +33,7 @@ index 32e3410..dc8e018 100644
  	OpportunisticGraftScoreThreshold = 3.5
  )
 diff --git a/src/libp2p/gossip_params.rs b/src/libp2p/gossip_params.rs
-index 3882286..55aa20d 100644
+index 38822868c..55aa20dd6 100644
 --- a/src/libp2p/gossip_params.rs
 +++ b/src/libp2p/gossip_params.rs
 @@ -45,7 +45,7 @@ fn build_msg_topic_config() -> TopicScoreParams {
@@ -84,10 +84,10 @@ index 3882286..55aa20d 100644
          opportunistic_graft_threshold: 3.5,
      }
 diff --git a/src/rpc/methods/chain.rs b/src/rpc/methods/chain.rs
-index 91e3547..dce0432 100644
+index 8ec3ecea3..d928dcfb4 100644
 --- a/src/rpc/methods/chain.rs
 +++ b/src/rpc/methods/chain.rs
-@@ -1188,7 +1188,7 @@ impl ChainGetTipSetFinalityStatus {
+@@ -1201,7 +1201,7 @@ impl ChainGetTipSetFinalityStatus {
          /// they consume array slots without advancing the meaningful epoch count.
          const FINALITY_CHAIN_EXTRA_EPOCHS: usize = 5;
  
@@ -96,12 +96,12 @@ index 91e3547..dce0432 100644
          let chain_len = finality as usize + FINALITY_CHAIN_EXTRA_EPOCHS;
          let mut chain = Vec::with_capacity(chain_len);
          let mut ts = head.shallow_clone();
-@@ -1234,7 +1234,7 @@ impl ChainGetTipSetFinalityStatus {
+@@ -1247,7 +1247,7 @@ impl ChainGetTipSetFinalityStatus {
              Some(ts)
          } else {
              let ec_finality_epoch =
 -                (head.epoch() - ctx.chain_config().policy.chain_finality).max(0);
 +                (head.epoch() - 20).max(0);
-             ctx.chain_index()
-                 .tipset_by_height(ec_finality_epoch, head, ResolveNullTipset::TakeOlder)
-                 .ok()
+             ctx.chain_index().tipset_by_height(
+                 ec_finality_epoch,
+                 head,
