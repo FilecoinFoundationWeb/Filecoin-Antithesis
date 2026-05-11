@@ -1,7 +1,7 @@
 FROM docker.io/rust:1.81-bookworm AS builder
 
 # Pin forest to a specific branch, tag, or commit
-ARG GIT_COMMIT="188c99b24"
+ARG GIT_COMMIT="17e1991bec6f2fd3b1f77dfcd53a83151c609c90"
 ARG LOCAL_BUILD=1
 # Step 1: Install dependencies
 RUN apt-get update && \
@@ -17,16 +17,15 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}" 
 # Step 3: Clone the repository (this is cached unless the repository changes)
-RUN git clone https://github.com/chainsafe/forest /forest
+RUN git clone -b main https://github.com/chainsafe/forest /forest
 
 WORKDIR /forest
 
-# Use provided commit or default to latest main
-RUN if [ -n "${GIT_COMMIT}" ]; then \
-        git checkout ${GIT_COMMIT}; \
-    else \
-        echo "No GIT_COMMIT specified, using latest main"; \
-    fi
+# Checkout the pinned commit (required; build fails if unset or not found in main history)
+RUN if [ -z "${GIT_COMMIT}" ]; then \
+        echo "ERROR: GIT_COMMIT build-arg is required" >&2; exit 1; \
+    fi && \
+    git checkout ${GIT_COMMIT}
 
 COPY ./patches/forest.patch ./forest.patch
 RUN git apply forest.patch
