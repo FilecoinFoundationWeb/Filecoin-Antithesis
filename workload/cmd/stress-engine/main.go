@@ -285,6 +285,11 @@ func buildDeck() {
 		{"DoF3FinalityMonitor", "STRESS_WEIGHT_F3_MONITOR", DoF3FinalityMonitor, 2},
 		{"DoF3FinalityAgreement", "STRESS_WEIGHT_F3_AGREEMENT", DoF3FinalityAgreement, 3},
 		{"DoDrandBeaconAudit", "STRESS_WEIGHT_DRAND_BEACON_AUDIT", DoDrandBeaconAudit, 3},
+		// Targeted regression checks for known SUT bugs
+		// (each ports an upstream antithesis-test workload to this harness's vector style)
+		{"DoChainStoreSelfHead", "STRESS_WEIGHT_CHAINSTORE_SELF_HEAD", DoChainStoreSelfHead, 2}, // blockstore IPLD loss on unclean shutdown
+		{"DoF3CertMonotonic", "STRESS_WEIGHT_F3_CERT_MONOTONIC", DoF3CertMonotonic, 2},         // F3 certstore regression after quorum loss
+		{"DoWindowPoStAudit", "STRESS_WEIGHT_WDPOST_AUDIT", DoWindowPoStAudit, 2},              // WindowPoSt stale deadline submission
 	}
 
 	// Network upgrade suite — single entry, runs all sub-vectors per invocation.
@@ -331,6 +336,10 @@ func buildDeck() {
 		{"DoFIP0115BaseFeeResponse", "STRESS_WEIGHT_FIP0115", DoFIP0115BaseFeeResponse, 0},
 		// Reorg chaos (guarded by partitionActive to avoid stomping n-split)
 		{"DoReorgChaos", "STRESS_WEIGHT_REORG", DoReorgChaos, 0},
+		// Sandboxed regression check for the MsigApprove-from-f410-signer
+		// bug. Lower weight than observers — each cycle sends on-chain
+		// transactions, so it's intentionally slower.
+		{"DoMsigF410ApproveAudit", "STRESS_WEIGHT_MSIG_F410_APPROVE", DoMsigF410ApproveAudit, 1},
 	}
 
 	// Build actions list: consensus always, upgrade always, stress only when FOC is not active
