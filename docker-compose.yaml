@@ -169,6 +169,9 @@ services:
       # Power / reorg
       - STRESS_WEIGHT_REORG=${STRESS_WEIGHT_REORG:-0}
       - STRESS_WEIGHT_POWER_SLASH=${STRESS_WEIGHT_POWER_SLASH:-2}
+      # Quiet recovery: pauses all fault injection to verify chain self-healing (off by default)
+      - QUIET_RECOVERY_ENABLED=${QUIET_RECOVERY_ENABLED:-0}
+      - STRESS_WEIGHT_QUIET_RECOVERY=${STRESS_WEIGHT_QUIET_RECOVERY:-0}
       # Protocol fuzzer: 0=off, 1=on (fuzzer uses its own Go-code defaults for weights)
       - FUZZER_ENABLED=${FUZZER_ENABLED:-0}
       #
